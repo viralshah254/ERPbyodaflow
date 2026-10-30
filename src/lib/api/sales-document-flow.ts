@@ -17,6 +17,7 @@ export type SalesDocumentFlowSettings = {
   allowPartialDeliveries: boolean;
   allowPartialReceipt: boolean;
   sendPodNotification: boolean;
+  prefillSalesOrderFinishedGoods: boolean;
 };
 
 export async function fetchSalesDocumentFlowApi(): Promise<SalesDocumentFlowSettings> {

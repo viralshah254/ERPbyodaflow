@@ -16,6 +16,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatMoney } from "@/lib/money";
 import { fetchDocumentDetailApi } from "@/lib/api/documents";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
 import {
   fetchLandedCostAllocation,
@@ -182,6 +184,10 @@ export function DocumentTaxesPanel({
   >([]);
   const [docTotal, setDocTotal] = React.useState(0);
   const [docCurrency, setDocCurrency] = React.useState(currency);
+  const [pricesIncludeVat, setPricesIncludeVat] = React.useState(false);
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const industryCategory = useOrgContextStore((s) => s.industryCategory);
+  const fmcgOrg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
 
   // For GRN: allocation on this doc. For bill: allocation on the source GRN.
   const [landedAllocation, setLandedAllocation] =
@@ -230,10 +236,13 @@ export function DocumentTaxesPanel({
         // Exclusive VAT: amount already includes tax → base = amount − tax. Inclusive: amount is gross.
         const totalGross = lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
         const totalBase = Math.max(0, Math.round((totalGross - totalTax) * 100) / 100);
-        const showVatBreakdown = ["invoice", "bill", "sales-order", "delivery-note", "quote"].includes(
+        const inclusive = document?.linesAreTaxInclusive === true;
+        setPricesIncludeVat(inclusive);
+        const showVatBreakdown = ["invoice", "bill", "sales-order", "delivery-note", "quote", "purchase-order", "grn"].includes(
           docType
         );
-        if (showVatBreakdown && totalTax > 0) {
+        const purchasingDoc = ["purchase-order", "grn", "bill"].includes(docType);
+        if (showVatBreakdown && (totalTax > 0 || (purchasingDoc && inclusive))) {
           const primaryCode =
             lines.find((l) => l.taxCodeCode)?.taxCodeCode ??
             lines.find((l) => l.taxCodeId)?.taxCodeId ??
@@ -249,18 +258,7 @@ export function DocumentTaxesPanel({
         } else {
           setVat([]);
         }
-        if (docType === "bill" && totalTax > 0) {
-          setWht([
-            {
-              code: "WHT-EST",
-              base: totalBase,
-              rate: totalBase > 0 ? Number(((totalTax / totalBase) * 100).toFixed(2)) : 0,
-              amount: totalTax,
-            },
-          ]);
-        } else {
-          setWht([]);
-        }
+        setWht([]);
 
         // Determine which ID to fetch landed costs for
         if (isGrn) {
@@ -347,6 +345,9 @@ export function DocumentTaxesPanel({
         <Card>
           <CardHeader>
             <CardTitle className="text-base">VAT breakdown</CardTitle>
+            {pricesIncludeVat ? (
+              <p className="text-xs text-muted-foreground font-normal mt-1">Prices include VAT. The total below is the gross amount.</p>
+            ) : null}
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -369,8 +370,19 @@ export function DocumentTaxesPanel({
                 ))}
               </TableBody>
             </Table>
-            <div className="px-4 py-2 text-sm font-medium border-t flex justify-end">
-              VAT total: {formatMoney(vatTotal, docCurrency)}
+            <div className="space-y-1 border-t px-4 py-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Net</span>
+                <span className="tabular-nums">{formatMoney(Math.max(0, docTotal - vatTotal), docCurrency)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">VAT</span>
+                <span className="tabular-nums">{formatMoney(vatTotal, docCurrency)}</span>
+              </div>
+              <div className="flex justify-between font-medium">
+                <span>Total</span>
+                <span className="tabular-nums">{formatMoney(docTotal, docCurrency)}</span>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -410,8 +422,8 @@ export function DocumentTaxesPanel({
         </Card>
       )}
 
-      {/* Additional costs — GRN (editable) or Bill (read-only from source GRN) */}
-      {(isGrn || isBill) && (
+      {/* Additional costs — seafood GRN (editable) or Bill (read-only from source GRN) */}
+      {(isGrn || isBill) && !fmcgOrg && (
         <>
           {loadingLanded ? (
             <Card>

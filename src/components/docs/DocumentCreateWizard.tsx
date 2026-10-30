@@ -50,6 +50,8 @@ import {
   previewDocumentPostingApi,
   searchPurchaseOrderLookupApi,
   fetchDocumentDetailApi,
+  fetchDocumentListPageApi,
+  uploadDocumentAttachmentApi,
   type DocumentPostingPreviewLine,
   type PurchaseOrderLookupOption,
 } from "@/lib/api/documents";
@@ -96,12 +98,10 @@ import {
 import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
-import {
-  deleteDocumentDraftApi,
-  fetchDocumentDraftApi,
-  saveDocumentDraftApi,
-} from "@/lib/api/document-drafts";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
+import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -527,41 +527,7 @@ const STEPS = [
   { id: "review", label: "Review & Submit" },
 ] as const;
 
-const WIZARD_DRAFT_DEBOUNCE_MS = 800;
 const EDIT_AUTOSAVE_DEBOUNCE_MS = 1500;
-
-function parseDraftLines(raw: unknown): DocumentLine[] | null {
-  if (!Array.isArray(raw) || raw.length === 0) return null;
-  const parsed: DocumentLine[] = [];
-  for (let i = 0; i < raw.length; i++) {
-    const row = raw[i];
-    if (!row || typeof row !== "object") continue;
-    const line = row as Record<string, unknown>;
-    const productId = typeof line.productId === "string" ? line.productId : "";
-    const name = typeof line.name === "string" ? line.name : "";
-    if (!productId && !name) continue;
-    parsed.push({
-      id: typeof line.id === "string" ? line.id : `draft-line-${i}`,
-      productId,
-      sku: typeof line.sku === "string" ? line.sku : "",
-      name,
-      uom: typeof line.uom === "string" ? line.uom : "EA",
-      qty: typeof line.qty === "number" && Number.isFinite(line.qty) ? line.qty : 1,
-      baseQty: typeof line.baseQty === "number" && Number.isFinite(line.baseQty) ? line.baseQty : 1,
-      price: typeof line.price === "number" && Number.isFinite(line.price) ? line.price : 0,
-      priceReason: typeof line.priceReason === "string" ? line.priceReason : "Draft",
-      ...(typeof line.discount === "number" && Number.isFinite(line.discount) && line.discount >= 0
-        ? { discount: line.discount }
-        : {}),
-      amount: typeof line.amount === "number" && Number.isFinite(line.amount) ? line.amount : 0,
-      ...(typeof line.tax === "number" ? { tax: line.tax } : {}),
-      ...(typeof line.taxCodeId === "string" ? { taxCodeId: line.taxCodeId } : {}),
-      ...(typeof line.sourceLineId === "string" ? { sourceLineId: line.sourceLineId } : {}),
-      ...(typeof line.poQty === "number" ? { poQty: line.poQty } : {}),
-    });
-  }
-  return parsed.length > 0 ? parsed : null;
-}
 
 export function DocumentCreateWizard({
   type,
@@ -577,6 +543,8 @@ export function DocumentCreateWizard({
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const templateId = useOrgContextStore((s) => s.templateId);
   const fmcgOrg = isFmcgOrg(templateId);
+  const fmcgPurchaseDoc =
+    fmcgOrg && (type === "purchase-order" || type === "grn" || type === "bill");
   const plantCatalogue = isPlantCatalogueTemplate(templateId);
   const isOdaflowFmcgEdit =
     isEditMode &&
@@ -594,7 +562,6 @@ export function DocumentCreateWizard({
   const isHqDoc = orgRole === "FRANCHISEE" && (type === "purchase-order" || type === "purchase-request");
   const [step, setStep] = React.useState(isHqDoc ? 2 : 1);
   const [maxStepReached, setMaxStepReached] = React.useState(isHqDoc ? 2 : 1);
-  const createDraftSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const editAutosaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const editHydratedRef = React.useRef(false);
   const odaflowBaselineRef = React.useRef<{
@@ -611,16 +578,32 @@ export function DocumentCreateWizard({
     React.useState<OdaflowMappingCorrectionsPayload>({});
   const odaflowDialogLockRef = React.useRef(false);
   const odaflowPendingRevertRef = React.useRef<{ lineIds: string[]; revertCustomer: boolean } | null>(null);
-  const draftRestoredRef = React.useRef(false);
-  const draftRestoreDoneRef = React.useRef(isEditMode);
+  const allowLeaveRef = React.useRef(false);
+  const autoFilledPartyRef = React.useRef<string | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false);
+  const pendingLeaveRef = React.useRef<string | null>(null);
   const skipEditAutosaveRef = React.useRef(false);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
+  const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
+  const sheetFinishedGoods = type === "sales-order" && !isEditMode && prefillFinishedGoods;
+  const billableLines = React.useMemo(
+    () => (sheetFinishedGoods ? lines.filter((line) => line.qty > 0) : lines),
+    [lines, sheetFinishedGoods]
+  );
   const linesOperational = React.useMemo(
-    () => documentLinesOperational(lines),
-    [lines]
+    () => documentLinesOperational(billableLines),
+    [billableLines]
+  );
+  const linesBlockedMessage = React.useCallback(
+    (context: "continue" | "review" | "submit") =>
+      sheetFinishedGoods && lines.length > 0 && billableLines.length === 0
+        ? "Enter a quantity for at least one product."
+        : documentLinesOperationalErrorMessage(billableLines, context),
+    [billableLines, lines.length, sheetFinishedGoods]
   );
   const [submitting, setSubmitting] = React.useState(false);
+  const [invoiceCopyFile, setInvoiceCopyFile] = React.useState<File | null>(null);
   const [loadingFxRate, setLoadingFxRate] = React.useState(false);
   const [postingPreview, setPostingPreview] = React.useState<DocumentPostingPreviewLine[]>([]);
   const [loadingPostingPreview, setLoadingPostingPreview] = React.useState(false);
@@ -675,6 +658,7 @@ export function DocumentCreateWizard({
     type === "grn" && initialPoId ? initialPoId : null
   );
   /** For supplier bill: linked upstream doc for create payload (PO or GRN). */
+  const [linkedSupplierBillId, setLinkedSupplierBillId] = React.useState<string | null>(null);
   const [billSourceLink, setBillSourceLink] = React.useState<{
     id: string;
     typeKey: "purchase-order" | "grn";
@@ -732,43 +716,21 @@ export function DocumentCreateWizard({
 
   React.useEffect(() => {
     if (isEditMode) return;
+    deleteDocumentDraftApi(type).catch(() => {});
+  }, [type, isEditMode]);
+
+  React.useEffect(() => {
+    if (isEditMode || type !== "sales-order" || !isApiConfigured()) return;
     let cancelled = false;
-    fetchDocumentDraftApi(type)
-      .then((draft) => {
-        if (cancelled || !draft || draftRestoredRef.current) return;
-        draftRestoredRef.current = true;
-        const { wizardStep, maxStepReached: savedMaxStep, lines: savedLines, overridePriceListId: savedPriceListId, overrideTaxConfigId: savedTaxConfigId, linkedPoId: savedLinkedPoId, savedAt: _savedAt, ...formDraft } = draft;
-        form.reset({ ...defaults, ...(formDraft as Partial<FormValues>) });
-        const restoredLines = parseDraftLines(savedLines);
-        if (restoredLines) setLines(restoredLines);
-        if (typeof savedPriceListId === "string") setOverridePriceListId(savedPriceListId);
-        if (savedPriceListId === null) setOverridePriceListId(null);
-        if (typeof savedTaxConfigId === "string") setOverrideTaxConfigId(savedTaxConfigId);
-        if (savedTaxConfigId === null) setOverrideTaxConfigId(null);
-        if (typeof savedLinkedPoId === "string") setLinkedPoId(savedLinkedPoId);
-        const restoredStep =
-          typeof wizardStep === "number" && wizardStep >= 1 && wizardStep <= STEPS.length
-            ? wizardStep
-            : restoredLines?.length
-              ? 2
-              : 1;
-        const restoredMax =
-          typeof savedMaxStep === "number" && savedMaxStep >= restoredStep
-            ? savedMaxStep
-            : restoredStep;
-        if (!isHqDoc) {
-          setStep(restoredStep);
-          setMaxStepReached(restoredMax);
-        }
+    fetchSalesDocumentFlowApi()
+      .then((settings) => {
+        if (!cancelled) setPrefillFinishedGoods(settings.prefillSalesOrderFinishedGoods);
       })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancelled) draftRestoreDoneRef.current = true;
-      });
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
-  }, [defaults, form, type, isEditMode, isHqDoc, isOdaflowFmcgEdit, existingDocument]);
+  }, [isEditMode, type]);
 
   React.useEffect(() => {
     if (!scanId || isEditMode) return;
@@ -1006,7 +968,7 @@ export function DocumentCreateWizard({
         if (cancelled) return;
         const wid = ctx.defaultWarehouseId;
         if (wid && opts.some((o) => o.id === wid)) {
-          form.setValue("warehouse", wid, { shouldDirty: true });
+          form.setValue("warehouse", wid);
         }
         deliveryNoteWarehouseDefaultAppliedRef.current = true;
       })
@@ -1025,7 +987,7 @@ export function DocumentCreateWizard({
     if (String(form.getValues("warehouse") ?? "").trim()) return;
     const sug = suggestWarehouseForBranch(opts, watchedBranch);
     if (sug) {
-      form.setValue("warehouse", sug, { shouldDirty: true });
+      form.setValue("warehouse", sug);
     }
   }, [type, fieldOptions, watchedBranch, form]);
 
@@ -1243,13 +1205,14 @@ export function DocumentCreateWizard({
     (next: DocumentLine[] | ((prev: DocumentLine[]) => DocumentLine[])) => {
       setLines((prev) => {
         const resolved = typeof next === "function" ? next(prev) : next;
-        const total = resolved.reduce((s, l) => s + l.amount, 0);
-        form.setValue("linesCount", resolved.length);
+        const counted = sheetFinishedGoods ? resolved.filter((line) => line.qty > 0) : resolved;
+        const total = counted.reduce((s, l) => s + l.amount, 0);
+        form.setValue("linesCount", counted.length);
         form.setValue("totalAmount", total);
         return resolved;
       });
     },
-    [form]
+    [form, sheetFinishedGoods]
   );
 
   const handlePackagingUpdated = React.useCallback((productId: string, items: ProductPackaging[]) => {
@@ -1336,6 +1299,10 @@ export function DocumentCreateWizard({
         }
         if (po.currency) form.setValue("currency", po.currency);
         form.setValue("poRef", po.number);
+        if (po.taxConfigId) setOverrideTaxConfigId(po.taxConfigId);
+        if (typeof po.linesAreTaxInclusive === "boolean") {
+          form.setValue("linesAreTaxInclusive", po.linesAreTaxInclusive);
+        }
         if (type === "bill") {
           setBillSourceLink({ id: poId, typeKey: "purchase-order" });
         }
@@ -1392,6 +1359,11 @@ export function DocumentCreateWizard({
         if (grn.partyId) form.setValue("party", grn.partyId);
         if (grn.branchId) form.setValue("branch", grn.branchId);
         if (grn.currency) form.setValue("currency", grn.currency);
+        if (grn.supplierInvoiceNumber) form.setValue("supplierInvoiceNumber", grn.supplierInvoiceNumber);
+        if (grn.taxConfigId) setOverrideTaxConfigId(grn.taxConfigId);
+        if (typeof grn.linesAreTaxInclusive === "boolean") {
+          form.setValue("linesAreTaxInclusive", grn.linesAreTaxInclusive);
+        }
         if (grn.warehouseId) form.setValue("warehouse", grn.warehouseId);
         const poNum = grn.sourceDocument?.typeKey === "purchase-order" ? grn.sourceDocument.number : "";
         if (poNum) form.setValue("poRef", poNum);
@@ -1494,6 +1466,7 @@ export function DocumentCreateWizard({
         })(),
         taxConfigId: (() => {
           if (!fmcgOrg) return undefined;
+          const purchasing = type === "bill" || type === "purchase-order" || type === "grn";
           const isSalesDoc = ![
             "bill",
             "purchase-order",
@@ -1502,15 +1475,18 @@ export function DocumentCreateWizard({
             "purchase-credit-note",
             "purchase-debit-note",
           ].includes(type);
-          if (!isSalesDoc) return undefined;
+          if (!isSalesDoc && !purchasing) return undefined;
           return effectiveTaxConfigId ?? undefined;
         })(),
         poRef: form.getValues("poRef") || undefined,
         reference: form.getValues("reference") || undefined,
-        ...(["bill", "purchase-credit-note", "purchase-debit-note"].includes(type)
+        ...(["bill", "purchase-credit-note", "purchase-debit-note", "grn"].includes(type)
           ? {
               supplierInvoiceNumber: form.getValues("supplierInvoiceNumber")?.trim() ?? "",
               supplierCuInvoiceNumber: form.getValues("supplierCuInvoiceNumber")?.trim() ?? "",
+              ...(type === "grn" && linkedSupplierBillId
+                ? { linkedSupplierBillId }
+                : {}),
             }
           : {}),
         dueDate: form.getValues("dueDate") || undefined,
@@ -1527,7 +1503,7 @@ export function DocumentCreateWizard({
                 sourceDocumentNumber: form.getValues("poRef") || undefined,
               }
             : {}),
-        lines: lines.map((line) => ({
+        lines: billableLines.map((line) => ({
           productId: line.productId,
           description: line.name,
           quantity: line.qty,
@@ -1539,8 +1515,8 @@ export function DocumentCreateWizard({
           amount: line.amount,
           ...(line.sourceLineId ? { sourceLineId: line.sourceLineId, lineId: line.sourceLineId } : {}),
         })),
-        subtotal: lines.reduce((s, l) => s + l.qty * l.price, 0),
-        tax: lines.reduce((s, l) => s + (l.tax ?? 0), 0) || undefined,
+        subtotal: billableLines.reduce((s, l) => s + l.qty * l.price, 0),
+        tax: billableLines.reduce((s, l) => s + (l.tax ?? 0), 0) || undefined,
         total: form.getValues("totalAmount") ?? 0,
         currency: selectedCurrency,
         ...(selectedCurrency !== baseCurrency && { exchangeRate }),
@@ -1550,10 +1526,11 @@ export function DocumentCreateWizard({
     [
       baseCurrency,
       form,
-      lines,
+      billableLines,
       linkedPoId,
       type,
       billSourceLink,
+      linkedSupplierBillId,
       overridePriceListId,
       customerDefaultPriceLists,
       fallbackPriceListId,
@@ -1562,37 +1539,9 @@ export function DocumentCreateWizard({
     ]
   );
 
-  const buildWizardDraftPayload = React.useCallback((): Record<string, unknown> => {
-    return {
-      ...form.getValues(),
-      wizardStep: step,
-      maxStepReached,
-      lines,
-      overridePriceListId,
-      overrideTaxConfigId,
-      linkedPoId,
-      savedAt: new Date().toISOString(),
-    };
-  }, [form, step, maxStepReached, lines, overridePriceListId, overrideTaxConfigId, linkedPoId]);
-
-  const persistCreateDraft = React.useCallback(
-    (immediate = false) => {
-      if (isEditMode || !isApiConfigured() || !draftRestoreDoneRef.current) return;
-      const doSave = () => {
-        void saveDocumentDraftApi(type, buildWizardDraftPayload()).catch(() => {});
-      };
-      if (createDraftSaveTimerRef.current) {
-        clearTimeout(createDraftSaveTimerRef.current);
-        createDraftSaveTimerRef.current = null;
-      }
-      if (immediate) {
-        doSave();
-        return;
-      }
-      createDraftSaveTimerRef.current = setTimeout(doSave, WIZARD_DRAFT_DEBOUNCE_MS);
-    },
-    [buildWizardDraftPayload, isEditMode, type]
-  );
+  const persistCreateDraft = React.useCallback((_immediate = false) => {
+    // Create mode no longer keeps a server draft. Opening New always starts empty.
+  }, []);
 
   const persistEditDraft = React.useCallback(
     (immediate = false) => {
@@ -1632,19 +1581,6 @@ export function DocumentCreateWizard({
   );
 
   React.useEffect(() => {
-    if (isEditMode) return;
-    const sub = form.watch(() => {
-      persistCreateDraft();
-    });
-    return () => sub.unsubscribe();
-  }, [form, isEditMode, persistCreateDraft]);
-
-  React.useEffect(() => {
-    if (isEditMode) return;
-    persistCreateDraft();
-  }, [step, maxStepReached, lines, overridePriceListId, overrideTaxConfigId, linkedPoId, isEditMode, persistCreateDraft]);
-
-  React.useEffect(() => {
     if (!isEditMode) return;
     const sub = form.watch(() => {
       persistEditDraft();
@@ -1659,7 +1595,6 @@ export function DocumentCreateWizard({
 
   React.useEffect(() => {
     return () => {
-      if (createDraftSaveTimerRef.current) clearTimeout(createDraftSaveTimerRef.current);
       if (editAutosaveTimerRef.current) clearTimeout(editAutosaveTimerRef.current);
     };
   }, []);
@@ -1684,7 +1619,7 @@ export function DocumentCreateWizard({
           return;
         }
         if (!linesOperational) {
-          toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+          toast.error(linesBlockedMessage("continue"));
           return;
         }
         persistWizardProgress(true);
@@ -1710,6 +1645,16 @@ export function DocumentCreateWizard({
             toast.error("Select a warehouse — stock must be received into a specific location.");
             return;
           }
+          if (fmcgOrg && type === "grn") {
+            if (!String(form.getValues("party") ?? "").trim()) {
+              toast.error("Select the supplier.");
+              return;
+            }
+            if (!String(form.getValues("supplierInvoiceNumber") ?? "").trim() && !linkedSupplierBillId) {
+              toast.error("Enter the supplier invoice number. The goods receipt has to be linked to a supplier invoice.");
+              return;
+            }
+          }
         }
         if (step === 2) {
           if (!linesStepReady) {
@@ -1717,7 +1662,7 @@ export function DocumentCreateWizard({
             return;
           }
           if (!linesOperational) {
-            toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+            toast.error(linesBlockedMessage("continue"));
             return;
           }
         }
@@ -1727,8 +1672,11 @@ export function DocumentCreateWizard({
     },
     [
       form,
+      fmcgOrg,
+      linkedSupplierBillId,
       headerStepReady,
       lines,
+      linesBlockedMessage,
       linesOperational,
       linesStepReady,
       maxStepReached,
@@ -1745,9 +1693,21 @@ export function DocumentCreateWizard({
       return;
     }
     if (!linesOperational) {
-      toast.error(documentLinesOperationalErrorMessage(lines, "review"));
+      toast.error(linesBlockedMessage("review"));
       setStep(2);
       return;
+    }
+    if (fmcgOrg && type === "grn") {
+      if (!String(form.getValues("party") ?? "").trim()) {
+        toast.error("Select the supplier.");
+        setStep(1);
+        return;
+      }
+      if (!String(form.getValues("supplierInvoiceNumber") ?? "").trim() && !linkedSupplierBillId) {
+        toast.error("Enter the supplier invoice number. The goods receipt has to be linked to a supplier invoice.");
+        setStep(1);
+        return;
+      }
     }
     // Credit check: if over limit and no override granted, open override dialog
     if (
@@ -1812,6 +1772,16 @@ export function DocumentCreateWizard({
         toast.error("Select a warehouse — stock must be received into a specific location.");
         return;
       }
+      if (fmcgOrg && type === "grn") {
+        if (!String(form.getValues("party") ?? "").trim()) {
+          toast.error("Select the supplier.");
+          return;
+        }
+        if (!String(form.getValues("supplierInvoiceNumber") ?? "").trim() && !linkedSupplierBillId) {
+          toast.error("Enter the supplier invoice number. The goods receipt has to be linked to a supplier invoice.");
+          return;
+        }
+      }
     }
     if (step === 2) {
       if (!linesStepReady) {
@@ -1819,7 +1789,7 @@ export function DocumentCreateWizard({
         return;
       }
       if (!linesOperational) {
-        toast.error(documentLinesOperationalErrorMessage(lines, "continue"));
+        toast.error(linesBlockedMessage("continue"));
         return;
       }
     }
@@ -1938,9 +1908,18 @@ export function DocumentCreateWizard({
       const patched = await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
       toast.success(`${label} updated.`);
       if (patched.pickPackSyncWarning) toast.warning(patched.pickPackSyncWarning);
+      if (type === "bill" && invoiceCopyFile) {
+        try {
+          await uploadDocumentAttachmentApi("bill", existingDocument.id, invoiceCopyFile);
+          toast.success(`Invoice copy ${invoiceCopyFile.name} attached.`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "Upload failed.";
+          toast.error(`The bill was saved, but the invoice copy did not upload. ${message}`);
+        }
+      }
       router.push(`/docs/${type}/${existingDocument.id}`);
     },
-    [buildDraftPayload, existingDocument, label, router, type]
+    [buildDraftPayload, existingDocument, invoiceCopyFile, label, router, type]
   );
 
   const confirmOdaflowCorrectionReasons = React.useCallback(
@@ -1973,11 +1952,34 @@ export function DocumentCreateWizard({
     odaflowConfirmedCorrections.customer || (odaflowConfirmedCorrections.products?.length ?? 0) > 0
   );
 
+  const attachInvoiceCopy = async (docId: string) => {
+    if (type !== "bill" || !invoiceCopyFile) return;
+    try {
+      await uploadDocumentAttachmentApi("bill", docId, invoiceCopyFile);
+      toast.success(`Invoice copy ${invoiceCopyFile.name} attached.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Upload failed.";
+      toast.error(`The bill was saved, but the invoice copy did not upload. ${message}`);
+    }
+  };
+
   const onSubmit = async () => {
     if (!linesOperational) {
-      toast.error(documentLinesOperationalErrorMessage(lines, "submit"));
+      toast.error(linesBlockedMessage("submit"));
       setStep(2);
       return;
+    }
+    if (fmcgOrg && type === "grn") {
+      if (!String(form.getValues("party") ?? "").trim()) {
+        toast.error("Select the supplier.");
+        setStep(1);
+        return;
+      }
+      if (!String(form.getValues("supplierInvoiceNumber") ?? "").trim() && !linkedSupplierBillId) {
+        toast.error("Enter the supplier invoice number. The goods receipt has to be linked to a supplier invoice.");
+        setStep(1);
+        return;
+      }
     }
     try {
       if (isEditMode && existingDocument) {
@@ -2000,9 +2002,11 @@ export function DocumentCreateWizard({
           (payload as Record<string, unknown>).notes = `[Credit override: ${creditOverrideReason}]`;
         }
         const result = await createDocumentApi(type as DocTypeKey, payload);
+        allowLeaveRef.current = true;
         await deleteDocumentDraftApi(type);
         toast.success(`${label} draft created.`);
         if (result.pickPackSyncWarning) toast.warning(result.pickPackSyncWarning);
+        await attachInvoiceCopy(result.id);
         router.push(`/docs/${type}/${result.id}`);
       }
     } catch (error) {
@@ -2188,9 +2192,10 @@ export function DocumentCreateWizard({
     };
   }, [selectedPartyId, lineEditorMode, fmcgOrg]);
 
-  // Load FMCG tax tags once; seed Kenya VAT16 exclusive/inclusive on first visit.
+  // Load FMCG tax tags for sales documents and for purchasing (PO, GRN, supplier bill).
   React.useEffect(() => {
-    if (!fmcgOrg || lineEditorMode !== "sales" || !isApiConfigured()) return;
+    const wantsTaxTags = fmcgOrg && (lineEditorMode === "sales" || fmcgPurchaseDoc);
+    if (!wantsTaxTags || !isApiConfigured()) return;
     let cancelled = false;
     fetchTaxConfigsApi()
       .then((items) => {
@@ -2202,7 +2207,7 @@ export function DocumentCreateWizard({
     return () => {
       cancelled = true;
     };
-  }, [fmcgOrg, lineEditorMode]);
+  }, [fmcgOrg, fmcgPurchaseDoc, lineEditorMode]);
 
   // Resolve party → org tax tag and apply to lines / inclusive flag.
   React.useEffect(() => {
@@ -2224,6 +2229,25 @@ export function DocumentCreateWizard({
     // Intentionally omit overrideTaxConfigId / taxCodes from deps — apply on party resolve only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPartyId, lineEditorMode, fmcgOrg, applyTaxConfigToLines]);
+
+  // Purchasing documents default to VAT inclusive. A tag copied from a PO or GRN wins.
+  React.useEffect(() => {
+    if (!fmcgPurchaseDoc || isEditMode || overrideTaxConfigId) return;
+    const inclusive =
+      taxConfigOptions.find((tag) => tag.code === "VAT16-INCL") ??
+      taxConfigOptions.find((tag) => tag.pricesAreTaxInclusive && tag.rate === 16);
+    if (!inclusive) return;
+    setResolvedTaxConfigId(inclusive.id);
+    setTaxConfigSource("org");
+    applyTaxConfigToLines(inclusive, taxCodes);
+  }, [
+    applyTaxConfigToLines,
+    fmcgPurchaseDoc,
+    isEditMode,
+    overrideTaxConfigId,
+    taxCodes,
+    taxConfigOptions,
+  ]);
 
   // When tax codes finish loading, re-apply the active tax tag so VAT amounts compute correctly.
   React.useEffect(() => {
@@ -2275,12 +2299,12 @@ export function DocumentCreateWizard({
     })
       .then((rate) => {
         if (!cancelled) {
-          form.setValue("exchangeRate", rate.rate, { shouldDirty: true });
+          form.setValue("exchangeRate", rate.rate);
         }
       })
       .catch(() => {
         if (!cancelled) {
-          form.setValue("exchangeRate", form.getValues("exchangeRate") || 1, { shouldDirty: true });
+          form.setValue("exchangeRate", form.getValues("exchangeRate") || 1);
         }
       })
       .finally(() => {
@@ -2301,7 +2325,8 @@ export function DocumentCreateWizard({
     fetchFranchiseOutletHqSupplier()
       .then((hq) => {
         if (cancelled) return;
-        form.setValue("party", hq.id, { shouldDirty: true });
+        autoFilledPartyRef.current = hq.id;
+        form.setValue("party", hq.id);
         setHqSupplierName(hq.name);
         setStep(2);
       })
@@ -2310,7 +2335,8 @@ export function DocumentCreateWizard({
         return searchPartyLookupOptionsApi({ role: "supplier", status: "ACTIVE", limit: 1 }).then((options) => {
           if (cancelled || !options.length) return;
           const hq = options[0];
-          form.setValue("party", hq.id, { shouldDirty: true });
+          autoFilledPartyRef.current = hq.id;
+          form.setValue("party", hq.id);
           setHqSupplierName(hq.label);
           setStep(2);
         });
@@ -2331,8 +2357,76 @@ export function DocumentCreateWizard({
       : step === 2 && !linesStepReady
         ? "Loading line items and product catalog…"
         : step === 2 && !linesOperational
-          ? documentLinesOperationalErrorMessage(lines, "continue")
+          ? linesBlockedMessage("continue")
           : undefined;
+
+  const formDirty = form.formState.isDirty;
+  const partyValue = (form.getValues("party") || "").trim();
+  const hasUserEntries =
+    !isEditMode &&
+    (formDirty ||
+      lines.some((line) => Number.isFinite(line.qty) && line.qty > 0) ||
+      Boolean(partyValue && partyValue !== autoFilledPartyRef.current) ||
+      Boolean((form.getValues("reference") || "").trim()) ||
+      Boolean((form.getValues("supplierInvoiceNumber") || "").trim()) ||
+      Boolean((form.getValues("supplierCuInvoiceNumber") || "").trim()) ||
+      Boolean((form.getValues("poRef") || "").trim()) ||
+      Boolean((form.getValues("dueDate") || "").trim()));
+  const hasEntriesRef = React.useRef(false);
+  hasEntriesRef.current = hasUserEntries;
+
+  React.useEffect(() => {
+    if (isEditMode) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (allowLeaveRef.current || !hasEntriesRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const onClick = (event: MouseEvent) => {
+      if (allowLeaveRef.current || !hasEntriesRef.current) return;
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = (event.target as HTMLElement | null)?.closest("a");
+      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || href.startsWith("mailto:") || href.startsWith("tel:")) return;
+      let url: URL;
+      try {
+        url = new URL(href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      const next = `${url.pathname}${url.search}${url.hash}`;
+      const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      if (next === current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      pendingLeaveRef.current = `${url.pathname}${url.search}`;
+      setLeaveConfirmOpen(true);
+    };
+    const currentUrl = window.location.href;
+    window.history.pushState({ docCreateGuard: type }, "", currentUrl);
+    const onPopState = () => {
+      if (allowLeaveRef.current) return;
+      if (!hasEntriesRef.current) {
+        allowLeaveRef.current = true;
+        window.history.back();
+        return;
+      }
+      window.history.pushState({ docCreateGuard: type }, "", currentUrl);
+      pendingLeaveRef.current = "back";
+      setLeaveConfirmOpen(true);
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("popstate", onPopState);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("popstate", onPopState);
+    };
+  }, [isEditMode, type]);
 
   return (
     <div className="space-y-4">
@@ -2371,6 +2465,43 @@ export function DocumentCreateWizard({
             {type === "bill" && loadingPo && (
               <p className="mb-3 text-xs text-muted-foreground">Loading supplier and lines from linked document…</p>
             )}
+            {fmcgOrg && type === "bill" ? (
+              <div className="mb-4 space-y-2 rounded-lg border bg-muted/30 p-4">
+                <Label>Goods receipt</Label>
+                <AsyncSearchableSelect
+                  value={billSourceLink?.typeKey === "grn" ? billSourceLink.id : ""}
+                  onValueChange={(grnId) => {
+                    if (!grnId) {
+                      setBillSourceLink(null);
+                      return;
+                    }
+                    void handleBillFromGrn(grnId);
+                  }}
+                  loadOptions={async (q) => {
+                    const page = await fetchDocumentListPageApi("grn", {
+                      search: q,
+                      limit: 20,
+                      partyId: form.getValues("party") || undefined,
+                    });
+                    return page.items
+                      .filter((item) => item.status !== "CANCELLED")
+                      .map((item) => ({
+                        id: item.id,
+                        label: item.number,
+                        description: [item.party, item.status, item.date].filter(Boolean).join(" · "),
+                      }));
+                  }}
+                  placeholder="Link a goods receipt"
+                  searchPlaceholder="GRN number"
+                  emptyMessage="No goods receipts found."
+                  allowClear
+                  disabled={loadingPo}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Optional. Linking a goods receipt fills the supplier, lines, and tax bracket from what was received.
+                </p>
+              </div>
+            ) : null}
             <form className={cn("space-y-4", !headerStepReady && "pointer-events-none opacity-60")}>
               {type === "grn" && (
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
@@ -2426,6 +2557,77 @@ export function DocumentCreateWizard({
                       </p>
                     )}
                   </div>
+                  {fmcgOrg ? (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <RenderField
+                        field={{ id: "supplier", label: "Supplier", type: "entity", entityType: "supplier", required: true }}
+                        form={form}
+                        options={fieldOptions.supplier}
+                        selectedPartyOption={selectedPartyOption}
+                        selectedWarehouseOption={selectedWarehouseOption}
+                        warehouseOptionsLoading={!branchWarehouseReady}
+                        branchId={watchedBranch}
+                        fmcgOrg={fmcgOrg}
+                        onCreateNewSupplier={(query) => {
+                          setQuickAddSupplierInitialName(query);
+                          setShowQuickAddSupplier(true);
+                        }}
+                      />
+                      <div className="space-y-2">
+                        <Label>Supplier invoice no.</Label>
+                        <Input
+                          {...form.register("supplierInvoiceNumber")}
+                          placeholder="Invoice number on the supplier tax invoice"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Required. Posting this receipt creates or links the supplier invoice.
+                        </p>
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Existing supplier invoice</Label>
+                        <AsyncSearchableSelect
+                          value={linkedSupplierBillId ?? ""}
+                          onValueChange={(billId) => {
+                            if (!billId) {
+                              setLinkedSupplierBillId(null);
+                              return;
+                            }
+                            setLinkedSupplierBillId(billId);
+                          }}
+                          onOptionSelect={(opt) => {
+                            if (!opt) return;
+                            setLinkedSupplierBillId(opt.id);
+                            const invoiceNo = opt.description?.match(/^Invoice ([^·]+)/)?.[1]?.trim();
+                            if (invoiceNo) form.setValue("supplierInvoiceNumber", invoiceNo);
+                          }}
+                          loadOptions={async (q) => {
+                            const page = await fetchDocumentListPageApi("bill", {
+                              search: q,
+                              limit: 20,
+                              partyId: form.getValues("party") || undefined,
+                            });
+                            return page.items
+                              .filter((item) => item.status !== "CANCELLED")
+                              .map((item) => ({
+                                id: item.id,
+                                label: item.supplierInvoiceNumber || item.number,
+                                description: [
+                                  item.supplierInvoiceNumber ? `Invoice ${item.supplierInvoiceNumber}` : item.number,
+                                  item.party,
+                                  item.status,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · "),
+                              }));
+                          }}
+                          placeholder="Link a supplier invoice you already entered"
+                          searchPlaceholder="Invoice number or bill number"
+                          emptyMessage="No supplier invoices found."
+                          allowClear
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
@@ -2582,9 +2784,9 @@ export function DocumentCreateWizard({
           <CardHeader className="flex flex-row items-center justify-between space-y-0">
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
-              {lineEditorMode === "sales" && fmcgOrg && (
+              {fmcgOrg && (lineEditorMode === "sales" || fmcgPurchaseDoc) && (
                 <div className="flex flex-wrap items-end justify-end gap-3">
-                  {priceListOptions.length > 0 && (
+                  {lineEditorMode === "sales" && priceListOptions.length > 0 && (
                     <div className="flex flex-col items-end gap-0.5">
                       <div className="flex items-center gap-2">
                         <Label className="text-xs text-muted-foreground whitespace-nowrap">Price tag</Label>
@@ -2621,7 +2823,7 @@ export function DocumentCreateWizard({
                   {taxConfigOptions.length > 0 && (
                     <div className="flex flex-col items-end gap-0.5">
                       <div className="flex items-center gap-2">
-                        <Label className="text-xs text-muted-foreground whitespace-nowrap">Tax tag</Label>
+                        <Label className="text-xs text-muted-foreground whitespace-nowrap">Tax bracket</Label>
                         <Select
                           value={effectiveTaxConfigId ?? undefined}
                           onValueChange={(newId) => {
@@ -2695,6 +2897,7 @@ export function DocumentCreateWizard({
             )}
             <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
+              sheetFinishedGoods={sheetFinishedGoods}
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
               currency={selectedCurrency}
@@ -2856,6 +3059,12 @@ export function DocumentCreateWizard({
                   </p>
                 </div>
               </div>
+              {type === "bill" ? (
+                <div className="space-y-1 border-t pt-4 text-sm">
+                  <span className="text-muted-foreground">Invoice copy</span>
+                  <p className="font-medium">{invoiceCopyFile?.name ?? "None"}</p>
+                </div>
+              ) : null}
               <p className="text-sm text-muted-foreground">
                 {isEditMode ? "Review your changes and save." : "Confirm and create draft. You can edit after creation."}
               </p>
@@ -2960,7 +3169,7 @@ export function DocumentCreateWizard({
                 step === 2 && !linesStepReady
                   ? "Loading line items and product catalog…"
                   : step === 2 && !linesOperational
-                    ? documentLinesOperationalErrorMessage(lines, "review")
+                    ? linesBlockedMessage("review")
                     : undefined
               }
             >
@@ -3059,6 +3268,30 @@ export function DocumentCreateWizard({
         confirmLabel="Confirm"
         onConfirm={confirmOdaflowCorrectionReasons}
       />
+      {!isEditMode ? (
+        <ConfirmDialog
+          open={leaveConfirmOpen}
+          onOpenChange={(open) => {
+            setLeaveConfirmOpen(open);
+            if (!open) pendingLeaveRef.current = null;
+          }}
+          title={`Cancel this ${label.toLowerCase()}?`}
+          description="Your entries will be discarded."
+          confirmLabel="Discard"
+          cancelLabel="Keep editing"
+          variant="destructive"
+          onConfirm={() => {
+            const href = pendingLeaveRef.current;
+            allowLeaveRef.current = true;
+            void deleteDocumentDraftApi(type)
+              .catch(() => {})
+              .finally(() => {
+                if (href === "back") window.history.go(-2);
+                else if (href) router.push(href);
+              });
+          }}
+        />
+      ) : null}
     </div>
   );
 }

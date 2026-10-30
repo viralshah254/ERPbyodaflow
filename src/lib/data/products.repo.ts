@@ -5,6 +5,7 @@
 
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchProductsApi, fetchProductsPageApi } from "@/lib/api/products";
+import { numericItemCodeSort } from "@/lib/products/item-code";
 
 let productsCache: ProductRow[] = [];
 const cacheListeners = new Set<() => void>();
@@ -51,6 +52,28 @@ export async function fetchProductsForDocumentLines(
         };
   const { items } = await fetchProductsPageApi(opts);
   return items;
+}
+
+/** Every active finished good with a numeric item code, in code order. */
+export async function fetchAllNumericFinishedGoods(): Promise<ProductRow[]> {
+  const rows: ProductRow[] = [];
+  let cursor: string | null = "0";
+  for (let page = 0; page < 20; page += 1) {
+    const result = await fetchProductsPageApi({
+      numericItemCode: true,
+      status: "ACTIVE",
+      sellable: true,
+      limit: 100,
+      cursor: cursor ?? "0",
+      includeStock: false,
+    });
+    rows.push(...result.items);
+    if (!result.hasMore || !result.nextCursor) break;
+    cursor = result.nextCursor;
+  }
+  return rows.sort(
+    (a, b) => numericItemCodeSort(a) - numericItemCodeSort(b) || a.name.localeCompare(b.name)
+  );
 }
 
 /** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */

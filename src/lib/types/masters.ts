@@ -1,6 +1,8 @@
 export type ProductRow = {
   id: string;
   sku: string;
+  /** Spreadsheet item code when the org uses numeric finished-goods codes. */
+  code?: string;
   /** Previous bakery code when the SKU was rewritten to a Sage code. */
   legacySku?: string;
   name: string;

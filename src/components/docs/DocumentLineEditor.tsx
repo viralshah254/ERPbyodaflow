@@ -16,10 +16,12 @@ import {
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import {
   listProducts,
+  fetchAllNumericFinishedGoods,
   fetchProductsForDocumentLines,
   setProductsCache,
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
+import { displayItemCode, isNumericItemCode } from "@/lib/products/item-code";
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
@@ -97,6 +99,11 @@ interface DocumentLineEditorProps {
   pricingByProductId?: Record<string, ProductPrice[]>;
   /** Filter products: purchasable (PO), sellable (SO), or all. */
   productFilter?: "purchasable" | "sellable" | "all";
+  /**
+   * New sales order lists every numeric finished good with a blank quantity.
+   * Add products and search stay on that same list.
+   */
+  sheetFinishedGoods?: boolean;
   /** Available tax codes for the tax column select. */
   taxCodes?: Array<{ id: string; code: string; name: string; rate: number }>;
   /**
@@ -307,6 +314,7 @@ export function DocumentLineEditor({
   packagingByProductId,
   pricingByProductId,
   productFilter,
+  sheetFinishedGoods = false,
   taxCodes = [],
   defaultLineTaxCodeId,
   linesAreTaxInclusive = false,
@@ -348,7 +356,7 @@ export function DocumentLineEditor({
   >({});
 
   const lineQtyValue = (line: DocumentLine) =>
-    lineFieldDrafts[line.id]?.qty ?? String(line.qty);
+    lineFieldDrafts[line.id]?.qty ?? (sheetFinishedGoods && line.qty === 0 ? "" : String(line.qty));
 
   const linePriceValue = (line: DocumentLine) =>
     lineFieldDrafts[line.id]?.price ?? String(line.price);
@@ -441,7 +449,8 @@ export function DocumentLineEditor({
       return;
     }
     let cancelled = false;
-    fetchProductsForDocumentLines(productFilter)
+    const load = sheetFinishedGoods ? fetchAllNumericFinishedGoods() : fetchProductsForDocumentLines(productFilter);
+    load
       .then((rows) => {
         if (!cancelled) {
           const sorted =
@@ -464,7 +473,7 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode]);
+  }, [productFilter, mode, sheetFinishedGoods]);
 
   React.useEffect(() => {
     const catalogReady = !productFilter || productFilter === "all" || filteredProducts !== null;
@@ -604,18 +613,19 @@ export function DocumentLineEditor({
       onLinesChange((prev) => {
         const next = [...prev];
         items.forEach((item, i) => {
-          const q = Number.isFinite(item.qty) && item.qty > 0 ? item.qty : 1;
+          const q = item.qty === 0 ? 0 : Number.isFinite(item.qty) && item.qty > 0 ? item.qty : 1;
+          const priceQty = q > 0 ? q : 1;
           if (!item.asNewLine) {
             const idx = next.findIndex((l) => l.productId === item.product.id);
             if (idx >= 0) {
               const line = next[idx]!;
-              const qty = line.qty + q;
-              const baseQty = computeBaseQty(line.productId, line.uom, qty);
+              const qty = q === 0 ? line.qty : line.qty + q;
+              const baseQty = qty > 0 ? computeBaseQty(line.productId, line.uom, qty) : 0;
               let merged: DocumentLine;
               if (useCostPricing || isPreservedCommercialLine(line)) {
                 merged = { ...line, qty, baseQty, amount: qty * line.price };
               } else {
-                const { price, reason, discount } = resolvePrice(line.productId, qty, line.uom, line.discount);
+                const { price, reason, discount } = resolvePrice(line.productId, qty > 0 ? qty : 1, line.uom, line.discount);
                 merged = {
                   ...line,
                   qty,
@@ -637,12 +647,12 @@ export function DocumentLineEditor({
           ensureVariantsLoaded(p.id);
           const packaging = packagingByProductId?.[p.id] ?? [];
           const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
-          const baseQty = computeBaseQty(p.id, uom, q);
-          const { price, reason, discount } = resolvePrice(p.id, q, uom);
+          const baseQty = q > 0 ? computeBaseQty(p.id, uom, q) : 0;
+          const { price, reason, discount } = resolvePrice(p.id, priceQty, uom);
           const draft: DocumentLine = {
             id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
             productId: p.id,
-            sku: p.sku,
+            sku: displayItemCode(p) || p.sku,
             name: p.name,
             uom,
             qty: q,
@@ -717,6 +727,23 @@ export function DocumentLineEditor({
       useCostPricing,
     ]
   );
+
+  const sheetPrefilledRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!sheetFinishedGoods || sheetPrefilledRef.current) return;
+    if (!filteredProducts?.length) return;
+    if (!filteredProducts.every((product) => isNumericItemCode(product.code) || isNumericItemCode(product.sku))) return;
+    if (lines.length > 0) {
+      sheetPrefilledRef.current = true;
+      return;
+    }
+    sheetPrefilledRef.current = true;
+    commitProducts(
+      filteredProducts.map((product) => ({ product, qty: 0, asNewLine: true })),
+      undefined,
+      false
+    );
+  }, [sheetFinishedGoods, filteredProducts, lines.length, commitProducts]);
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -808,7 +835,8 @@ export function DocumentLineEditor({
           const packs = packagingByProductId?.[l.productId];
           if (!packs?.length) return l;
         }
-        const nextBaseQty = computeBaseQty(l.productId, l.uom, l.qty);
+        const priceQty = l.qty > 0 ? l.qty : 1;
+        const nextBaseQty = l.qty > 0 ? computeBaseQty(l.productId, l.uom, l.qty) : 0;
         if (isPreservedCommercialLine(l) && l.price > 0) {
           if (l.discount != null) {
             if (nextBaseQty === l.baseQty) return l;
@@ -830,7 +858,7 @@ export function DocumentLineEditor({
         // Keep line Disc% when set (edit / manual); otherwise use price-tag default.
         const { price, reason, discount } = resolvePriceRef.current(
           l.productId,
-          l.qty,
+          priceQty,
           l.uom,
           l.discount
         );
@@ -1086,7 +1114,7 @@ export function DocumentLineEditor({
   );
   const priceLabelFor = React.useCallback(
     (p: ProductRow) => {
-      if (useCostPricing) return "Enter cost";
+      if (useCostPricing) return "";
       const uom = defaultLineUom(packagingByProductId?.[p.id] ?? [], mode, p, fmcgOrg);
       const { price } = resolvePrice(p.id, 1, uom);
       return formatMoney(price, currency);
@@ -1128,8 +1156,9 @@ export function DocumentLineEditor({
       void Promise.all(
         queries.map((search) =>
           fetchProductsApi({
-            purchasable: productFilter === "purchasable" ? true : undefined,
-            sellable: productFilter === "sellable" ? true : undefined,
+            purchasable: sheetFinishedGoods ? undefined : productFilter === "purchasable" ? true : undefined,
+            sellable: productFilter === "sellable" || sheetFinishedGoods ? true : undefined,
+            numericItemCode: sheetFinishedGoods || undefined,
             search,
             limit: 30,
             includeStock: false,
@@ -1146,7 +1175,7 @@ export function DocumentLineEditor({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [productFilter, searchOpen, searchSplit.stripped, searchSplit.text]);
+  }, [productFilter, searchOpen, searchSplit.stripped, searchSplit.text, sheetFinishedGoods]);
 
   const searchResults = React.useMemo(() => {
     const byId = new Map<string, ProductRow>();
@@ -1399,7 +1428,9 @@ export function DocumentLineEditor({
                           {qtyForAdd ? ` · Add at qty ${qtyForAdd}` : ""}
                         </span>
                       </span>
-                      <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
+                      {priceLabelFor(p) ? (
+                        <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
+                      ) : null}
                     </button>
                   </li>
                 ))}
@@ -1412,6 +1443,7 @@ export function DocumentLineEditor({
       <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
+        sheetFinishedGoods={sheetFinishedGoods}
         productFilter={productFilter ?? (mode === "purchasing" ? "purchasable" : "sellable")}
         fmcgOrg={fmcgOrg}
         plantCatalogue={plantCatalogue}

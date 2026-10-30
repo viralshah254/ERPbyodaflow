@@ -50,6 +50,8 @@ type DocumentProductPickerSheetProps = {
   fmcgOrg?: boolean;
   /** Top Food and bakery catalogues. Type filter uses item role, including packaging. */
   plantCatalogue?: boolean;
+  /** Only numeric finished-goods item codes. Hides raw, packaging, and semi-finished. */
+  sheetFinishedGoods?: boolean;
   /** Catalog already loaded for the lines step. */
   products?: ProductRow[];
   loading?: boolean;
@@ -77,6 +79,7 @@ export function DocumentProductPickerSheet({
   productFilter = "sellable",
   fmcgOrg = false,
   plantCatalogue = false,
+  sheetFinishedGoods = false,
   products = [],
   loading: catalogLoading = false,
   priceLabel,
@@ -92,7 +95,11 @@ export function DocumentProductPickerSheet({
   const [typeFilter, setTypeFilter] = React.useState<PickerTypeFilter>(() =>
     defaultPickerTypeFilter(productFilter, plantCatalogue)
   );
-  const typeOptions = plantCatalogue ? PLANT_TYPE_FILTER_OPTIONS : TYPE_FILTER_OPTIONS;
+  const typeOptions = sheetFinishedGoods
+    ? [{ value: "FINISHED" as const, label: "Finished goods" }]
+    : plantCatalogue
+      ? PLANT_TYPE_FILTER_OPTIONS
+      : TYPE_FILTER_OPTIONS;
   const [categoryKey, setCategoryKey] = React.useState<string | null>(null);
   const [remoteItems, setRemoteItems] = React.useState<ProductRow[]>([]);
   const [cursor, setCursor] = React.useState<string | null>("0");
@@ -120,7 +127,7 @@ export function DocumentProductPickerSheet({
     if (!open) return;
     setSearch("");
     setDebouncedSearch("");
-    setTypeFilter(defaultPickerTypeFilter(productFilter, plantCatalogue));
+    setTypeFilter(sheetFinishedGoods ? "FINISHED" : defaultPickerTypeFilter(productFilter, plantCatalogue));
     setCategoryKey(null);
     setSelected(new Map());
     setQtyById({});
@@ -131,7 +138,7 @@ export function DocumentProductPickerSheet({
     setAddedIds(new Set());
     const focusId = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(focusId);
-  }, [open, productFilter, plantCatalogue]);
+  }, [open, productFilter, plantCatalogue, sheetFinishedGoods]);
 
   const loadPage = React.useCallback(
     async (opts: { reset: boolean; cursor: string | null; search: string }) => {
@@ -141,14 +148,19 @@ export function DocumentProductPickerSheet({
       if (opts.reset) setLoading(true);
       else setLoadingMore(true);
       try {
-        const query = pickerListQuery({ productFilter, plantCatalogue, typeFilter });
+        const query = pickerListQuery({
+          productFilter,
+          plantCatalogue,
+          typeFilter: sheetFinishedGoods ? "FINISHED" : typeFilter,
+        });
         const page = await fetchProductsPageApi({
           search: opts.search || undefined,
           status: "ACTIVE",
-          purchasable: query.purchasable,
-          sellable: query.sellable,
-          productType: query.productType,
-          itemRole: query.itemRole,
+          purchasable: sheetFinishedGoods ? undefined : query.purchasable,
+          sellable: sheetFinishedGoods ? true : query.sellable,
+          productType: sheetFinishedGoods ? undefined : query.productType,
+          itemRole: sheetFinishedGoods ? undefined : query.itemRole,
+          numericItemCode: sheetFinishedGoods || undefined,
           limit: PAGE_SIZE,
           cursor: opts.cursor ?? "0",
           includeStock: false,
@@ -173,7 +185,7 @@ export function DocumentProductPickerSheet({
         }
       }
     },
-    [plantCatalogue, productFilter, typeFilter]
+    [plantCatalogue, productFilter, typeFilter, sheetFinishedGoods]
   );
 
   React.useEffect(() => {
@@ -440,9 +452,12 @@ export function DocumentProductPickerSheet({
                         <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
                       </button>
-                      <span className="hidden shrink-0 text-sm tabular-nums sm:block">
-                        {priceLabel ? priceLabel(p) : ""}
-                      </span>
+                      {priceLabel?.(p) ? (
+                        <span className="hidden shrink-0 text-sm tabular-nums sm:block">
+                          {priceLabel(p)}
+                        </span>
+                      ) : null}
+                      <span className="shrink-0 text-xs text-muted-foreground">Qty</span>
                       <Input
                         className="h-8 w-16 shrink-0 tabular-nums"
                         inputMode="decimal"

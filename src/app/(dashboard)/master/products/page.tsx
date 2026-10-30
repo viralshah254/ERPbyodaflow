@@ -81,6 +81,9 @@ import {
   type ItemRole,
 } from "@/lib/products/item-role";
 import { composeFmcgSize, FMCG_SIZE_UOMS } from "@/lib/products/fmcg-size";
+import { nextNumericItemCode } from "@/lib/products/item-code";
+import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
+import { isApiConfigured } from "@/lib/api/client";
 import {
   clearProductCreateDraft,
   loadProductCreateDraft,
@@ -155,6 +158,7 @@ export default function MasterProductsPage() {
   const canWriteProduct = permissions.includes("inventory.write") || permissions.includes("admin.settings") || permissions.includes("*");
   const productLabel = t("product", terminology);
   const [hasCreateDraft, setHasCreateDraft] = React.useState(false);
+  const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -369,18 +373,41 @@ export default function MasterProductsPage() {
   React.useEffect(() => { void refreshProducts(); }, [refreshProducts]);
 
   React.useEffect(() => {
+    if (!isApiConfigured()) return;
+    fetchSalesDocumentFlowApi()
+      .then((settings) => setPrefillFinishedGoods(settings.prefillSalesOrderFinishedGoods))
+      .catch(() => {});
+  }, []);
+
+  const creatingFinishedGood =
+    prefillFinishedGoods &&
+    (plantCatalogue
+      ? (createItemRole || itemRoleFilter) === "FINISHED"
+      : productType === "FINISHED");
+
+  React.useEffect(() => {
     if (drawerOpen) {
-      fetchProductSkusApi()
-        .then((skus) => setSku(suggestNextSku(skus)))
-        .catch(() => {});
-      fetchProductCodesApi()
-        .then((codes) => setCode(suggestNextCode(codes)))
-        .catch(() => setCode("00001"));
+      if (creatingFinishedGood) {
+        Promise.all([fetchProductSkusApi(), fetchProductCodesApi()])
+          .then(([skus, codes]) => {
+            const next = nextNumericItemCode([...skus, ...codes]);
+            setSku(next);
+            setCode(next);
+          })
+          .catch(() => {});
+      } else {
+        fetchProductSkusApi()
+          .then((skus) => setSku(suggestNextSku(skus)))
+          .catch(() => {});
+        fetchProductCodesApi()
+          .then((codes) => setCode(suggestNextCode(codes)))
+          .catch(() => setCode("00001"));
+      }
       fetchFinancialTaxesApi()
         .then((taxes) => setTaxCodes(taxes))
         .catch(() => setTaxCodes([]));
     }
-  }, [drawerOpen]);
+  }, [drawerOpen, creatingFinishedGood]);
 
   const categoryNameById = React.useMemo(
     () => new Map(categories.map((c) => [c.id, categoryPathLabel(c, categories)])),
@@ -772,9 +799,12 @@ export default function MasterProductsPage() {
     let trimmedSku = sku.trim();
     try {
       const freshSkus = await fetchProductSkusApi();
+      const freshCodes = creatingFinishedGood ? await fetchProductCodesApi() : [];
       // Auto-generate if the field was cleared.
       if (!trimmedSku) {
-        trimmedSku = suggestNextSku(freshSkus);
+        trimmedSku = creatingFinishedGood
+          ? nextNumericItemCode([...freshSkus, ...freshCodes])
+          : suggestNextSku(freshSkus);
         setSku(trimmedSku);
       }
       if (freshSkus.some((s) => s.toLowerCase() === trimmedSku.toLowerCase())) {
@@ -797,9 +827,11 @@ export default function MasterProductsPage() {
       ? composeFmcgSize(sizeValue, sizeUom)
       : size.trim() || undefined;
     // FMCG: product code = barcode (trade identity). Seafood keeps separate product code.
-    const resolvedCode = fmcgOrg
-      ? trimmedBarcode || trimmedSku
-      : code.trim() || undefined;
+    const resolvedCode = creatingFinishedGood
+      ? trimmedSku
+      : fmcgOrg
+        ? trimmedBarcode || trimmedSku
+        : code.trim() || undefined;
 
     if (fmcgOrg && (!plantCatalogue || roleForCreate === "FINISHED")) {
       for (const row of createPackRows) {

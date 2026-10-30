@@ -4,6 +4,7 @@ import { apiRequest, requireLiveApi } from "./client";
 type BackendProduct = {
   id: string;
   sku?: string;
+  code?: string;
   legacySku?: string;
   name: string;
   barcode?: string | null;
@@ -51,6 +52,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
   return {
     id: item.id,
     sku: item.sku ?? item.id,
+    code: item.code,
     legacySku: item.legacySku || undefined,
     name: item.name,
     barcode: item.barcode ?? undefined,
@@ -102,6 +104,8 @@ export type FetchProductsOptions = {
   size?: string;
   pricedOnPriceListId?: string;
   pricedStatus?: "priced" | "unpriced";
+  /** Active finished goods whose item code is a whole number. */
+  numericItemCode?: boolean;
 };
 
 export type FetchProductsPageResult = {
@@ -133,6 +137,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.size?.trim()) params.set("size", opts.size.trim());
   if (opts.pricedOnPriceListId?.trim()) params.set("pricedOnPriceListId", opts.pricedOnPriceListId.trim());
   if (opts.pricedStatus) params.set("pricedStatus", opts.pricedStatus);
+  if (opts.numericItemCode) params.set("numericItemCode", "true");
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);

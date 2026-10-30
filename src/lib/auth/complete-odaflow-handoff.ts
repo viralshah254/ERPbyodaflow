@@ -4,6 +4,7 @@ import { fetchRuntimeSession } from "@/lib/api/context";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { erpApiCandidates, odaflowApiCandidates } from "@/lib/auth/odaflow-hub";
+import { clearErpScreenLock } from "@/lib/auth/screen-lock";
 
 type ExchangePayload = {
   erpAssertion?: string;
@@ -112,6 +113,7 @@ async function sessionOn(base: string, token: string): Promise<string> {
     franchiseManagerName: session.orgContext.franchiseManagerName,
     franchisePersona: session.orgContext.franchisePersona,
   });
+  clearErpScreenLock(session.user.userId);
   if (session.collectionsHold?.enabled) return "/collections-hold";
   return session.isPlatformOperator ? "/platform" : "/dashboard";
 }

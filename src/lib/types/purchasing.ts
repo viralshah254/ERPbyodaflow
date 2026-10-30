@@ -52,6 +52,7 @@ export type GrnLineRow = {
   qty: number;
   uom: string;
   value: number;
+  tax?: number;
   receivedWeightKg?: number;
   paidWeightKg?: number;
   processedWeightKg?: number;
@@ -79,6 +80,12 @@ export type GrnDetailRow = PurchasingDocRow & {
   warehouseId?: string;
   lines: GrnLineRow[];
   linkedBill?: { id: string; number: string; status: string } | null;
+  partyId?: string;
+  supplierInvoiceNumber?: string;
+  linkedSupplierBillId?: string;
+  linesAreTaxInclusive?: boolean;
+  tax?: number;
+  taxConfigId?: string;
   // Work order link (inherited via PurchasingDocRow but repeated here for clarity)
 };
 

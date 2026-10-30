@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth-store";
-import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useUIStore } from "@/stores/ui-store";
 import { Button } from "@/components/ui/button";
@@ -16,17 +15,15 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { Bell, Menu, Search, Settings, LogOut, User, Sparkles, KeyRound, LayoutGrid } from "lucide-react";
-import { signOut as firebaseSignOut } from "@/lib/firebase";
-import { unregisterWebPushToken } from "@/lib/push-notifications";
-import { setApiAuth } from "@/lib/api/client";
+import { Bell, Menu, Search, Settings, LogOut, User, Sparkles, KeyRound, LayoutGrid, Lock } from "lucide-react";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { getUserDisplayName, getUserInitials } from "@/lib/user-display";
-import { odaflowHubLoggedOutUrl, odaflowLaunchpadUrl } from "@/lib/auth/odaflow-hub";
-import { pingSiblingSignOut } from "@/lib/auth/sso-logout-sync";
+import { odaflowLaunchpadUrl } from "@/lib/auth/odaflow-hub";
+import { requestChangeLockPassword } from "@/lib/auth/screen-lock";
+import { signOutOfErp } from "@/lib/auth/sign-out-erp";
 
 export function Header() {
-  const { user, currentBranch, permissions, logout } = useAuthStore();
+  const { user, currentBranch, permissions } = useAuthStore();
   const copilotEnabled = useCopilotFeatureEnabled();
   const canSeeOrgProfile = permissions.includes("settings.org.read") || permissions.includes("*");
   const openDrawer = useCopilotStore((s) => s.openDrawer);
@@ -35,24 +32,6 @@ export function Header() {
 
   const displayName = getUserDisplayName(user);
   const userInitials = getUserInitials(user);
-
-  const handleLogout = async () => {
-    try {
-      await unregisterWebPushToken();
-    } catch {
-      // best-effort before token is cleared
-    }
-    pingSiblingSignOut();
-    setApiAuth({ bearerToken: undefined });
-    logout();
-    useOrgContextStore.getState().reset();
-    try {
-      await firebaseSignOut();
-    } catch {
-      // ignore if Firebase is unavailable or already signed out
-    }
-    window.location.assign(odaflowHubLoggedOutUrl("erp"));
-  };
 
   return (
     <header className="z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 md:gap-4">
@@ -155,6 +134,14 @@ export function Header() {
               <span>Change password</span>
             </Link>
           </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={() => {
+              requestChangeLockPassword();
+            }}
+          >
+            <Lock className="mr-2 h-4 w-4" />
+            <span>Change lock password</span>
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
             <a href={odaflowLaunchpadUrl()} className="flex cursor-pointer items-center">
@@ -164,7 +151,7 @@ export function Header() {
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={() => {
-              void handleLogout();
+              void signOutOfErp();
             }}
             className="focus:bg-destructive/10 focus:text-destructive"
           >
