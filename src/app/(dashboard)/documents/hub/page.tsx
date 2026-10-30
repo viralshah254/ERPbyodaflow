@@ -11,6 +11,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 import { DocumentHubPreview } from "@/components/documents/DocumentHubPreview";
+import { HubInvoiceEditor } from "@/components/documents/HubInvoiceEditor";
 import {
   clearHubCheque,
   commitHubDocument,
@@ -18,13 +19,11 @@ import {
   confirmHubAllocation,
   confirmHubClassification,
   confirmHubPhysicalReceipt,
-  createHubGroup,
   deleteHubDocument,
   explainHubDocument,
   fetchDocumentHub,
   rereadHubDocument,
   linkHubDocument,
-  updateHubRule,
 } from "@/lib/api/document-hub";
 import { searchPartyLookupOptionsApi } from "@/lib/api/parties";
 import type { DocumentHubStatus, HubFlag, ScannedDocument } from "@/lib/types/document-hub";
@@ -73,7 +72,6 @@ export default function DocumentHubPage() {
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [data, setData] = React.useState<Awaited<ReturnType<typeof fetchDocumentHub>> | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [groupName, setGroupName] = React.useState("");
   const [bankReference, setBankReference] = React.useState("");
   const [physical, setPhysical] = React.useState<Record<string, string>>({});
   const [pendingDelete, setPendingDelete] = React.useState<{ id: string; name: string } | null>(null);
@@ -108,7 +106,7 @@ export default function DocumentHubPage() {
       }
       setSelectedId((current) => {
         if (override?.selectId && next.items.some((item) => item._id === override.selectId)) return override.selectId;
-        return current && next.items.some((item) => item._id === current) ? current : next.items[0]?._id ?? null;
+        return current && next.items.some((item) => item._id === current) ? current : null;
       });
     } catch (error) {
       if (requestId !== loadRequest.current) return;
@@ -125,8 +123,6 @@ export default function DocumentHubPage() {
   const selected = data?.items.find((item) => item._id === selectedId) ?? null;
   const counts = new Map((data?.counts ?? []).map((row) => [row._id, row.count]));
   const allCount = [...counts.values()].reduce((sum, count) => sum + count, 0);
-  const parents = (data?.groups ?? []).filter((group) => !group.parentKey);
-  const childrenOf = (key: string) => (data?.groups ?? []).filter((group) => group.parentKey === key);
 
   const run = async (work: () => Promise<unknown>, success: string) => {
     try {
@@ -209,7 +205,32 @@ export default function DocumentHubPage() {
           <Input value={party} onChange={(event) => setParty(event.target.value)} placeholder="Supplier or customer" />
         </div>
 
-        <div className="grid items-start gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
+        {selected ? (
+          <div className="grid min-h-[calc(100dvh-16rem)] overflow-hidden rounded-xl border bg-card lg:grid-cols-2">
+            <section className="flex min-h-[32rem] flex-col border-b bg-muted/20 lg:min-h-0 lg:border-b-0 lg:border-r">
+              <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedId(null)}>Inbox</Button>
+                <p className="min-w-0 truncate text-sm text-muted-foreground">{selected.fileName}</p>
+              </div>
+              <div className="min-h-0 flex-1">
+                <DocumentHubPreview fileId={selected.fileId} fileName={selected.fileName} contentType={selected.contentType} fileUrl={selected.fileUrl} fill />
+              </div>
+            </section>
+            <section className="min-h-0 overflow-y-auto">
+              <Detail
+                item={selected}
+                groups={data?.groups ?? []}
+                physical={physical}
+                setPhysical={setPhysical}
+                bankReference={bankReference}
+                setBankReference={setBankReference}
+                onDelete={() => setPendingDelete({ id: selected._id, name: selected.fields.partyName || selected.fileName })}
+                run={run}
+              />
+            </section>
+          </div>
+        ) : (
+        <div>
           <Card className="relative overflow-hidden">
             <TableLinearProgress active={loading} />
             <CardHeader className="flex flex-row items-center justify-between gap-2 p-4 pb-2">
@@ -309,81 +330,8 @@ export default function DocumentHubPage() {
               ) : null}
             </CardContent>
           </Card>
-
-          {selected ? (
-            <Detail
-              item={selected}
-              groups={data?.groups ?? []}
-              physical={physical}
-              setPhysical={setPhysical}
-              bankReference={bankReference}
-              setBankReference={setBankReference}
-              onDelete={() => setPendingDelete({ id: selected._id, name: selected.fields.partyName || selected.fileName })}
-              run={run}
-            />
-          ) : (
-            <Card>
-              <CardContent className="p-8 text-sm text-muted-foreground">Select a document to review its preview, summary, match, and allocation.</CardContent>
-            </Card>
-          )}
         </div>
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-base">Groups</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4 pt-2">
-              <div className="flex gap-2">
-                <Input value={groupName} onChange={(event) => setGroupName(event.target.value)} placeholder="New group or subgroup name" />
-                <Button
-                  type="button"
-                  onClick={() => void run(async () => {
-                    await createHubGroup(groupName);
-                    setGroupName("");
-                  }, "Group saved.")}
-                  disabled={!groupName.trim()}
-                >
-                  Add
-                </Button>
-              </div>
-              <div className="max-h-56 space-y-3 overflow-y-auto pr-1">
-                {parents.map((group) => (
-                  <div key={group._id}>
-                    <p className="text-sm font-medium">{group.name}</p>
-                    <ul className="mt-1 space-y-0.5 border-l pl-3 text-sm text-muted-foreground">
-                      {childrenOf(group.key).map((child) => (
-                        <li key={child._id}>{child.name}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-base">Learned rules</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-4 pt-2">
-              {(data?.rules ?? []).length === 0 ? (
-                <p className="text-sm text-muted-foreground">Confirmed classifications show up here as proposed rules. An administrator confirms them before they change future documents.</p>
-              ) : null}
-              {(data?.rules ?? []).map((rule) => (
-                <div key={rule._id} className="rounded-lg border p-3 text-sm">
-                  <p className="font-medium">{rule.partyName || "Any party"}</p>
-                  <p className="text-muted-foreground">{labelize(rule.documentType)} · {rule.status} · {labelize(rule.mode)}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button type="button" size="sm" variant="outline" onClick={() => void run(() => updateHubRule(rule._id, { status: "confirmed" }), "Rule confirmed.")}>Confirm</Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void run(() => updateHubRule(rule._id, { mode: "suggest" }), "Rule will only suggest.")}>Suggest</Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void run(() => updateHubRule(rule._id, { mode: "draft" }), "Rule will prepare a draft.")}>Draft</Button>
-                    <Button type="button" size="sm" variant="outline" onClick={() => void run(() => updateHubRule(rule._id, { mode: "auto_post" }), "Eligible exact matches can be marked auto-processed. The ledger is still posted from the ERP document.")}>Auto-process</Button>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
+        )}
       </div>
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -430,6 +378,7 @@ function Detail({
   const [partySearch, setPartySearch] = React.useState("");
   const [partyOptions, setPartyOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const role = partyRole(item.documentType);
+  const invoiceReview = item.documentType === "supplier_invoice" || item.documentType === "customer_invoice" || item.documentType === "utility_bill" || item.documentType === "supplier_credit_note";
   const lines = item.fields.lines ?? [];
   const receipt = item.documentType === "supplier_delivery_note" || item.documentType === "goods_receipt";
   const countedLines = receipt ? (lines.length ? lines : [{ description: "Received goods" }]) : [];
@@ -467,7 +416,7 @@ function Detail({
   }, [item.fields.partyId, item.fields.partyName, partySearch, role]);
 
   return (
-    <Card>
+    <Card className="h-full rounded-none border-0 shadow-none">
       <CardHeader className="space-y-1 p-4 pb-2">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
@@ -480,11 +429,34 @@ function Detail({
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-4 pt-2 text-sm">
-        <DocumentHubPreview fileId={item.fileId} fileName={item.fileName} contentType={item.contentType} fileUrl={item.fileUrl} />
         <DocumentSummary documentId={item._id} />
         <p className="text-muted-foreground">{item.ledgerPostingNote}</p>
-        {item.postedRecord ? (
+        {invoiceReview ? (
+          <HubInvoiceEditor
+            item={item}
+            role={role}
+            onApprove={(body) => run(() => commitHubDocument(item._id, body), item.status === "ready_for_approval" ? "Approved. It is in the system, and the original file stays attached." : "Recorded. The original file stays attached.")}
+          />
+        ) : item.postedRecord ? (
           <p className="font-medium">{item.postedRecord.number} is in the books.</p>
+        ) : item.status === "ready_for_approval" ? (
+          <div className="space-y-2">
+            <p>Approve to put this {labelize(item.documentType)} in the system. The original file stays attached.</p>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                const partyId = chosenPartyId || item.fields.partyId;
+                if (role && !partyId) {
+                  toast.error(role === "supplier" ? "Choose the supplier this document belongs to." : "Choose the customer this document belongs to.");
+                  return;
+                }
+                void run(() => commitHubDocument(item._id, partyId ? { partyId } : {}), "Approved. It is in the system, and the original file stays attached.");
+              }}
+            >
+              Approve
+            </Button>
+          </div>
         ) : (
           <Button
             type="button"
@@ -501,6 +473,12 @@ function Detail({
             Record in the books
           </Button>
         )}
+        {invoiceReview ? (
+          <Button type="button" size="sm" variant="outline" onClick={() => void run(() => rereadHubDocument(item._id), "Read the file again.")}>
+            Read the file again
+          </Button>
+        ) : (
+        <>
         <Section title="On the file">
           <dl className="grid grid-cols-2 gap-3">
             <Field label={role === "supplier" ? "Supplier" : "Customer"} value={item.fields.partyName} />
@@ -557,6 +535,8 @@ function Detail({
             </select>
           </Section>
         ) : null}
+        </>
+        )}
         <dl className="grid grid-cols-2 gap-3">
           <Field label="Type" value={labelize(item.documentType)} />
           <Field label="Confidence" value={`${Math.round(item.confidence * 100)}%`} />
@@ -573,7 +553,13 @@ function Detail({
           </Section>
         ) : null}
         <Section title="Matches">
-          {item.matches.length === 0 ? <p className="text-muted-foreground">No ERP transaction matched.</p> : null}
+          {item.matches.length === 0 ? (
+            <p className="text-muted-foreground">
+              {item.status === "ready_for_approval"
+                ? "Nothing in the books matches this yet. Approve it to add it."
+                : "No ERP transaction matched."}
+            </p>
+          ) : null}
           <div className="space-y-2">
             {item.matches.map((match) => (
               <div key={match.candidateId} className="rounded-lg border p-3">

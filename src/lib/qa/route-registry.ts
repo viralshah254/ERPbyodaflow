@@ -19,6 +19,8 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/approvals/requests", module: "core", description: "My requests", inNav: true },
   { path: "/tasks", module: "core", description: "Tasks / Work queue", inNav: true },
   { path: "/documents/hub", module: "core", description: "Document scanning hub", inNav: true },
+  { path: "/documents/hub/groups", module: "core", description: "Document hub groups", inNav: true },
+  { path: "/documents/hub/rules", module: "core", description: "Document hub learned rules", inNav: true },
   { path: "/inbox", module: "core", description: "Inbox (internal)", inNav: false },
   { path: "/onboarding", module: "core", description: "Onboarding wizard", inNav: false },
 
