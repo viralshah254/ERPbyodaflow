@@ -22,6 +22,7 @@ import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { odaflowHubResumeUrl, odaflowHubWebUrl } from "@/lib/auth/odaflow-hub";
 import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
+import { clearErpScreenLock } from "@/lib/auth/screen-lock";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -152,6 +153,7 @@ function LoginContent() {
         bearerToken: token,
         branchId: session.currentBranch?.branchId,
       });
+      clearErpScreenLock(session.user.userId);
       setIsLoading(false);
       if (session.user.mustChangePassword) {
         router.push("/change-password");

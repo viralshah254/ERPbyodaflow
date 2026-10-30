@@ -32,6 +32,7 @@ type BackendUser = {
   createdAt?: string;
   updatedAt?: string;
   mustChangePassword?: boolean;
+  lockPasswordSet?: boolean;
 };
 
 type BackendOrg = {
@@ -116,6 +117,7 @@ function mapUser(user: BackendUser): User {
     createdAt: mapDate(user.createdAt),
     updatedAt: mapDate(user.updatedAt),
     mustChangePassword: user.mustChangePassword,
+    lockPasswordSet: user.lockPasswordSet === true,
   };
 }
 

@@ -109,6 +109,8 @@ export interface User {
   updatedAt: Date;
   /** When true, user must set a new password (e.g. after first sign-in). */
   mustChangePassword?: boolean;
+  /** When true, this user has a screen-lock password. */
+  lockPasswordSet?: boolean;
 }
 
 export interface Role {

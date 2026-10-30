@@ -5,6 +5,7 @@ import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { useState } from "react";
 import { AuthRestore } from "@/components/auth/auth-restore";
+import { ScreenLockGate } from "@/components/auth/screen-lock-gate";
 import { SessionLogoutWatcher } from "@/components/auth/session-logout-watcher";
 import { FirebaseClientInit } from "@/components/firebase-client-init";
 import { AccessibilityProvider } from "@/components/accessibility/AccessibilityProvider";
@@ -39,6 +40,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             {children}
             <Toaster position="bottom-right" richColors />
             <AccessibilityWidget />
+            <ScreenLockGate />
           </div>
         </AccessibilityProvider>
       </QueryClientProvider>
