@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
+import { canonicalPathId } from "@/lib/api/path-id";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -59,7 +60,7 @@ import * as Icons from "lucide-react";
 export default function ProductVariantsPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id as string;
+  const id = canonicalPathId(typeof params.id === "string" ? params.id : "");
   const user = useAuthStore((s) => s.user);
   const canDelete = canDeleteEntity(user);
   const canWrite = useCanWriteInventory();

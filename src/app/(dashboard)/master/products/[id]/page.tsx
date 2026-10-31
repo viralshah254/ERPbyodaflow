@@ -1,4 +1,5 @@
 "use client";
+import { ProductStockPolicy } from "@/components/masters/ProductStockPolicy";
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -94,7 +95,7 @@ import { createUomApi, fetchProductUomsApi } from "@/lib/api/uom";
 const FMCG_PACK_PRESETS = ["CARTON", "OUTER", "BALE", "BOX", "PACK", "DOZEN"] as const;
 import { formatMoney } from "@/lib/money";
 import { t } from "@/lib/terminology";
-import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { useCanWriteCatalog } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isPlantCatalogueTemplate, isSeafoodOrg } from "@/config/industry";
@@ -108,6 +109,7 @@ import {
   parseFmcgSize,
 } from "@/lib/products/fmcg-size";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
+import { canonicalPathId } from "@/lib/api/path-id";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -148,7 +150,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = params.id as string;
+  const id = canonicalPathId(typeof params.id === "string" ? params.id : "");
   const tabParam = (searchParams.get("tab") ?? "").trim().toLowerCase();
   const initialTab =
     tabParam === "packaging" || tabParam === "packs"
@@ -165,8 +167,8 @@ export default function ProductDetailPage() {
     setActiveTab(initialTab);
   }, [initialTab]);
   const permissions = useAuthStore((s) => s.permissions);
-  const canDelete = permissions.includes("admin.settings");
-  const canWrite = useCanWriteInventory();
+  const canDelete = permissions.includes("catalog.write");
+  const canWrite = useCanWriteCatalog();
   const { enrolled: sfaEnrolled } = useErpSfaEnrollment();
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -938,6 +940,7 @@ export default function ProductDetailPage() {
 
           {/* ── Overview Tab ──────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-6">
+            <ProductStockPolicy productId={product.id} />
             <div className="grid gap-6 md:grid-cols-2">
               {/* Core details */}
               <Card>

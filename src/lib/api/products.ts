@@ -1,5 +1,6 @@
 import type { ProductRow } from "@/lib/types/masters";
 import { apiRequest, requireLiveApi } from "./client";
+import { encodePathId } from "./path-id";
 
 type BackendProduct = {
   id: string;
@@ -214,7 +215,7 @@ export async function fetchProductFamiliesApi(): Promise<string[]> {
 
 export async function fetchProductApi(id: string): Promise<ProductRow | null> {
   requireLiveApi("Product detail");
-  const data = await apiRequest<BackendProduct>(`/api/products/${id}`);
+  const data = await apiRequest<BackendProduct>(`/api/products/${encodePathId(id)}`);
   return mapProduct(data);
 }
 
@@ -268,7 +269,7 @@ export type ProductPatchPayload = Partial<
 
 export async function patchProductApi(id: string, payload: ProductPatchPayload): Promise<void> {
   requireLiveApi("Product patch");
-  await apiRequest(`/api/products/${encodeURIComponent(id)}`, {
+  await apiRequest(`/api/products/${encodePathId(id)}`, {
     method: "PATCH",
     body: {
       sku: payload.sku,
@@ -294,14 +295,14 @@ export async function patchProductApi(id: string, payload: ProductPatchPayload):
 
 export async function deleteProductApi(id: string): Promise<void> {
   requireLiveApi("Product delete");
-  await apiRequest(`/api/products/${encodeURIComponent(id)}`, {
+  await apiRequest(`/api/products/${encodePathId(id)}`, {
     method: "DELETE",
   });
 }
 
 export async function applyProductPricingTemplateApi(productId: string, templateId: string): Promise<void> {
   requireLiveApi("Apply product pricing template");
-  await apiRequest(`/api/products/${encodeURIComponent(productId)}/pricing/apply-template`, {
+  await apiRequest(`/api/products/${encodePathId(productId)}/pricing/apply-template`, {
     method: "POST",
     body: { templateId },
   });

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
+import { canonicalPathId } from "@/lib/api/path-id";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -57,7 +58,7 @@ const DEFAULT_UOM_OPTIONS = ["EA", "KG", "L", "M", "PCS"];
 export default function ProductPackagingPage() {
   const params = useParams();
   const router = useRouter();
-  const id = params.id as string;
+  const id = canonicalPathId(typeof params.id === "string" ? params.id : "");
   const terminology = useTerminology();
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);

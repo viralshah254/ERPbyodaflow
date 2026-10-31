@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useParams } from "next/navigation";
+import { canonicalPathId } from "@/lib/api/path-id";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -54,7 +55,7 @@ const KINDS: ProductAttributeDef["kind"][] = ["size", "grade", "flavor", "packag
 
 export default function ProductAttributesPage() {
   const params = useParams();
-  const id = params.id as string;
+  const id = canonicalPathId(typeof params.id === "string" ? params.id : "");
   const terminology = useTerminology();
   const canWrite = useCanWriteInventory();
 

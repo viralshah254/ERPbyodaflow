@@ -196,6 +196,9 @@ export type WarehouseDropRecord = {
 };
 
 export type DocumentDetailRecord = {
+  adjustmentEffect?: "SUPPLIER_RETURN" | "PRICE_DECREASE" | "PRICE_INCREASE" | "PHYSICAL_RETURN";
+  stockAccountingVersion?: number;
+  companyAverageCosting?: boolean;
   id: string;
   type: DocTypeKey;
   number: string;

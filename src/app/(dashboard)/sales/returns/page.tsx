@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -22,11 +23,12 @@ import { CustomerLink } from "@/components/customers/CustomerLink";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
-import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { useCanWriteSales, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { listedCuNumber } from "@/lib/kra/kra-signing";
 
 export default function SalesReturnsPage() {
   const canWrite = useCanWriteSales();
+  const canPost = useHasPermission("finance.approve");
   const router = useRouter();
   const [rows, setRows] = React.useState<DocListRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -88,7 +90,7 @@ export default function SalesReturnsPage() {
         id: "actions",
         header: "",
         accessor: (r: DocListRow) =>
-          r.status === "DRAFT" ? (
+          r.status === "DRAFT" && canPost ? (
             <Button
               size="sm"
               variant="ghost"
@@ -96,7 +98,7 @@ export default function SalesReturnsPage() {
                 event.stopPropagation();
                 try {
                   await bulkDocumentActionApi("credit-note", "post", [r.id]);
-                  toast.success("Credit note signed and posted.");
+                  toast.success("Credit note posted. Review its KRA signing status.");
                   await refresh();
                 } catch (error) {
                   toast.error(error instanceof Error ? error.message : "Sign and post failed.");
@@ -108,7 +110,7 @@ export default function SalesReturnsPage() {
           ) : null,
       },
     ],
-    [refresh]
+    [refresh, canPost]
   );
 
   return (
@@ -130,6 +132,7 @@ export default function SalesReturnsPage() {
         ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <Button asChild variant="outline"><Link href="/finance/notes">All credit and debit notes</Link></Button>
         <div className={LIST_TABLE_SURFACE_CLASS}>
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Returns</h3>

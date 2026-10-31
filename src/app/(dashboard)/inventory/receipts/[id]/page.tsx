@@ -41,7 +41,7 @@ import {
   GRN_VARIANCE_REASON_LABELS,
   grnVarianceReasonCodesForDeltaKg,
 } from "@/lib/constants/grn-variance-reasons";
-import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { useCanWriteInventory, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -116,6 +116,7 @@ export default function ReceiptDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const canWrite = useCanWriteInventory();
+  const canRecordQc = useHasPermission("inventory.qc.write");
   const hasCashWeightAudit = useOrgContextStore((s) => s.hasFlag?.("procurementAuditCashWeight") ?? false);
   const hasLandedCostMultiCurrency = useOrgContextStore((s) => s.hasFlag?.("landedCostMultiCurrency") ?? false);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -499,10 +500,10 @@ export default function ReceiptDetailPage() {
             <div className="font-medium">{line.lotNumber ?? "—"}</div>
             {line.expiryDate ? <div className="text-xs text-muted-foreground">Expires {line.expiryDate.slice(0, 10)}</div> : null}
             <Badge variant="outline">{line.lotStatus ?? "QUARANTINED"}</Badge>
-            {line.qcStatus === "PENDING" && canWrite ? (
+            {line.qcStatus === "PENDING" && canRecordQc ? (
               <div className="flex gap-1">
-                <Button size="sm" variant="outline" className="h-7 px-2" onClick={async () => setGrn(await recordGRNLineQc(grn.id, idx, "ACCEPTED"))}>Release</Button>
-                <Button size="sm" variant="outline" className="h-7 px-2 text-destructive" onClick={async () => setGrn(await recordGRNLineQc(grn.id, idx, "REJECTED"))}>Reject</Button>
+                <Button size="sm" variant="outline" className="h-7 px-2" onClick={async () => { try { setGrn(await recordGRNLineQc(grn.id, idx, "ACCEPTED")); toast.success("Receipt lot released."); } catch (error) { toast.error((error as Error).message); } }}>Release</Button>
+                <Button size="sm" variant="outline" className="h-7 px-2 text-destructive" onClick={async () => { try { setGrn(await recordGRNLineQc(grn.id, idx, "REJECTED")); toast.success("Receipt lot rejected."); } catch (error) { toast.error((error as Error).message); } }}>Reject</Button>
               </div>
             ) : null}
           </div>
@@ -1099,7 +1100,7 @@ export default function ReceiptDetailPage() {
                   <CardTitle className="text-base">Receipt Lines</CardTitle>
                   <CardDescription className="text-xs">Received quantity and financial value per line.</CardDescription>
                 </div>
-                {canWrite && !fmcgOrg && grn.status !== "DRAFT" && pendingQcLineIndexes.length > 1 ? (
+                {canRecordQc && grn.status !== "DRAFT" && pendingQcLineIndexes.length > 1 ? (
                   <Button
                     size="sm"
                     variant="outline"
@@ -1123,7 +1124,7 @@ export default function ReceiptDetailPage() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="max-h-[min(38vh,20rem)] overflow-auto">
-                  <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={fmcgOrg ? lineColumns.filter((column) => column.id !== "lot") : lineColumns} emptyMessage="No receipt lines." />
+                  <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
                 </div>
               </CardContent>
               {hasCashWeightAudit && totalReceivedWeight > 0 && (

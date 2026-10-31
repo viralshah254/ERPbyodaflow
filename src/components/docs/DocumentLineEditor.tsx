@@ -1469,6 +1469,7 @@ export function DocumentLineEditor({
             <table className="w-full table-fixed border-collapse text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
+                  <th className="w-24 px-2 py-2 font-medium">Item</th>
                   <th className="px-3 py-2 font-medium">Product</th>
                   <th className="w-[5.25rem] px-2 py-2 font-medium" title={lineColumnLabels?.qtyTooltip}>
                     {lineColumnLabels?.qtyHeader ?? "Qty"}
@@ -1493,11 +1494,16 @@ export function DocumentLineEditor({
             const lineVariants = variantsByProductId[l.productId] ?? [];
             const expanded = Boolean(expandedLineIds[l.id]);
             const taxRateLabel = taxCode ? `${taxCode.rate}%` : null;
-            const meta = [l.sku, taxRateLabel].filter(Boolean).join(" · ");
-            const colSpan = lineColumnLabels ? 7 : 6;
+            const itemId = (product ? displayItemCode(product) : l.sku) || l.sku;
+            const colSpan = lineColumnLabels ? 8 : 7;
             return (
               <React.Fragment key={l.id}>
               <tr data-line-row className="border-b align-middle">
+                  <td className="px-2 py-2 align-middle">
+                    <span className="block truncate text-sm tabular-nums" title={itemId || undefined}>
+                      {itemId || "—"}
+                    </span>
+                  </td>
                   <td className="min-w-0 px-3 py-2">
                     <div className="flex min-w-0 items-start gap-1">
                       <button
@@ -1531,7 +1537,9 @@ export function DocumentLineEditor({
                         >
                           {l.name || product?.name || l.sku}
                         </button>
-                        <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
+                        {taxRateLabel ? (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">{taxRateLabel}</p>
+                        ) : null}
                       </div>
                     </div>
                   </td>

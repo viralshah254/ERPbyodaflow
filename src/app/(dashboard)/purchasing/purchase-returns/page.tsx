@@ -48,7 +48,7 @@ const scope = "purchasing-returns";
 export default function PurchaseReturnsPage() {
   const baseCurrency = useBaseCurrency();
   const canWrite = useCanWritePurchasing();
-  const canPost = useHasPermission("purchase.approve");
+  const canPost = useHasPermission("finance.approve");
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState("");
@@ -282,7 +282,7 @@ export default function PurchaseReturnsPage() {
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
-        title="Purchase Returns"
+        title="Supplier Returns / Credit Notes"
         description="Manage returns to suppliers"
         breadcrumbs={[
           { label: "Purchasing", href: "/purchasing/orders" },
@@ -299,6 +299,7 @@ export default function PurchaseReturnsPage() {
         ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <Button asChild variant="outline"><Link href="/finance/notes">All supplier and customer notes</Link></Button>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 p-4 pb-0">
             <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"

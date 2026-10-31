@@ -13,6 +13,7 @@ import { DocumentRightPanel } from "@/components/docs/DocumentRightPanel";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { DocumentAttachments } from "@/components/docs/DocumentAttachments";
 import { DocumentPriceTagControl } from "@/components/docs/DocumentPriceTagControl";
+import { DocumentAdjustmentEffect } from "@/components/docs/DocumentAdjustmentEffect";
 import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
 import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
@@ -1762,6 +1763,7 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
+              ...(["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type) && document ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite} onSaved={() => refreshDocument(true)} /> }] : []),
               ...(["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) && document
                 ? [
                     {
