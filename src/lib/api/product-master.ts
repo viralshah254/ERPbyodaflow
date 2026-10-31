@@ -1,4 +1,5 @@
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
+import { encodePathId } from "@/lib/api/path-id";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import type { ProductAttributeDef, ProductVariant } from "@/lib/products/types";
 
@@ -34,7 +35,7 @@ export async function fetchProductPackagingDetailApi(
 ): Promise<ProductPackagingPayload> {
   requireLiveApi("Product packaging");
   const payload = await apiRequest<ProductPackagingPayload>(
-    `/api/settings/products/${encodeURIComponent(productId)}/packaging`,
+    `/api/settings/products/${encodePathId(productId)}/packaging`,
   );
   return {
     items: payload.items ?? [],
@@ -46,7 +47,7 @@ export async function fetchProductPackagingDetailApi(
 
 export async function saveProductPackagingApi(productId: string, items: ProductPackaging[]): Promise<void> {
   requireLiveApi("Save product packaging");
-  await apiRequest(`/api/settings/products/${encodeURIComponent(productId)}/packaging`, {
+  await apiRequest(`/api/settings/products/${encodePathId(productId)}/packaging`, {
     method: "PUT",
     body: { items },
   });
@@ -76,7 +77,7 @@ export async function fetchProductPricingApi(productId: string, priceListId?: st
   requireLiveApi("Product pricing");
   const params = new URLSearchParams();
   if (priceListId) params.set("priceListId", priceListId);
-  const payload = await apiRequest<{ items: ProductPrice[] }>(`/api/settings/products/${encodeURIComponent(productId)}/pricing`, {
+  const payload = await apiRequest<{ items: ProductPrice[] }>(`/api/settings/products/${encodePathId(productId)}/pricing`, {
     params,
   });
   return payload.items ?? [];
@@ -84,7 +85,7 @@ export async function fetchProductPricingApi(productId: string, priceListId?: st
 
 export async function saveProductPricingApi(productId: string, items: ProductPrice[]): Promise<void> {
   requireLiveApi("Save product pricing");
-  await apiRequest(`/api/settings/products/${encodeURIComponent(productId)}/pricing`, {
+  await apiRequest(`/api/settings/products/${encodePathId(productId)}/pricing`, {
     method: "PUT",
     body: { items },
   });
@@ -92,7 +93,7 @@ export async function saveProductPricingApi(productId: string, items: ProductPri
 
 export async function fetchProductVariantsApi(productId: string): Promise<ProductVariant[]> {
   requireLiveApi("Product variants");
-  const payload = await apiRequest<{ items: ProductVariant[] }>(`/api/settings/products/${encodeURIComponent(productId)}/variants`);
+  const payload = await apiRequest<{ items: ProductVariant[] }>(`/api/settings/products/${encodePathId(productId)}/variants`);
   return payload.items ?? [];
 }
 
@@ -101,7 +102,7 @@ export async function createProductVariantApi(
   input: Omit<ProductVariant, "id" | "productId">
 ): Promise<ProductVariant> {
   requireLiveApi("Create product variant");
-  return apiRequest<ProductVariant>(`/api/settings/products/${encodeURIComponent(productId)}/variants`, {
+  return apiRequest<ProductVariant>(`/api/settings/products/${encodePathId(productId)}/variants`, {
     method: "POST",
     body: input,
   });
@@ -114,7 +115,7 @@ export async function updateProductVariantApi(
 ): Promise<ProductVariant> {
   requireLiveApi("Update product variant");
   return apiRequest<ProductVariant>(
-    `/api/settings/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}`,
+    `/api/settings/products/${encodePathId(productId)}/variants/${encodeURIComponent(variantId)}`,
     {
       method: "PATCH",
       body: patch,
@@ -124,7 +125,7 @@ export async function updateProductVariantApi(
 
 export async function deleteProductVariantApi(productId: string, variantId: string): Promise<void> {
   requireLiveApi("Delete product variant");
-  await apiRequest(`/api/settings/products/${encodeURIComponent(productId)}/variants/${encodeURIComponent(variantId)}`, {
+  await apiRequest(`/api/settings/products/${encodePathId(productId)}/variants/${encodeURIComponent(variantId)}`, {
     method: "DELETE",
   });
 }

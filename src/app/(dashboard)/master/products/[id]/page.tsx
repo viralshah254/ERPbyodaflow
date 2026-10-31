@@ -109,6 +109,7 @@ import {
   parseFmcgSize,
 } from "@/lib/products/fmcg-size";
 import { ProductTypeBadge } from "@/components/products/ProductTypeBadge";
+import { canonicalPathId } from "@/lib/api/path-id";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -149,7 +150,7 @@ export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const id = params.id as string;
+  const id = canonicalPathId(typeof params.id === "string" ? params.id : "");
   const tabParam = (searchParams.get("tab") ?? "").trim().toLowerCase();
   const initialTab =
     tabParam === "packaging" || tabParam === "packs"
