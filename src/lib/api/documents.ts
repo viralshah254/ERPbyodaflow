@@ -141,6 +141,9 @@ type BackendWarehouseDrop = {
 };
 
 type BackendDocumentDetail = {
+  adjustmentEffect?: DocumentDetailRecord["adjustmentEffect"];
+  stockAccountingVersion?: number;
+  companyAverageCosting?: boolean;
   id: string;
   number: string;
   date: string;
@@ -298,6 +301,7 @@ type BackendDocumentListResponse = {
 };
 
 export type DocumentDraftPayload = {
+  adjustmentEffect?: DocumentDetailRecord["adjustmentEffect"];
   date: string;
   branchId?: string;
   partyId?: string;
@@ -448,6 +452,9 @@ function mapDocumentDetail(
     party: payload.party,
     branchId: payload.branchId,
     warehouseId: payload.warehouseId,
+    adjustmentEffect: payload.adjustmentEffect,
+    stockAccountingVersion: payload.stockAccountingVersion,
+    companyAverageCosting: payload.companyAverageCosting,
     ...(payload.priceListId ? { priceListId: payload.priceListId } : {}),
     ...(payload.priceListName ? { priceListName: payload.priceListName } : {}),
     ...(payload.taxConfigId ? { taxConfigId: payload.taxConfigId } : {}),

@@ -24,6 +24,8 @@ export function downloadWhtCertificateApi(
 type BackendReportLibraryItem = {
   id: string;
   name: string;
+  description?: string;
+  category?: string;
 };
 
 type BackendSavedView = {
@@ -78,8 +80,8 @@ export async function fetchReportLibraryApi(): Promise<Array<{ id: string; name:
   return data.items.map((item) => ({
     id: item.id,
     name: item.name,
-    description: item.name,
-    category: item.id.includes("commission") ? "sales" : "finance",
+    description: item.description ?? item.name,
+    category: item.category ?? (item.id.includes("commission") ? "sales" : "finance"),
   }));
 }
 

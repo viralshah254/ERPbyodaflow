@@ -79,6 +79,21 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresPermissions: ["manufacturing.bom.read"],
       },
       {
+        key: "manufacturing-reports",
+        label: "Manufacturing reports",
+        icon: "FileBarChart",
+        moduleKey: "manufacturing",
+        requiresFlags: ["bomMrpWorkOrders"],
+        requiresTemplates: ["fmcg-manufacturer", "fmcg-bakery"],
+        requiresPermissions: ["reports.read"],
+        children: [
+          { key: "report-bom-explosion", label: "BOM explosion", href: "/reports/manufacturing/bom-explosion", icon: "GitBranch", moduleKey: "manufacturing", requiresPermissions: ["manufacturing.bom.read"] },
+          { key: "report-bom-where-used", label: "Where-used", href: "/reports/manufacturing/bom-where-used", icon: "Search", moduleKey: "manufacturing", requiresPermissions: ["manufacturing.bom.read"] },
+          { key: "report-manufacture-orders", label: "Manufacture orders", href: "/reports/manufacturing/manufacture-orders", icon: "ClipboardList", moduleKey: "manufacturing", requiresPermissions: ["manufacturing.workorders.read"] },
+          { key: "report-manufacturing-library", label: "Report library / WIP", href: "/reports", icon: "Library", moduleKey: "manufacturing", requiresPermissions: ["reports.read"] },
+        ],
+      },
+      {
         key: "manufacturing-routing",
         label: "Routing",
         href: "/manufacturing/routing",

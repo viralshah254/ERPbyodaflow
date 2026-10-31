@@ -136,6 +136,9 @@ export type WarehouseCycleCountRow = {
   warehouseId?: string;
   warehouse?: string;
   status: string;
+  requiresApproval?: boolean;
+  submittedBy?: string;
+  approvedBy?: string;
   lines: Array<{
     id: string;
     productId: string;
@@ -146,6 +149,9 @@ export type WarehouseCycleCountRow = {
     systemQty: number;
     countedQty: number;
     variance: number;
+    unitCost?: number;
+    varianceValue?: number;
+    lotNumber?: string;
   }>;
 };
 
@@ -388,10 +394,17 @@ export async function updateCycleCountTaskLine(id: string, lineId: string, count
   });
 }
 
-export async function submitCycleCountTask(id: string): Promise<void> {
-  await apiRequest(`/api/warehouse/cycle-counts/${encodeURIComponent(id)}/submit`, {
+export async function submitCycleCountTask(id: string): Promise<{ id: string; status: string }> {
+  return apiRequest(`/api/warehouse/cycle-counts/${encodeURIComponent(id)}/submit`, {
     method: "POST",
   });
+}
+
+export async function approveCycleCountTask(id: string): Promise<void> {
+  await apiRequest(`/api/warehouse/cycle-counts/${encodeURIComponent(id)}/approve`, { method: "POST" });
+}
+export async function cancelCycleCountTask(id: string): Promise<void> {
+  await apiRequest(`/api/warehouse/cycle-counts/${encodeURIComponent(id)}/cancel`, { method: "POST" });
 }
 
 export async function fetchLocationStock(warehouseId?: string): Promise<WarehouseLocationStockRow[]> {

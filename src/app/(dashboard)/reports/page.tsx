@@ -22,6 +22,10 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { isApiConfigured } from "@/lib/api/client";
+import { FmcgReportCoverage } from "@/components/reports/FmcgReportCoverage";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { resolveIndustryCategoryFromTemplateId } from "@/config/industry";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 
 const QUICK_LINKS = [
   { href: "/reports/saved", label: "Saved Views", desc: "Your saved report views", icon: "Bookmark" as const },
@@ -49,6 +53,12 @@ const CRON_BY_FREQUENCY: Record<string, string> = {
 };
 
 export default function ReportsPage() {
+  const templateId = useOrgContextStore((state) => state.templateId);
+  const isFmcg = resolveIndustryCategoryFromTemplateId(templateId) === "FMCG";
+  const canTax = useHasPermission("finance.tax.read");
+  const canReadSchedules = useHasPermission("reports.schedule.read");
+  const canReadExports = useHasPermission("reports.export.read");
+  const canSchedule = useHasPermission("reports.schedule.write", "finance.write");
   const [savedCount, setSavedCount] = React.useState(0);
   const [scheduledCount, setScheduledCount] = React.useState(0);
   const [exports, setExports] = React.useState<Array<{ id: string }>>([]);
@@ -63,15 +73,15 @@ export default function ReportsPage() {
   const refresh = React.useCallback(async () => {
     const [saved, scheduled, exportRows, libraryRows] = await Promise.all([
       fetchSavedReportViewsApi(),
-      fetchScheduledReportsApi(),
-      fetchReportExportsApi(),
+      canReadSchedules ? fetchScheduledReportsApi() : Promise.resolve([]),
+      canReadExports ? fetchReportExportsApi() : Promise.resolve([]),
       fetchReportLibraryApi(),
     ]);
     setSavedCount(saved.length);
     setScheduledCount(scheduled.length);
     setExports(exportRows);
     setLibrary(libraryRows);
-  }, []);
+  }, [canReadSchedules, canReadExports]);
 
   React.useEffect(() => {
     refresh().catch((error) => toast.error((error as Error).message || "Failed to load reports."));
@@ -87,13 +97,14 @@ export default function ReportsPage() {
         showCommandHint
       />
       <div className="p-6 space-y-8">
+        <FmcgReportCoverage />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {QUICK_LINKS.map(({ href, label, desc, icon }) => {
+          {QUICK_LINKS.filter((link) => (!isFmcg || !["Commission reconciliation", "Batch Costing"].includes(link.label)) && (!["VAT summary", "WHT summary", "KRA CU numbers"].includes(link.label) || canTax) && (link.label !== "Scheduled" || canReadSchedules) && (link.label !== "Exports" || canReadExports)).map(({ href, label, desc, icon }) => {
             const Icon = (Icons[icon] || Icons.FileText) as React.ComponentType<{ className?: string }>;
             const count =
               label === "Saved Views" ? savedCount :
               label === "Scheduled" ? scheduledCount :
-              exports.length;
+              label === "Exports" ? exports.length : 0;
             return (
               <Link key={href} href={href}>
                 <Card className="h-full transition-colors hover:bg-muted/50">
@@ -124,7 +135,7 @@ export default function ReportsPage() {
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {library.map((r) => (
+              {library.filter((r) => (!isFmcg || !r.id.startsWith("cool-catch") && r.id !== "batch-costing") && (!["vat-summary", "wht-summary"].includes(r.id) || canTax)).map((r) => (
                 <div
                   key={r.id}
                   className="flex items-start gap-3 rounded-lg border p-4 hover:bg-muted/30 transition-colors"
@@ -153,7 +164,7 @@ export default function ReportsPage() {
                     >
                       Run
                     </button>
-                    {isApiConfigured() && (
+                    {isApiConfigured() && canSchedule && (
                       <button
                         type="button"
                         className="text-xs text-primary hover:underline"
