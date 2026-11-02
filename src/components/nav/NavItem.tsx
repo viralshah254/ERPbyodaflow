@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { getItemExpanded, setItemExpanded } from "@/lib/sidebar-state";
-import { navHrefMatchesPath, navTreeContainsPath } from "@/lib/nav/nav-active-path";
+import { navHrefIsCurrent, navTreeContainsPath } from "@/lib/nav/nav-active-path";
 import * as Icons from "lucide-react";
 interface NavItemLike {
   id: string;
@@ -21,13 +21,16 @@ interface NavItemProps {
   item: NavItemLike;
   isCollapsed: boolean;
   level?: number;
+  siblingHrefs?: readonly string[];
 }
 
-export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
+export function NavItem({ item, isCollapsed, level = 0, siblingHrefs }: NavItemProps) {
   const pathname = usePathname();
   const IconComponent = (Icons[item.icon as keyof typeof Icons] || Icons.Circle) as React.ComponentType<{ className?: string }>;
-  const isActive = navHrefMatchesPath(item.href, pathname);
+  const isActive = navHrefIsCurrent(item.href, pathname, siblingHrefs);
   const isChildActive = navTreeContainsPath(item.children, pathname);
+  const parentMarked = isActive || isChildActive;
+  const childHrefs = item.children?.flatMap((child) => (child.href ? [child.href] : [])) ?? [];
   const hasChildren = item.children && item.children.length > 0;
   const [isExpanded, setIsExpanded] = React.useState(isActive || isChildActive);
   const itemRef = React.useRef<HTMLDivElement | null>(null);
@@ -79,9 +82,9 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
             nested
               ? "gap-2 py-1 text-[11px] text-muted-foreground hover:bg-muted/50 hover:text-foreground"
               : "gap-2.5 py-2 text-[13px] text-foreground/90 hover:bg-muted/40 hover:text-foreground",
-            nested && isActive && "bg-muted/70 text-foreground",
-            !nested && isActive && "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
-            !nested && !isActive && "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            nested && parentMarked && "bg-muted/70 text-foreground",
+            !nested && parentMarked && "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground",
+            !nested && !parentMarked && "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           )}
           onClick={toggle}
         >
@@ -121,6 +124,7 @@ export function NavItem({ item, isCollapsed, level = 0 }: NavItemProps) {
                 item={child}
                 isCollapsed={isCollapsed}
                 level={level + 1}
+                siblingHrefs={childHrefs}
               />
             ))}
           </div>
