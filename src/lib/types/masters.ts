@@ -89,9 +89,11 @@ export type PartyRow = {
   taxId?: string;
   vatWithholding?: {
     agent: boolean;
+    source?: "KRA_CERTIFICATE" | "MANUAL";
     matchMethod?: "PIN" | "LEGAL_NAME";
     withholderName?: string;
     pin?: string;
+    appointedAt?: string;
   };
   sageDcLink?: number;
   arApGroup?: ArApGroup;

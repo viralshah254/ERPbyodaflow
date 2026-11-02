@@ -35,6 +35,8 @@ export interface Employee {
   residency?: ConsultantResidency;
   salaryType: SalaryType;
   baseSalary: number;
+  payBasis?: "SALARY" | "PIECEWORK";
+  pieceworkRate?: number;
   hourlyCostRate?: number;
   contractDailyRate?: number;
   currency: string;
@@ -68,6 +70,7 @@ export interface StatBreakdown {
 
 export interface PayRunLine {
   id: string;
+  piecework?: { quantity: number; rate: number };
   employeeId: string;
   employeeName: string;
   employmentType?: EmploymentType;
@@ -85,6 +88,7 @@ export interface PayRunLine {
 export interface CalculatedLine {
   employeeId: string;
   employeeName: string;
+  piecework?: { quantity: number; rate: number };
   employmentType: EmploymentType;
   taxCountry: TaxCountry;
   currency: string;
@@ -108,6 +112,10 @@ export interface CalculatedLine {
 
 export interface PayRun {
   id: string;
+  payrollOrigin?: "ERP";
+  createdBy?: string;
+  disbursementStatus?: "READY";
+  approvedBy?: string;
   number: string;
   month: string;
   branch?: string;

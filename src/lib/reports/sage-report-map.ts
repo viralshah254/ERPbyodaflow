@@ -24,7 +24,7 @@ group("Order Entry — Purchasing", "purchase.read", [
   ["Linked Purchase Orders", undefined, 1], ["Outstanding GRVs", "/inventory/receipts"], ["Overdue Purchase Orders", undefined, 1], ["Purchase Order Foreign Currency Variance", undefined, 3], ["Purchase Orders", "/purchasing/orders"],
 ]);
 group("Bill of Materials", "manufacturing.bom.read", [["Explosion", "/reports/manufacturing/bom-explosion"], ["Implosion (Where-used)", "/reports/manufacturing/bom-where-used"]]);
-group("Manufacturing", "manufacturing.workorders.read", [["Manufacture Order", "/reports/manufacturing/manufacture-orders"], ["Manufacture Process", "/manufacturing/work-orders"], ["Material Requirements Plan", "/manufacturing/mrp"], ["Work in Progress", "/reports/manufacturing/work-in-progress"]]);
+group("Manufacturing", "manufacturing.workorders.read", [["Manufacture Order", "/reports/manufacturing/manufacture-orders"], ["Manufacture Process", "/manufacturing/work-orders"], ["Material Requirements Plan", "/manufacturing/mrp"], ["Work in Progress", "/reports/manufacturing/work-in-progress"], ["Manufacturing Reconciliation", "/reports/manufacturing/reconciliation"]]);
 for (const name of ["Contracts", "Incidents", "Knowledge Base", "Sales Force Automation"]) entries.push({ id: `contact-${name.toLowerCase().replaceAll(" ", "-")}`, name, group: "Contact Management", permission: "crm.accounts.read", status: "definition", phase: 3, kind: "submenu" });
 const operational: Record<string, { id: string; permissions: string[] }> = {
   "Overdue Sales Orders": { id: "overdue-sales-orders", permissions: ["sales.read"] },
@@ -48,5 +48,5 @@ for (const entry of entries) {
     : entry.name === "Transactions" && entry.group === "Accounts Payable" ? { id: "purchase-register", permissions: ["purchase.read", "finance.ap.read"] } : operational[entry.name];
   if (report) { entry.href = `/reports/operations/${report.id}`; entry.status = "new-report"; entry.additionalPermissions = report.permissions; }
 }
-export const SAGE_REPORT_MAP = entries.map((entry) => entry.href?.endsWith("/work-in-progress") ? { ...entry, additionalPermissions: ["finance.read"] } : entry);
+export const SAGE_REPORT_MAP = entries.map((entry) => (entry.href?.endsWith("/work-in-progress") || entry.href?.endsWith("/reconciliation")) ? { ...entry, additionalPermissions: ["finance.read"] } : entry);
 export const SAGE_REPORT_STATUS_LABELS = { workspace: "Existing screen — report parity to verify", "new-report": "New report — client acceptance pending", planned: "To build", definition: "Submenu — report list not shown" } as const;

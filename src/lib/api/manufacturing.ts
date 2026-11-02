@@ -1,3 +1,4 @@
+import { requireManufacturingCapability } from "./manufacturing-capabilities";
 import { apiRequest, requireLiveApi } from "@/lib/api/client";
 
 export type ManufacturingBomItem = {
@@ -10,6 +11,7 @@ export type ManufacturingBomItem = {
   type?: string;
   isOptional?: boolean;
   scrapFactor?: number;
+  scrapFactorMode?: "RATIO" | "PERCENT";
   unitCost?: number;
   /** Store this component is issued from. Empty means the work order input store. */
   warehouseId?: string;
@@ -26,6 +28,7 @@ export type ManufacturingBom = {
   quantity: number;
   uom: string;
   version: string;
+  yieldTolerancePercent?: number;
   type: "bom" | "formula" | "disassembly";
   direction?: "STANDARD" | "REVERSE";
   isActive: boolean;
@@ -49,7 +52,9 @@ export type ManufacturingRoute = {
     name: string;
     workCenterId?: string;
     workCenter?: string;
-    setupMinutes: number;
+    critical?: boolean;
+  qcRequired?: boolean;
+  setupMinutes: number;
     runMinutesPerUnit: number;
   }>;
 };
@@ -75,6 +80,12 @@ export type ManufacturingWorkOrder = {
   scrapQuantity: number;
   openQuantity: number;
   status: string;
+  updatedAt?: string;
+  preparationStatus?: "READY" | "REQUIRED";
+  preparationRevision?: number;
+  preparationDefaults?: { inputWarehouseIds: string[]; outputWarehouseId?: string };
+  bomSnapshot?: { name?: string; version?: string; yieldTolerancePercent?: number; quantity?: number; uom?: string };
+  routingSnapshot?: { name?: string; updatedAt?: string; operations?: Array<{ operationId?: string; name: string; order: number; workCenter?: string; setupMinutes?: number; runMinutesPerUnit?: number }> };
   dueDate?: string;
   plannedDate?: string;
   releasedAt?: string;
@@ -96,6 +107,11 @@ export type ManufacturingWorkOrder = {
     returnedQuantity: number;
     consumedQuantity: number;
     warehouseId: string;
+    warehouseName?: string;
+    recipeQuantity?: number;
+    recipeUom?: string;
+    recipeToBaseFactor?: number;
+    wipLotSplits?: Array<{ lotId: string; lotNumber?: string; quantity: number }>;
   }>;
   outputLines: Array<{
     lineId: string;
@@ -107,8 +123,15 @@ export type ManufacturingWorkOrder = {
     plannedQuantity: number;
     producedQuantity: number;
     warehouseId: string;
+    warehouseName?: string;
+    recipeQuantity?: number;
+    recipeUom?: string;
+    recipeToBaseFactor?: number;
+    wipLotSplits?: Array<{ lotId: string; lotNumber?: string; quantity: number }>;
   }>;
-  completions: Array<{ idempotencyKey: string; quantity: number; postedAt: string }>;
+  productionLots?: Array<{ _id: string; productId: string; warehouseId: string; lotNumber: string; status: string; qcStatus: string; expiryDate?: string; remainingQuantity: number }>;
+  operationExecution?: Array<{ operationId: string; name: string; order: number; critical: boolean; qcRequired: boolean; workCenter?: string; status: "PENDING" | "IN_PROGRESS" | "COMPLETED"; startedAt?: string; completedAt?: string; operatorId?: string; qcOutcome?: string }>;
+  completions: Array<{ idempotencyKey: string; quantity: number; postedAt: string; inputLines?: Array<{ productId: string; uom?: string; quantity: number; consumedQuantity?: number; returnedQuantity?: number; consumedLotSplits?: Array<{ lotId: string; quantity: number }>; lotSplits?: Array<{ lotId: string; quantity: number }> }> }>;
   wipQuantity: number;
   reconciliation: {
     inputMass: number;
@@ -464,6 +487,7 @@ export async function runManufacturingWorkOrderAction(
     producedQuantity?: number;
     scrapQuantity?: number;
     idempotencyKey?: string;
+    varianceReason?: string;
     measuredWeight?: number;
     deviceReadingId?: string;
     inputLines?: Array<{
@@ -482,6 +506,7 @@ export async function runManufacturingWorkOrderAction(
     }>;
   }
 ): Promise<ManufacturingWorkOrder> {
+  await requireManufacturingCapability("outputActuals", "primary-base-output-v1");
   return apiRequest(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/action`, {
     method: "POST",
     body: payload,
@@ -633,7 +658,7 @@ export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): P
   });
 }
 
-export async function applyProductionPlan(lines: ProductionPlanLineInput[]): Promise<{
+export async function applyProductionPlan(lines: ProductionPlanLineInput[], requestId: string): Promise<{
   applied: boolean;
   created: Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }>;
   explode: ExplodedProductionPlan;
@@ -641,7 +666,7 @@ export async function applyProductionPlan(lines: ProductionPlanLineInput[]): Pro
   requireLiveApi("Production plan");
   return apiRequest("/api/manufacturing/production-plan/apply", {
     method: "POST",
-    body: { lines },
+    body: { lines, requestId },
   });
 }
 
@@ -676,5 +701,37 @@ export async function checkWorkOrderAvailability(
 }
 
 export async function checkExistingWorkOrderAvailability(id: string): Promise<{ lines: MaterialAvailabilityLine[] }> {
-  return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/availability`);
+  try {
+    return await apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/availability`);
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) {
+      throw new Error("Warehouse availability is unavailable. Refresh the work order; if it still opens, the connected backend may need the work-order availability release. No stock has been changed.");
+    }
+    throw error;
+  }
+}
+
+export type WorkOrderPreparationPreview = {
+  eligibleLots?: Array<{ _id: string; productId: string; warehouseId: string; lotNumber: string; expiryDate: string; remainingQuantity: number }>;
+  availability?: Array<{ productId: string; warehouseId: string; quantity: number }>;
+  version: string;
+  previewToken: string;
+  prepared: Pick<ManufacturingWorkOrder, "materialLines" | "outputLines" | "bomSnapshot" | "routingSnapshot">;
+};
+export async function previewWorkOrderPreparation(id: string, stores: { inputWarehouseIds: string[]; outputWarehouseId: string }) {
+  await requireManufacturingCapability("preparation", "work-order-preparation-v1");
+  return apiRequest<WorkOrderPreparationPreview>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/prepare`, { method: "POST", body: stores });
+}
+export async function saveWorkOrderPreparation(id: string, stores: { inputWarehouseIds: string[]; outputWarehouseId: string }, preview: WorkOrderPreparationPreview) {
+  await requireManufacturingCapability("preparation", "work-order-preparation-v1");
+  return apiRequest<ManufacturingWorkOrder>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/prepare`, { method: "POST", body: { ...stores, commit: true, version: preview.version, previewToken: preview.previewToken } });
+}
+
+export async function postWorkOrderMaterials(id: string, body: { action: "issue" | "return"; idempotencyKey: string; reason: string; lines: Array<{ lineId: string; quantity: number }> }) {
+  await requireManufacturingCapability("floorMaterials", "work-order-materials-v1");
+  return apiRequest<ManufacturingWorkOrder>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/materials`, { method: "POST", body });
+}
+export async function postWorkOrderOperation(id: string, operationId: string, body: { status: "IN_PROGRESS" | "COMPLETED"; qcOutcome?: string; qcReason?: string }) {
+  await requireManufacturingCapability("operations", "critical-operation-gates-v1");
+  return apiRequest<ManufacturingWorkOrder>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/operations/${encodeURIComponent(operationId)}`, { method: "POST", body });
 }

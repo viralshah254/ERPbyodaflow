@@ -22,9 +22,13 @@ import { MaterialComponentLinks } from "@/components/manufacturing/material-comp
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
-import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
+import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { printProductionSheet } from "@/lib/manufacturing/production-sheet";
+import { WorkOrderFloor } from "@/components/manufacturing/work-order-floor";
+import { WorkOrderPreparation } from "@/components/manufacturing/work-order-preparation";
+import { completionInputDefaults, completionIssueShortages } from "@/lib/manufacturing/completion-inputs";
 import * as Icons from "lucide-react";
 
 const STEPS = [
@@ -52,6 +56,9 @@ export default function WorkOrderDetailPage() {
   })();
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
+  const canApprove = useHasPermission("manufacturing.production.approve");
+  const [varianceReason, setVarianceReason] = React.useState("");
+  const completionRetry = React.useRef<{ fingerprint: string; key: string }>();
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
@@ -74,12 +81,11 @@ export default function WorkOrderDetailPage() {
     setLoading(true);
     try {
       const next = await fetchManufacturingWorkOrder(id);
+      completionRetry.current = undefined;
+      setVarianceReason("");
       setOrder(next);
       setCompletionQuantity(String(next.openQuantity));
-      setActualInputs(Object.fromEntries(next.materialLines.map((line) => {
-        const remaining = Math.max(0, line.plannedQuantity - line.consumedQuantity);
-        return [line.lineId, { issue: String(Math.max(0, remaining - Math.max(0, line.issuedQuantity - line.returnedQuantity - line.consumedQuantity))), consume: String(remaining), returnQty: "0" }];
-      })));
+      setActualInputs(completionInputDefaults(next, next.openQuantity));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load work order.");
       setOrder(null);
@@ -113,14 +119,17 @@ export default function WorkOrderDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [order?.bomId, order?.quantity, order?.status, order?.materialLines]);
+  }, [order?.id, order?.bomId, order?.quantity, order?.status, order?.materialLines]);
 
   const shortfalls = availLines.filter((line) => line.shortfall > 0);
+  const issueShortages = order ? completionIssueShortages(order, actualInputs, availLines) : [];
   const currentStep = order ? stepIndex(order.status) : 0;
 
   async function runAction(action: "release" | "start" | "complete" | "cancel") {
     if (!order) return;
     setActing(true);
+    const fingerprint = JSON.stringify({ completionQuantity, actualInputs, measuredWeight, deviceReadingId, varianceReason });
+    if (completionRetry.current?.fingerprint !== fingerprint) completionRetry.current = { fingerprint, key: crypto.randomUUID() };
     try {
       const next = await runManufacturingWorkOrderAction(order.id, {
         action,
@@ -128,7 +137,8 @@ export default function WorkOrderDetailPage() {
           action === "complete"
             ? Number(completionQuantity)
             : undefined,
-        idempotencyKey: action === "complete" ? crypto.randomUUID() : undefined,
+        idempotencyKey: action === "complete" ? completionRetry.current.key : undefined,
+        varianceReason: action === "complete" ? varianceReason : undefined,
         measuredWeight: action === "complete" && measuredWeight ? Number(measuredWeight) : undefined,
         deviceReadingId: action === "complete" ? deviceReadingId || undefined : undefined,
         inputLines: action === "complete" ? order.materialLines.map((line) => ({
@@ -143,17 +153,19 @@ export default function WorkOrderDetailPage() {
           lineId: line.lineId,
           productId: line.productId,
           warehouseId: line.warehouseId,
-          quantity: Number(completionQuantity),
+          quantity: Math.round(line.plannedQuantity * Number(completionQuantity) / order.quantity * 1000) / 1000,
         })) : undefined,
       });
       setOrder(next);
+      setCompletionQuantity(String(next.openQuantity));
+      setActualInputs(completionInputDefaults(next, next.openQuantity));
       toast.success(
         action === "release"
           ? "Released. Floor can start this batch."
           : action === "start"
             ? "Marked in progress."
             : action === "complete"
-              ? "Completed. Materials issued and finished goods received."
+              ? (next.status === "COMPLETED" ? "Production completed. Finished goods received; check QC before dispatch." : "Partial production posted. Remaining quantities updated; check received goods in QC.")
               : "Cancelled."
       );
       if (action === "cancel") router.push("/manufacturing/work-orders");
@@ -195,12 +207,18 @@ export default function WorkOrderDetailPage() {
         ]}
         sticky
         actions={
+          <>
+          <Button variant="outline" size="sm" disabled={!order?.materialLines.length} onClick={() => {
+            if (!order) return;
+            try { printProductionSheet(order); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not print production sheet."); }
+          }}><Icons.Printer className="mr-2 h-4 w-4" />Print production sheet</Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/manufacturing/work-orders">
               <Icons.ArrowLeft className="mr-2 h-4 w-4" />
               All work orders
             </Link>
           </Button>
+          </>
         }
       />
 
@@ -211,6 +229,8 @@ export default function WorkOrderDetailPage() {
           <p className="text-sm text-muted-foreground">This work order does not exist or you cannot open it.</p>
         ) : (
           <>
+            {canWrite && order.status === "DRAFT" && <WorkOrderPreparation order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
+            {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             <Card data-tutorial-hint="work-order-lifecycle">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -251,7 +271,7 @@ export default function WorkOrderDetailPage() {
 
                 {canWrite && order.status !== "COMPLETED" && order.status !== "CANCELLED" ? (
                   <div className="space-y-4">
-                    {(order.status === "RELEASED" || order.status === "IN_PROGRESS") && (
+                    {order.status === "IN_PROGRESS" && (
                       <div
                         className="grid gap-3 rounded-lg border p-3 sm:grid-cols-3"
                         data-tutorial-hint="work-order-measurement"
@@ -261,11 +281,7 @@ export default function WorkOrderDetailPage() {
                           <Input id="completion-quantity" type="number" min="0.001" max={order.openQuantity} step="0.001" value={completionQuantity} onChange={(event) => {
                             const value = event.target.value;
                             setCompletionQuantity(value);
-                            const ratio = Number(value) / (order.plannedQuantity || order.quantity || 1);
-                            setActualInputs(Object.fromEntries(order.materialLines.map((line) => {
-                              const qty = Math.min(Math.max(0, line.plannedQuantity - line.consumedQuantity), Math.round(line.plannedQuantity * ratio * 1000) / 1000);
-                              return [line.lineId, { issue: String(Math.max(0, qty - Math.max(0, line.issuedQuantity - line.returnedQuantity - line.consumedQuantity))), consume: String(qty), returnQty: "0" }];
-                            })));
+                            setActualInputs(completionInputDefaults(order, Number(value)));
                           }} />
                         </div>
                         {order.measurementMode !== "COUNT_ONLY" && (
@@ -322,9 +338,10 @@ export default function WorkOrderDetailPage() {
                         )}
                       </div>
                     )}
+                    {canApprove && ["RELEASED", "IN_PROGRESS"].includes(order.status) && <label className="block text-sm">Supervisor yield-variance approval reason (tolerance {order.bomSnapshot?.yieldTolerancePercent ?? 0}%)<Input value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></label>}
                     <div className="flex flex-wrap gap-2">
                     {order.status === "DRAFT" && (
-                      <Button size="sm" disabled={acting} onClick={() => void runAction("release")}>
+                      <Button size="sm" disabled={acting || !order.materialLines.length || !order.outputLines.length || Boolean(availError) || availLoading || shortfalls.length > 0} onClick={() => void runAction("release")}>
                         Release this order
                       </Button>
                     )}
@@ -333,17 +350,17 @@ export default function WorkOrderDetailPage() {
                         Mark in progress
                       </Button>
                     )}
-                    {(order.status === "RELEASED" || order.status === "IN_PROGRESS") && (
+                    {order.status === "IN_PROGRESS" && (
                       <Button
                         size="sm"
-                        disabled={acting || shortfalls.length > 0 || availLoading || Boolean(availError) || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
+                        disabled={acting || order.operationExecution?.some((step) => step.critical && (step.status !== "COMPLETED" || (step.qcRequired && step.qcOutcome !== "ACCEPTED"))) || issueShortages.length > 0 || availLoading || Boolean(availError) || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
                         onClick={() => void runAction("complete")}
                       >
                         Complete this order
                       </Button>
                     )}
                     {(order.status === "DRAFT" || order.status === "RELEASED") && (
-                      <Button size="sm" variant="ghost" disabled={acting} onClick={() => void runAction("cancel")}>
+                      <Button size="sm" variant="ghost" disabled={acting || order.producedQuantity > 0 || order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9)} onClick={() => void runAction("cancel")}>
                         Cancel
                       </Button>
                     )}
@@ -379,7 +396,7 @@ export default function WorkOrderDetailPage() {
                       {shortfalls.length > 0 ? (
                         <p className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
                           Short on {shortfalls.length} component{shortfalls.length === 1 ? "" : "s"}. Complete or
-                          receive those items first. Complete stays off until warehouse qty covers the recipe.
+                          receive those items first. A partial completion is available when the requested issue quantities are covered.
                         </p>
                       ) : (
                         <p className="mb-3 text-sm text-muted-foreground">On-hand covers this recipe.</p>

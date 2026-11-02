@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CustomerCreditTab } from "@/components/customers/CustomerCreditTab";
+import { CustomerVatWithholdingCard } from "@/components/customers/CustomerVatWithholdingCard";
 import { CustomerLedger } from "@/components/customers/CustomerLedger";
 import { CustomerFormSheet } from "@/components/customers/CustomerFormSheet";
 import {
@@ -248,11 +249,6 @@ export default function Customer360Page() {
                   <div>
                     <p className="text-muted-foreground">Tax PIN</p>
                     <p>{party.taxId || "—"}</p>
-                    {party.vatWithholding?.agent ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        VAT withholding agent. New invoices keep the gross amount and expect 2% of the taxable value to be withheld.
-                      </p>
-                    ) : null}
                   </div>
                   <div>
                     <p className="text-muted-foreground">Address</p>
@@ -280,6 +276,11 @@ export default function Customer360Page() {
                   ) : null}
                 </CardContent>
               </Card>
+              <CustomerVatWithholdingCard
+                party={party}
+                canEdit={canWriteSales || canWriteFinance}
+                onSaved={() => void load()}
+              />
             </TabsContent>
 
             <TabsContent value="orders">

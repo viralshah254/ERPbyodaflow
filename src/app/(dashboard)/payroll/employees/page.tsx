@@ -61,6 +61,8 @@ export default function PayrollEmployeesPage() {
   const [shifNumber, setShifNumber] = React.useState("");
   const [residency, setResidency] = React.useState<ConsultantResidency>("RESIDENT");
   const [baseSalary, setBaseSalary] = React.useState(0);
+  const [payBasis, setPayBasis] = React.useState<"SALARY" | "PIECEWORK">("SALARY");
+  const [pieceworkRate, setPieceworkRate] = React.useState(0);
   const [contractDailyRate, setContractDailyRate] = React.useState(0);
   const [hourlyCostRate, setHourlyCostRate] = React.useState(0);
   const [currency, setCurrency] = React.useState("KES");
@@ -180,6 +182,7 @@ export default function PayrollEmployeesPage() {
         jobTitle: jobTitle || undefined,
         branch: branchId || undefined,
         baseSalary: baseSalary || 0,
+        payBasis, pieceworkRate: payBasis === "PIECEWORK" ? pieceworkRate : undefined,
         hourlyCostRate: hourlyCostRate || undefined,
         contractDailyRate: employmentType === "CONSULTANT" ? (contractDailyRate || undefined) : undefined,
         currency,
@@ -337,6 +340,8 @@ export default function PayrollEmployeesPage() {
               </Select>
             </div>
 
+            <div className="space-y-2"><Label>Pay basis</Label><Select value={payBasis} onValueChange={value => setPayBasis(value as "SALARY" | "PIECEWORK")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="SALARY">Salary / day rate</SelectItem><SelectItem value="PIECEWORK">Piecework output</SelectItem></SelectContent></Select></div>
+            {payBasis === "PIECEWORK" && <div className="space-y-2"><Label htmlFor="piecework-rate">Agreed rate per completed unit</Label><Input id="piecework-rate" type="number" min="0.01" step="0.01" required value={pieceworkRate || ''} onChange={event => setPieceworkRate(Number(event.target.value))} /></div>}
             {/* Employment type + country */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">

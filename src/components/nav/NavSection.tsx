@@ -48,6 +48,8 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
     setSectionExpanded(section.id, next);
   };
 
+  const siblingHrefs = section.items.flatMap((entry) => (entry.href ? [entry.href] : []));
+
   if (isCollapsed) {
     return null; // Hide section headers when collapsed
   }
@@ -94,7 +96,7 @@ export function NavSection({ section, isCollapsed }: NavSectionProps) {
                     <span className="border-b border-border/50 pb-0.5">{item.navGroupLabel}</span>
                   </div>
                 )}
-                <NavItem item={item} isCollapsed={isCollapsed} />
+                <NavItem item={item} isCollapsed={isCollapsed} siblingHrefs={siblingHrefs} />
               </div>
             );
           })}

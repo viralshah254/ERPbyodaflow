@@ -19,10 +19,12 @@ import {
   applyProductionPlan,
   explodeProductionPlan,
   fetchProductionPlanDefaults,
+  fetchManufacturingWorkOrder,
   type ExplodedProductionPlan,
   type ProductionPlanRow,
   type ProductionPlanTreeNode,
 } from "@/lib/api/manufacturing";
+import { printDailyProductionPacket } from "@/lib/manufacturing/production-sheet";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -304,7 +306,12 @@ export default function ProductionPlanPage() {
     }
     setApplying(true);
     try {
-      const result = await applyProductionPlan(packLines);
+      const fingerprint = JSON.stringify(packLines);
+      const storageKey = "manufacturing-daily-plan-apply";
+      const previous = JSON.parse(sessionStorage.getItem(storageKey) || "null") as { fingerprint: string; requestId: string } | null;
+      const requestId = previous?.fingerprint === fingerprint ? previous.requestId : crypto.randomUUID();
+      sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, requestId }));
+      const result = await applyProductionPlan(packLines, requestId);
       setPlan(result.explode);
       setShowAllSkus(false);
       setCreatedOrders(result.created);
@@ -330,11 +337,11 @@ export default function ProductionPlanPage() {
         );
       } else if (reused) {
         toast.success(
-          `Created ${fresh} draft work order${fresh === 1 ? "" : "s"}. ${reused} already existed.`
+          `Choose stores and prepare each batch. Created ${fresh} draft work order${fresh === 1 ? "" : "s"}. ${reused} already existed.`
         );
       } else {
         toast.success(
-          `Created ${fresh} draft work order${fresh === 1 ? "" : "s"}: ${result.created.map((row) => row.number).join(", ")}.`
+          `Choose stores and prepare each batch. Created ${fresh} draft work order${fresh === 1 ? "" : "s"}: ${result.created.map((row) => row.number).join(", ")}.`
         );
       }
     } catch (error) {
@@ -688,8 +695,16 @@ export default function ProductionPlanPage() {
                   {createdOrders.length ? (
                     <>
                       <span className="font-medium text-foreground">
-                        Draft work orders (Release → Complete next):
+                        Draft work orders (Prepare → Print → Release → Start → Complete → QC):
                       </span>
+                      <Button size="sm" variant="outline" onClick={() => {
+                        const popup = window.open("", "_blank");
+                        if (popup) { popup.document.write("<p>Loading production packet…</p>"); popup.document.close(); }
+                        void Promise.all(createdOrders.map((wo) => fetchManufacturingWorkOrder(wo.id))).then((orders) => {
+                          printDailyProductionPacket(orders, popup);
+                        }).catch((error) => { popup?.close(); toast.error(error instanceof Error ? error.message : "Packet could not load"); });
+                      }}>Preview / print prepared packet</Button>
+                      <Button size="sm" variant="ghost" onClick={() => { sessionStorage.removeItem("manufacturing-daily-plan-apply"); setCreatedOrders(null); toast.info("New planning request started. Applying again creates new batches."); }}>Start a new plan</Button>
                       {createdOrders.map((wo) => (
                         <Link
                           key={wo.id}

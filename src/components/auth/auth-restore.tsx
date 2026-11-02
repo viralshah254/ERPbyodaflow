@@ -1,5 +1,7 @@
 "use client";
 
+import { canUseDevHeaders } from "@/lib/runtime-flags";
+
 import { useEffect } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -54,6 +56,20 @@ export function AuthRestore() {
     let teardown: (() => void) | null = null;
 
     const restore = async () => {
+      if (isApiConfigured() && canUseDevHeaders()) {
+        try {
+          const session = await fetchRuntimeSession();
+          if (!cancelled) {
+            setSession(session);
+            useOrgContextStore.getState().hydrateFromBackend({ ...session.orgContext, orgType: session.org.orgType });
+          }
+        } catch {
+          if (!cancelled) logout();
+        } finally {
+          if (!cancelled) finishHydration();
+        }
+        return;
+      }
       if (!isApiConfigured() || !isFirebaseConfigured()) {
         finishHydration();
         return;

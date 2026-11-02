@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import {
   calculatePayRunLinesApi,
+  fetchErpPayrollCapabilitiesApi,
   createPayRunApi,
   fetchEmployeesApi,
   fetchPayRunsApi,
@@ -66,8 +67,16 @@ export default function PayRunsPage() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [month, setMonth] = React.useState("");
   const [branchId, setBranchId] = React.useState("");
+  const [department, setDepartment] = React.useState("ALL");
+  const [workforceType, setWorkforceType] = React.useState("ALL");
+  const [outputQuantities, setOutputQuantities] = React.useState<Record<string, number>>({});
+  const currentNairobiMonth = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" }).format(new Date());
+  const [currentYear, currentMonth] = currentNairobiMonth.split("-").map(Number);
+  const latestCompletedMonth = new Date(Date.UTC(currentYear!, currentMonth! - 2, 1)).toISOString().slice(0, 7);
   const [currency, setCurrency] = React.useState("KES");
   const [loading, setLoading] = React.useState(true);
+  const [workflowReady, setWorkflowReady] = React.useState(false);
+  const permissions = useAuthStore(state => state.permissions);
   const [calculating, setCalculating] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [runs, setRuns] = React.useState<PayRun[]>([]);
@@ -79,9 +88,8 @@ export default function PayRunsPage() {
   const [expandedLineId, setExpandedLineId] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    const d = new Date();
-    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
-  }, []);
+    setMonth(latestCompletedMonth);
+  }, [latestCompletedMonth]);
 
   React.useEffect(() => {
     if (!branchId) {
@@ -92,10 +100,12 @@ export default function PayRunsPage() {
   const refreshData = React.useCallback(async () => {
     setLoading(true);
     try {
-      const [payRuns, payrollEmployees] = await Promise.all([
+      const [payRuns, payrollEmployees, capabilities] = await Promise.all([
         fetchPayRunsApi(),
         fetchEmployeesApi(),
+        fetchErpPayrollCapabilitiesApi().catch(() => null),
       ]);
+      setWorkflowReady(capabilities?.workflowVersion === "erp-only-completed-month-v1");
       setRuns(payRuns);
       setEmployees(payrollEmployees);
     } catch (e) {
@@ -112,13 +122,21 @@ export default function PayRunsPage() {
     [branches]
   );
 
-  const filteredEmployees = employees.filter((e) => !branchId || e.branch === branchId);
+  const departments = [...new Set(employees.map(employee => employee.department).filter((value): value is string => Boolean(value)))].sort();
+  const filteredEmployees = employees.filter(employee => (!branchId || employee.branch === branchId)
+    && (department === "ALL" || employee.department === department)
+    && (workforceType === "ALL" || workforceType === "PIECEWORK" && employee.payBasis === "PIECEWORK"
+      || workforceType === "PERMANENT" && employee.employmentType === "FULL_TIME" && employee.payBasis !== "PIECEWORK"
+      || workforceType === "CASUAL" && employee.employmentType === "CASUAL" && employee.payBasis !== "PIECEWORK"));
+  React.useEffect(() => { setCalculatedLines(null); }, [month, branchId, department, workforceType, outputQuantities]);
 
   const handleAutoCalculate = async () => {
-    if (!month || !filteredEmployees.length) {
+    if (!workflowReady) { toast.error("The connected backend needs the ERP-only payroll update."); return; }
+    if (!month || month > latestCompletedMonth || !filteredEmployees.length) {
       toast.info("Select a month and ensure employees exist for the branch.");
       return;
     }
+    if (filteredEmployees.some(employee => employee.payBasis === "PIECEWORK" && !(outputQuantities[employee.id]! > 0))) { toast.error("Enter completed output for every selected pieceworker."); return; }
     setCalculating(true);
     try {
       const lines = await calculatePayRunLinesApi({
@@ -126,6 +144,7 @@ export default function PayRunsPage() {
         autoUnpaidLeave,
         employees: filteredEmployees.map((e) => ({
           employeeId: e.id,
+          outputQuantity: e.payBasis === "PIECEWORK" ? outputQuantities[e.id] : undefined,
           grossPay: e.baseSalary > 0 ? e.baseSalary : e.contractDailyRate ? e.contractDailyRate * 20 : 0,
         })),
       });
@@ -159,7 +178,8 @@ export default function PayRunsPage() {
   const totalEmployerNssf = summaryLines.reduce((s, l) => s + l.totalEmployerCost, 0);
 
   const handleCreate = async (andSubmit = false) => {
-    if (!month) { toast.info("Select month."); return; }
+    if (!workflowReady) { toast.error("The connected backend needs the ERP-only payroll update."); return; }
+    if (!month || month > latestCompletedMonth) { toast.info("Choose a completed payroll month."); return; }
     if (!summaryLines.length) { toast.info("Click Auto-calculate taxes first."); return; }
     setSaving(true);
     try {
@@ -169,6 +189,7 @@ export default function PayRunsPage() {
       const payload = {
         periodStart: `${month}-01`,
         periodEnd,
+        selection: { department: department === "ALL" ? undefined : department, workforceType },
         branchId,
         currency,
         lines: summaryLines.map((l) => {
@@ -179,6 +200,7 @@ export default function PayRunsPage() {
               : undefined;
           return {
             employeeId: l.employeeId,
+            outputQuantity: l.piecework?.quantity,
             grossPay: l.grossPay,
             deductions: ded,
             statBreakdown: l.statBreakdown,
@@ -222,7 +244,7 @@ export default function PayRunsPage() {
         id: "status",
         header: "Status",
         accessor: (r: PayRun) => (
-          <Badge variant={statusVariant(r.status)}>{r.status.replace("_", " ")}</Badge>
+          <Badge variant={statusVariant(r.status)}>{r.status.replace("_", " ")}{r.disbursementStatus === "READY" ? " · Disbursement ready" : ""}</Badge>
         ),
       },
     ],
@@ -243,7 +265,7 @@ export default function PayRunsPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain pay run flow, PAYE, NSSF, SHIF, AHL for Kenya and Uganda payroll." label="Explain" />
-            <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Button size="sm" disabled={!workflowReady || !permissions.includes("finance.write")} onClick={() => setCreateOpen(true)}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               New pay run
             </Button>
@@ -293,15 +315,16 @@ export default function PayRunsPage() {
           <SheetHeader>
             <SheetTitle>New pay run</SheetTitle>
             <SheetDescription>
-              Select month and branch, then auto-calculate statutory deductions for all employees.
+              Choose a completed month, branch, department and team. A different ERP approver must review the run, including any piecework output.
             </SheetDescription>
           </SheetHeader>
 
           <div className="mt-6 space-y-4">
+            {!workflowReady && <p role="alert" className="text-sm text-destructive">The connected backend needs the ERP-only payroll update before calculating or saving a run.</p>}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="create-payrun-month">Month</Label>
-                <Input id="create-payrun-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+                <Input id="create-payrun-month" type="month" min="2000-01" max={latestCompletedMonth} value={month} onChange={(e) => setMonth(e.target.value)} />
               </div>
               <div className="space-y-2">
                 <Label>Branch</Label>
@@ -316,6 +339,12 @@ export default function PayRunsPage() {
               </div>
             </div>
 
+            <p className="text-sm text-muted-foreground">Current and future months cannot be run. Earlier completed months remain available.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Department</Label><Select value={department} onValueChange={setDepartment}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All departments</SelectItem>{departments.map(value => <SelectItem key={value} value={value}>{value}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Payroll team</Label><Select value={workforceType} onValueChange={setWorkforceType}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="ALL">All teams</SelectItem><SelectItem value="PERMANENT">Permanent</SelectItem><SelectItem value="CASUAL">Casual (excluding piecework)</SelectItem><SelectItem value="PIECEWORK">Piecework</SelectItem></SelectContent></Select></div>
+            </div>
+            {filteredEmployees.filter(employee => employee.payBasis === 'PIECEWORK').map(employee => <div key={employee.id} className="rounded-lg border p-3 space-y-2"><Label htmlFor={`output-${employee.id}`}>{employee.name} — completed output × {formatMoney(employee.pieceworkRate || 0, employee.currency)} per unit</Label><Input id={`output-${employee.id}`} type="number" min="0" step="any" value={outputQuantities[employee.id] ?? ''} onChange={event => setOutputQuantities(previous => ({ ...previous, [employee.id]: Number(event.target.value) }))} /><p className="text-xs text-muted-foreground">Output and the configured rate are included in the independent payroll approval.</p></div>)}
             <div className="flex items-center gap-3 rounded-lg border bg-muted/40 p-3">
               <Icons.Users className="h-4 w-4 shrink-0 text-muted-foreground" />
               <div className="flex flex-col gap-2 flex-1 sm:flex-row sm:items-center">
@@ -338,7 +367,7 @@ export default function PayRunsPage() {
                   size="sm"
                   variant="secondary"
                   onClick={handleAutoCalculate}
-                  disabled={calculating || !filteredEmployees.length}
+                  disabled={calculating || !filteredEmployees.length || !month || month > latestCompletedMonth}
                 >
                   {calculating ? (
                     <Icons.Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />

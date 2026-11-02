@@ -234,7 +234,7 @@ export default function BomsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={`Bills of Material (${bomLabel})`}
-        description="Define product structures, formulas, and cost rollup"
+        description="Recipes define what goes into a batch and how much it makes. Link a routing to describe the production steps."
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "BOMs" }]}
         sticky
         showCommandHint

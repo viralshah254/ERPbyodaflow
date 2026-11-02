@@ -298,8 +298,8 @@ export default function MrpPage() {
               <p className="text-lg font-semibold tabular-nums">{summary.purchaseSuggestions}</p>
             </div>
             <div className="rounded-lg border bg-card px-4 py-3 text-sm shadow-sm">
-              <span className="text-muted-foreground">Total shortage qty</span>
-              <p className="text-lg font-semibold tabular-nums">{summary.totalShortageQty}</p>
+              <span className="text-muted-foreground">Products short</span>
+              <p className="text-lg font-semibold tabular-nums">{summary.workOrderSuggestions + summary.purchaseSuggestions}</p>
             </div>
             {planRun ? (
               <div className="rounded-lg border bg-card px-4 py-3 text-sm shadow-sm">
