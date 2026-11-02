@@ -21,3 +21,14 @@ describe("daily packet units", () => {
     expect(html).toContain("not reserved or pickable");
   });
 });
+
+it("avoids empty history tables on drafts while retaining posted lot and QC evidence", () => {
+  const order = { number: "WO", materialLines: [{ productId: "rm", plannedQuantity: 2, warehouseId: "rm-store", uom: "KG" }], outputLines: [{ productId: "fg", warehouseId: "fg-store" }] } as ManufacturingWorkOrder;
+  const draft = productionSheetHtml(order);
+  expect(draft).not.toContain("Material posting and lot actuals");
+  expect(draft).not.toContain("Finished lot QC");
+  const posted = productionSheetHtml({ ...order, completions: [{ idempotencyKey: "posted", quantity: 1, postedAt: "2026-11-02", inputLines: [{ productId: "rm", quantity: 2, consumedQuantity: 2, consumedLotSplits: [{ lotId: "raw-lot", quantity: 2 }] }] }], productionLots: [{ _id: "fg-lot", lotNumber: "FG-LOT", productId: "fg", warehouseId: "fg-store", qcStatus: "ACCEPTED", status: "RELEASED", remainingQuantity: 1 }] });
+  expect(posted).toContain("raw-lot: 2");
+  expect(posted).toContain("FG-LOT");
+  expect(posted).toContain("ACCEPTED");
+});
