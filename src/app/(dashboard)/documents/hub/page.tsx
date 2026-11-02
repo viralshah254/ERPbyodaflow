@@ -649,8 +649,17 @@ function Detail({
             {groups.map((group) => <option key={group.key} value={group.key}>{group.name}</option>)}
           </select>
           <Input value={documentType} onChange={(event) => setDocumentType(event.target.value)} aria-label="Document type" />
-          <Button type="button" size="sm" onClick={() => void run(() => confirmHubClassification(item._id, { documentType, groupKey, fields: { partyName: item.fields.partyName } }), "Classification confirmed. A proposed rule was saved for an administrator.")}>
-            Confirm classification
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void run(
+              () => confirmHubClassification(item._id, { documentType, groupKey, fields: { partyName: item.fields.partyName } }),
+              item.classificationSource === "user_confirmed"
+                ? "Classification updated."
+                : "Classification confirmed.",
+            )}
+          >
+            {item.classificationSource === "user_confirmed" ? "Update classification" : "Confirm classification"}
           </Button>
         </Section>
       </CardContent>
