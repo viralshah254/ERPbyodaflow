@@ -8,6 +8,7 @@ export type VatWithholdingAgent = {
   status?: string;
   vatWithholding?: {
     agent?: boolean;
+    source?: "KRA_CERTIFICATE" | "MANUAL";
     matchMethod?: "PIN" | "LEGAL_NAME";
     withholderName?: string;
     pin?: string;

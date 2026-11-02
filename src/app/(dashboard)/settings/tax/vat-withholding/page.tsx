@@ -175,7 +175,9 @@ export default function VatWithholdingPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Appointed agents</CardTitle>
-            <CardDescription>Only these customers get VAT withholding on new invoices.</CardDescription>
+            <CardDescription>
+              Only these customers get VAT withholding on new invoices. Turn it on from a customer, or import the KRA report.
+            </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
@@ -184,6 +186,7 @@ export default function VatWithholdingPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead>KRA PIN</TableHead>
                   <TableHead>KRA name</TableHead>
+                  <TableHead>Set on</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -196,12 +199,15 @@ export default function VatWithholdingPage() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{agent.taxId || "—"}</TableCell>
                     <TableCell>{agent.vatWithholding?.withholderName || "—"}</TableCell>
+                    <TableCell>
+                      {agent.vatWithholding?.source === "MANUAL" ? "Customer record" : "KRA report"}
+                    </TableCell>
                   </TableRow>
                 ))}
                 {!loading && (report?.agents.length ?? 0) === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-muted-foreground">
-                      No withholding agents yet. Import the KRA VAT withholding report.
+                    <TableCell colSpan={4} className="text-muted-foreground">
+                      No withholding agents yet. Open a customer and turn withholding on, or import the KRA report.
                     </TableCell>
                   </TableRow>
                 ) : null}

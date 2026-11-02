@@ -29,9 +29,11 @@ type BackendParty = {
   taxId?: string;
   vatWithholding?: {
     agent: boolean;
+    source?: "KRA_CERTIFICATE" | "MANUAL";
     matchMethod?: "PIN" | "LEGAL_NAME";
     withholderName?: string;
     pin?: string;
+    appointedAt?: string;
   };
   sageDcLink?: number;
   arApGroup?: ArApGroup;
@@ -94,6 +96,8 @@ export type PartyPayload = {
   email?: string;
   phone?: string;
   taxId?: string;
+  /** Turn Kenya VAT withholding on or off for this customer. A valid KRA PIN is required to turn it on. */
+  vatWithholding?: { agent: boolean };
   sageDcLink?: number;
   arApGroup?: ArApGroup;
   onHold?: boolean;
