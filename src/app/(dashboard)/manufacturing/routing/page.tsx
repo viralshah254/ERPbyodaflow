@@ -54,6 +54,8 @@ type RouteOperationInput = {
   workCenter: string;
   setupMinutes: string;
   runMinutesPerUnit: string;
+  critical?: boolean;
+  qcRequired?: boolean;
 };
 
 function toRow(route: ManufacturingRoute): RouteRow {
@@ -166,6 +168,7 @@ export default function RoutingPage() {
         workCenter: operation.workCenter ?? operation.workCenterId ?? "",
         setupMinutes: String(operation.setupMinutes ?? 0),
         runMinutesPerUnit: String(operation.runMinutesPerUnit ?? 0),
+        critical: operation.critical, qcRequired: operation.qcRequired,
       }))
     );
   }
@@ -265,7 +268,7 @@ export default function RoutingPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Routing"
-        description="Live operation sequences used by manufacturing BOMs and work orders."
+        description="Routings describe how a batch is made: mixing, baking, cooling and packing. Ingredients and quantities belong in the BOM."
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
           { label: "Routing" },
@@ -404,7 +407,9 @@ export default function RoutingPage() {
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-2">
                         <Label className="text-xs">Sequence</Label>
-                        <Input
+                        <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={operation.critical === true} onChange={(event) => setOperations((rows) => rows.map((row, i) => i === index ? { ...row, critical: event.target.checked } : row))} />Critical completion gate</label>
+                          <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={operation.qcRequired === true} onChange={(event) => setOperations((rows) => rows.map((row, i) => i === index ? { ...row, qcRequired: event.target.checked } : row))} />Operation QC required</label>
+                          <Input
                           value={operation.sequence}
                           onChange={(e) =>
                             setOperations((current) =>
@@ -515,6 +520,7 @@ export default function RoutingPage() {
                       workCenter: operation.workCenter.trim(),
                       setupMinutes: Number(operation.setupMinutes) || 0,
                       runMinutesPerUnit: Number(operation.runMinutesPerUnit) || 0,
+                      critical: operation.critical === true, qcRequired: operation.qcRequired === true,
                     })),
                   };
                   if (editingRouteId) {

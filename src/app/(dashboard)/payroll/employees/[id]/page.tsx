@@ -8,11 +8,14 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { fetchEmployeeByIdApi, fetchPayrollStatutoriesApi } from "@/lib/api/payroll";
+import { fetchEmployeeByIdApi, fetchPayrollStatutoriesApi, updateEmployeeApi, fetchErpPayrollCapabilitiesApi } from "@/lib/api/payroll";
 import type { Employee } from "@/lib/payroll/types";
 import type { StatutoryConfig } from "@/lib/types/payroll";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuthStore } from "@/stores/auth-store";
 
 export default function PayrollEmployeeDetailPage() {
   const params = useParams();
@@ -20,6 +23,10 @@ export default function PayrollEmployeeDetailPage() {
   const [employee, setEmployee] = React.useState<Employee | null>(null);
   const [statutories, setStatutories] = React.useState<StatutoryConfig[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const permissions = useAuthStore(state => state.permissions);
+  const [payBasis, setPayBasis] = React.useState<"SALARY" | "PIECEWORK">("SALARY");
+  const [pieceworkRate, setPieceworkRate] = React.useState(0);
+  const [savingBasis, setSavingBasis] = React.useState(false);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -32,6 +39,8 @@ export default function PayrollEmployeeDetailPage() {
         ]);
         if (!cancelled) {
           setEmployee(employeeItem);
+          setPayBasis(employeeItem?.payBasis || "SALARY");
+          setPieceworkRate(employeeItem?.pieceworkRate || 0);
           setStatutories(statutoryItems);
         }
       } catch (error) {
@@ -105,6 +114,24 @@ export default function PayrollEmployeeDetailPage() {
             </p>
             <p><span className="text-muted-foreground">Salary type:</span> {employee.salaryType}</p>
             <p><span className="text-muted-foreground">Base salary:</span> {formatMoney(employee.baseSalary, employee.currency)}</p>
+            {permissions.includes("finance.write") && <form className="space-y-3 rounded-lg border p-3" onSubmit={async event => {
+              event.preventDefault();
+              if (payBasis === "PIECEWORK" && !(pieceworkRate > 0)) { toast.error("Enter a positive agreed unit rate."); return; }
+              setSavingBasis(true);
+              try {
+                const capabilities = await fetchErpPayrollCapabilitiesApi();
+                if (capabilities.workflowVersion !== "erp-only-completed-month-v1") throw new Error("Update the ERP backend before changing payroll basis.");
+                await updateEmployeeApi(id, { payBasis, pieceworkRate: payBasis === "PIECEWORK" ? pieceworkRate : 0 });
+                setEmployee(previous => previous ? { ...previous, payBasis, pieceworkRate } : previous);
+                toast.success("Payroll basis saved. Existing approved payroll remains unchanged.");
+              } catch (error) { toast.error(error instanceof Error ? error.message : "Could not save payroll basis."); }
+              finally { setSavingBasis(false); }
+            }}>
+              <Label htmlFor="employee-pay-basis">Pay basis</Label><select id="employee-pay-basis" className="h-10 w-full rounded-md border bg-background px-3" value={payBasis} onChange={event => setPayBasis(event.target.value as "SALARY" | "PIECEWORK")}><option value="SALARY">Salary / day rate</option><option value="PIECEWORK">Piecework output</option></select>
+              {payBasis === "PIECEWORK" && <><Label htmlFor="employee-piece-rate">Agreed rate per completed unit</Label><Input id="employee-piece-rate" type="number" min="0.0001" step="any" required value={pieceworkRate || ''} onChange={event => setPieceworkRate(Number(event.target.value))} /></>}
+              <Button size="sm" type="submit" disabled={savingBasis}>{savingBasis ? 'Saving…' : 'Save payroll basis'}</Button>
+            </form>}
+
             <p>
               <span className="text-muted-foreground">Hourly cost override:</span>{" "}
               {employee.hourlyCostRate && employee.hourlyCostRate > 0

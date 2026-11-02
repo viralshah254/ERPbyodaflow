@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import {
   approvePayRunApi,
+  releaseErpPayrollApi,
   fetchPayRunDetailApi,
   postPayRunJournalApi,
   recordHrPayrollSignatureApi,
@@ -36,6 +37,7 @@ import type { PayRun, PayRunLine } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { toast } from "sonner";
+import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
 
 function exportPayRunBankCSV(runId: string, lines: PayRunLine[]) {
@@ -86,6 +88,8 @@ function employmentLabel(t?: string) {
 }
 
 export default function PayRunDetailPage() {
+  const permissions = useAuthStore(state => state.permissions);
+  const user = useAuthStore(state => state.user);
   const params = useParams();
   const id = params.id as string;
 
@@ -175,22 +179,24 @@ export default function PayRunDetailPage() {
         actions={
           <div className="flex gap-2">
             <ExplainThis prompt="Explain pay run approval and bank file generation." label="Explain" />
-            {(run.status === "DRAFT" || run.status === "SUBMITTED") && (
+            {(run.status === "DRAFT" || run.status === "SUBMITTED") && permissions.includes("finance.approve") && user?.userId !== run.createdBy && (
               <Button size="sm" disabled={approving} onClick={handleApprove}>
                 Approve
               </Button>
             )}
-            <Button variant="outline" size="sm" onClick={handlePostJournal}>
+            {run.payrollOrigin === "ERP" && run.status === "APPROVED" && run.disbursementStatus !== "READY" && permissions.includes("finance.write") && <Button size="sm" onClick={async () => { try { await releaseErpPayrollApi(id); await refreshRun(); toast.success("Payroll sent to disbursement. Bank settlement is tracked separately."); } catch (error) { toast.error(error instanceof Error ? error.message : "Submission failed"); } }}>Send to disburse</Button>}
+            <Button variant="outline" size="sm" onClick={handlePostJournal} disabled={run.status !== "APPROVED" || run.payrollOrigin === "ERP" && run.disbursementStatus !== "READY" || !permissions.includes("finance.post_journal")}>
               <Icons.FileEdit className="mr-2 h-4 w-4" />
               Post payroll journal
             </Button>
-            <Button variant="outline" size="sm" onClick={handleExportBank}>
+            <Button variant="outline" size="sm" onClick={handleExportBank} disabled={run.payrollOrigin === "ERP" && run.disbursementStatus !== "READY"}>
               <Icons.Download className="mr-2 h-4 w-4" />
-              Generate bank file
+              Export disbursement register
             </Button>
             <Button
               variant="outline"
               size="sm"
+              disabled={run.status !== "DRAFT" || !permissions.includes("finance.write")}
               onClick={async () => {
                 try {
                   await submitPayRunForApprovalApi(id);
@@ -220,7 +226,7 @@ export default function PayRunDetailPage() {
             <p><span className="text-muted-foreground">Total gross:</span> {formatMoney(run.totalGross, run.currency)}</p>
             <p><span className="text-muted-foreground">Total deductions:</span> {formatMoney(run.totalDeductions ?? run.totalGross - run.totalNet, run.currency)}</p>
             <p><span className="text-muted-foreground">Total net:</span> {formatMoney(run.totalNet, run.currency)}</p>
-            <form
+            {run.payrollOrigin === "ERP" ? <p className="text-sm text-muted-foreground">{run.disbursementStatus === "READY" ? "Sent to disbursement. This does not confirm bank settlement." : "ERP-only payroll uses independent ERP approval; no HR signature is required."}</p> : <form
               className="flex flex-wrap items-end gap-3 pt-2"
               onSubmit={async (event) => {
                 event.preventDefault();
@@ -244,7 +250,7 @@ export default function PayRunDetailPage() {
                 <Input id="hr-signature" value={signature} onChange={(event) => setSignature(event.target.value)} required />
               </div>
               <Button type="submit" variant="outline">Sign pay run</Button>
-            </form>
+            </form>}
           </CardContent>
         </Card>
         <Card>
@@ -265,7 +271,7 @@ export default function PayRunDetailPage() {
               <TableBody>
                 {lines.map((l) => (
                   <TableRow key={l.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openLine(l)}>
-                    <TableCell className="font-medium">{l.employeeName}</TableCell>
+                    <TableCell className="font-medium">{l.employeeName}{l.piecework && <p className="text-xs font-normal text-muted-foreground">Output {l.piecework.quantity} × {formatMoney(l.piecework.rate, l.currency)} per unit</p>}</TableCell>
                     <TableCell className="text-right">{formatMoney(l.gross, l.currency)}</TableCell>
                     <TableCell className="text-right">{formatMoney(l.statutoryTotal, l.currency)}</TableCell>
                     <TableCell className="text-right">{formatMoney(l.net, l.currency)}</TableCell>

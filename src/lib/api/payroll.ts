@@ -22,6 +22,8 @@ type BackendEmployee = {
   department?: string;
   jobTitle?: string;
   salary?: number;
+  payBasis?: "SALARY" | "PIECEWORK";
+  pieceworkRate?: number;
   hourlyCostRate?: number;
   contractDailyRate?: number;
   currency?: string;
@@ -37,6 +39,8 @@ type BackendEmployee = {
 
 type BackendPayRunLine = {
   employeeId: string;
+  piecework?: { quantity: number; rate: number };
+  employeeName?: string;
   employmentType?: string;
   taxCountry?: string;
   grossPay: number;
@@ -65,6 +69,8 @@ type BackendPayRunLine = {
 
 type BackendPayRun = {
   id: string;
+  payrollOrigin?: "ERP"; createdBy?: string; approvedBy?: string; disbursementStatus?: "READY";
+  hrSource?: unknown;
   branchId?: string;
   number: string;
   periodStart: string;
@@ -123,7 +129,10 @@ function mapStatBreakdownFromBackend(s: NonNullable<BackendPayRunLine["statBreak
 
 function monthFromDate(value?: string): string {
   if (!value) return "";
-  return value.slice(0, 7);
+  const date = new Date(value);
+  return Number.isFinite(date.getTime())
+    ? new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Nairobi", year: "numeric", month: "2-digit" }).format(date)
+    : value.slice(0, 7);
 }
 
 function mapPayRunStatus(status: BackendPayRun["status"]): PayRun["status"] {
@@ -147,6 +156,7 @@ function mapEmployee(item: BackendEmployee): Employee {
     residency: item.residency as Employee["residency"],
     salaryType: "MONTHLY",
     baseSalary: item.salary ?? 0,
+    payBasis: item.payBasis || "SALARY", pieceworkRate: item.pieceworkRate,
     hourlyCostRate: item.hourlyCostRate,
     contractDailyRate: item.contractDailyRate,
     currency: item.currency ?? "KES",
@@ -161,6 +171,7 @@ function mapPayRun(item: BackendPayRun): PayRun {
   return {
     id: item.id,
     number: item.number,
+    payrollOrigin: item.payrollOrigin, createdBy: item.createdBy, approvedBy: item.approvedBy, disbursementStatus: item.disbursementStatus,
     month: monthFromDate(item.periodStart),
     branch: item.branchId,
     currency: item.currency ?? "KES",
@@ -182,7 +193,8 @@ function mapPayRunLines(item: BackendPayRun, employees: Employee[]): PayRunLine[
     return {
       id: `${item.id}-${line.employeeId}-${index}`,
       employeeId: line.employeeId,
-      employeeName: employee?.name ?? line.employeeId,
+      piecework: line.piecework,
+      employeeName: employee?.name ?? line.employeeName ?? line.employeeId,
       employmentType: line.employmentType as PayRunLine["employmentType"],
       taxCountry: line.taxCountry as PayRunLine["taxCountry"],
       gross: line.grossPay,
@@ -233,6 +245,8 @@ export async function createEmployeeApi(payload: {
   department?: string;
   branch?: string;
   baseSalary: number;
+  payBasis?: "SALARY" | "PIECEWORK";
+  pieceworkRate?: number;
   hourlyCostRate?: number;
   contractDailyRate?: number;
   currency?: string;
@@ -255,6 +269,7 @@ export async function createEmployeeApi(payload: {
       jobTitle: payload.jobTitle,
       startDate: new Date().toISOString(),
       salary: payload.baseSalary,
+      payBasis: payload.payBasis, pieceworkRate: payload.pieceworkRate,
       hourlyCostRate: payload.hourlyCostRate,
       contractDailyRate: payload.contractDailyRate,
       currency: payload.currency ?? "KES",
@@ -277,6 +292,8 @@ export async function updateEmployeeApi(
     department: string;
     jobTitle: string;
     salary: number;
+    payBasis: "SALARY" | "PIECEWORK";
+    pieceworkRate: number;
     hourlyCostRate: number;
     contractDailyRate: number;
     currency: string;
@@ -319,7 +336,7 @@ export async function fetchPayRunDetailApi(
 export async function calculatePayRunLinesApi(payload: {
   periodStart: string;
   autoUnpaidLeave?: boolean;
-  employees: { employeeId: string; grossPay?: number; adjustments?: number; unpaidLeaveDays?: number }[];
+  employees: { employeeId: string; grossPay?: number; adjustments?: number; unpaidLeaveDays?: number; outputQuantity?: number }[];
 }): Promise<CalculatedLine[]> {
   requireLiveApi("Payroll tax calculation");
   const data = await apiRequest<{ lines: CalculatedLine[] }>("/api/payroll/pay-runs/calculate", {
@@ -330,12 +347,14 @@ export async function calculatePayRunLinesApi(payload: {
 }
 
 export async function createPayRunApi(payload: {
+  selection?: { department?: string; workforceType?: string };
   periodStart: string;
   periodEnd: string;
   branchId?: string;
   currency: string;
   lines: {
     employeeId: string;
+    outputQuantity?: number;
     grossPay: number;
     deductions?: number;
     statBreakdown?: StatBreakdown;
@@ -655,4 +674,13 @@ export async function regenerateP9ForEmployeeApi(employeeId: string, year?: numb
 /** Returns the URL string for downloading a P9 PDF — use with downloadFile() or as href. */
 export function p9PdfUrl(employeeId: string, year: number): string {
   return `/api/payroll/p9/${encodeURIComponent(employeeId)}/pdf?year=${year}`;
+}
+
+export async function releaseErpPayrollApi(id: string): Promise<void> {
+  requireLiveApi("Payroll disbursement submission");
+  await apiRequest(`/api/payroll/pay-runs/${id}/release`, { method: "POST", body: {} });
+}
+
+export async function fetchErpPayrollCapabilitiesApi(): Promise<{ workflowVersion: string; latestCompletedMonth: string }> {
+  return apiRequest("/api/payroll/capabilities");
 }

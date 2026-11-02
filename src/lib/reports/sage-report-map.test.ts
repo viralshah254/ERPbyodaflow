@@ -3,8 +3,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { SAGE_REPORT_MAP } from "./sage-report-map";
 describe("Sage menu coverage", () => {
-  it("records all 82 visible report entries and four unexpanded contact submenus without duplicate IDs", () => {
-    expect(SAGE_REPORT_MAP.filter((entry) => entry.kind === "report")).toHaveLength(82);
+  it("records all 83 visible report entries and four unexpanded contact submenus without duplicate IDs", () => {
+    expect(SAGE_REPORT_MAP.filter((entry) => entry.kind === "report")).toHaveLength(83);
     expect(SAGE_REPORT_MAP.filter((entry) => entry.kind === "submenu")).toHaveLength(4);
     expect(new Set(SAGE_REPORT_MAP.map((entry) => entry.id)).size).toBe(SAGE_REPORT_MAP.length);
   });
@@ -17,7 +17,8 @@ describe("Sage menu coverage", () => {
   });
   it("keeps WIP values behind finance access and links implemented report contracts", () => {
     const reports = SAGE_REPORT_MAP.filter((entry) => entry.status === "new-report");
-    expect(new Set(reports.map((entry) => entry.href)).size).toBe(21);
+    expect(new Set(reports.map((entry) => entry.href)).size).toBe(22);
     expect(reports.find((entry) => entry.name === "Work in Progress")?.additionalPermissions).toContain("finance.read");
+    expect(reports.find((entry) => entry.name === "Manufacturing Reconciliation")?.additionalPermissions).toContain("finance.read");
   });
 });

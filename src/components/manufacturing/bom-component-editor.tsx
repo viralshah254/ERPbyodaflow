@@ -50,9 +50,9 @@ function localDraftKey(bomId: string): string {
   return `erp.bom-components.draft.${bomId}`;
 }
 
-function scrapPercentFromStored(scrapFactor?: number): string {
+function scrapPercentFromStored(scrapFactor?: number, mode?: "RATIO" | "PERCENT"): string {
   if (scrapFactor == null || !Number.isFinite(scrapFactor) || scrapFactor <= 0) return "";
-  const ratio = scrapFactor >= 1 ? scrapFactor / 100 : scrapFactor;
+  const ratio = mode === "RATIO" ? scrapFactor : mode === "PERCENT" ? scrapFactor / 100 : scrapFactor >= 1 ? scrapFactor / 100 : scrapFactor;
   const percent = Math.round(ratio * 10000) / 100;
   return percent > 0 ? String(percent) : "";
 }
@@ -70,7 +70,7 @@ function toDraftLine(item: ManufacturingBomItem): ComponentDraftLine {
     quantity: String(item.quantity ?? 1),
     uom: item.uom || "EA",
     isOptional: item.isOptional === true,
-    scrapPercent: scrapPercentFromStored(item.scrapFactor),
+    scrapPercent: scrapPercentFromStored(item.scrapFactor, item.scrapFactorMode),
     warehouseId: item.warehouseId ?? "",
     unitCost: item.unitCost,
   };
@@ -170,6 +170,7 @@ function toBomItem(line: ComponentDraftLine): ManufacturingBomItem {
     quantity: Number.isFinite(quantity) ? quantity : 0,
     uom: line.uom || "EA",
     isOptional: line.isOptional,
+    scrapFactorMode: "RATIO",
     scrapFactor: scrap != null && Number.isFinite(scrap) && scrap > 0 ? scrap / 100 : undefined,
     warehouseId: line.warehouseId || undefined,
     unitCost: line.unitCost,

@@ -1,21 +1,18 @@
-import { apiRequest, downloadFile, requireLiveApi, getApiBase } from "./client";
-export const MANUFACTURING_REPORT_IDS = ["bom-explosion", "bom-where-used", "manufacture-orders", "work-in-progress"] as const;
+import { requireManufacturingCapability } from "./manufacturing-capabilities";
+import { apiRequest, downloadFile, requireLiveApi } from "./client";
+export const MANUFACTURING_REPORT_IDS = ["bom-explosion", "bom-where-used", "manufacture-orders", "work-in-progress", "reconciliation"] as const;
 export type ManufacturingReportId = typeof MANUFACTURING_REPORT_IDS[number];
 export type ManufacturingReportParams = { bomId?: string; productId?: string; quantity?: string; dateFrom?: string; dateTo?: string };
 export type ManufacturingReport = { version: string; id: ManufacturingReportId; title: string; basis: string; generatedAt: string; columns: string[]; rows: Array<Record<string, string | number | boolean | null>>; warnings: string[]; totalWipValue?: number | null; requires?: "bomId" | "productId"; options?: Array<{ id: string; label: string }>; readOnlyPreview?: boolean };
 export async function fetchManufacturingReport(id: ManufacturingReportId, params: ManufacturingReportParams = {}) {
   requireLiveApi("Manufacturing report");
+  await requireManufacturingCapability("reports", "manufacturing-reports-v1");
   try {
     const report = await apiRequest<ManufacturingReport>(`/api/reports/manufacturing/${id}`, { params });
     if (report.version !== "manufacturing-reports-v1") throw new Error("Update the connected backend to use the manufacturing report contract.");
     return report;
   } catch (error) {
-    if ((error as { status?: number }).status === 404 && typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname) && getApiBase() !== "http://localhost:4000") {
-      const report = await apiRequest<ManufacturingReport>(`/api/reports/manufacturing/${id}`, { params, baseUrl: "http://localhost:4000" });
-      if (report.version !== "manufacturing-reports-v1") throw new Error("Update the local report preview backend.");
-      return { ...report, readOnlyPreview: true };
-    }
-    if ((error as { status?: number }).status === 404) throw new Error("The connected backend needs the manufacturing reports release before this report can run.");
+    if ((error as { status?: number }).status === 404) throw new Error("The API advertises manufacturing reports, but this report route was not found. Check API routing and deployment.");
     throw error;
   }
 }
