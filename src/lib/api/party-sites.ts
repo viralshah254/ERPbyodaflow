@@ -41,11 +41,13 @@ export type PartySitePayload = {
 export async function fetchPartySitesApi(params?: {
   partyId?: string;
   status?: string;
+  limit?: number;
 }): Promise<{ items: PartySiteRow[] }> {
   requireLiveApi("party sites");
   const qs = new URLSearchParams();
   if (params?.partyId) qs.set("partyId", params.partyId);
   if (params?.status) qs.set("status", params.status);
+  if (params?.limit) qs.set("limit", String(params.limit));
   const query = qs.toString();
   return apiRequest<{ items: PartySiteRow[] }>(`/api/party-sites${query ? `?${query}` : ""}`);
 }

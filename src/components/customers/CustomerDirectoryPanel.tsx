@@ -280,7 +280,7 @@ export function CustomerDirectoryPanel({
         <EmptyState
           icon="Users"
           title="No multichain customers yet"
-          description="Add a supermarket (chain HQ), then open Branches to add outlets as full customers."
+          description="Add a supermarket. Its SFA branches show under Branches, and invoices stay on the supermarket."
           action={{
             label: "Add supermarket",
             onClick: () => requestAdd("modern-trade"),
