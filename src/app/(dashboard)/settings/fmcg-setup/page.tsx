@@ -17,6 +17,7 @@ import { ArrowRight, CheckCircle2, Circle, RefreshCw, ShieldCheck, AlertCircle }
 import { toast } from "sonner";
 export default function FmcgSetupPage() {
   const [setup, setSetup] = React.useState<FmcgSetup | null>(null);
+  const [acknowledgePendingChecks, setAcknowledgePendingChecks] = React.useState(false);
   const [acceptanceReference, setAcceptanceReference] = React.useState("");
   const [stage, setStage] = React.useState<SetupStage | "all">("all");
   const [pendingOnly, setPendingOnly] = React.useState(false);
@@ -59,13 +60,15 @@ export default function FmcgSetupPage() {
           </div>
         </div>
         <Card id="activate-opening"><CardHeader><CardTitle>{setup.status === "ACTIVE" ? "Live posting enabled" : "Activate live posting"}</CardTitle></CardHeader><CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">{setup.status === "ACTIVE" ? `The accounting opening is active from ${setup.openingDate}. Posting dates must be on or after this date, and the opening day must have arrived.` : "Complete the required checks, then record the reviewed opening and client acceptance reference to enable posting from the official opening date. Existing invoices, payments, stock and balances are retained."}</p>
+          <p className="text-sm text-muted-foreground">{setup.status === "ACTIVE" ? `The accounting opening is active from ${setup.openingDate}. Posting dates must be on or after this date, and the opening day must have arrived.` : "Review the required checks and record client acceptance to enable posting from the official opening date. Existing invoices, payments, stock and balances are retained."}</p>
+          {setup.status === "ACTIVE" && !setup.readyForAcceptance && <p className="rounded-md border p-3 text-sm">Live posting is active with {required.length - checked} unresolved required checks. These remain pending in the checklist and require follow-up.</p>}
           {setup.status !== "ACTIVE" && <>
-            {!setup.readyForAcceptance && <p className="text-sm">{required.length - checked} required checks remain. Use the checklist above to resolve them, then refresh checks.</p>}
-            {canEdit && <form className="max-w-xl space-y-3" onSubmit={async event => { event.preventDefault(); if (!setup.openingDate) return; setBusy(true); try { await apiRequest("/api/settings/fmcg-setup/activate", { method: "POST", body: { openingDate: setup.openingDate, acceptanceReference } }); toast.success("Accounting opening activated. Posting is enabled from the official opening date."); setAcceptanceReference(""); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "Opening could not be activated."); } finally { setBusy(false); } }}>
-              <Label htmlFor="opening-acceptance">Opening review and client acceptance reference</Label>
+            {!setup.readyForAcceptance && <p className="text-sm">{required.length - checked} required checks remain. Resolve them using the checklist, or explicitly authorize and record the exceptions below.</p>}
+            {canEdit && <form className="max-w-xl space-y-3" onSubmit={async event => { event.preventDefault(); if (!setup.openingDate) return; setBusy(true); try { await apiRequest("/api/settings/fmcg-setup/activate", { method: "POST", body: { openingDate: setup.openingDate, acceptanceReference, ...(acknowledgePendingChecks ? { acknowledgePendingChecks: true } : {}) } }); toast.success("Accounting opening activated. Posting is enabled from the official opening date."); setAcceptanceReference(""); await load(); } catch (e) { toast.error(e instanceof Error ? e.message : "Opening could not be activated."); } finally { setBusy(false); } }}>
+              <Label htmlFor="opening-acceptance">Opening review, acceptance or exception approval reference</Label>
               <Input id="opening-acceptance" maxLength={500} required value={acceptanceReference} disabled={busy || setup.readOnlyPreview} onChange={event => setAcceptanceReference(event.target.value)} placeholder="Signed opening review or acceptance record" />
-              <Button type="submit" disabled={busy || setup.readOnlyPreview || !setup.readyForAcceptance || !setup.openingDate || !acceptanceReference.trim()}>{busy ? "Activating…" : `Activate opening from ${setup.openingDate ?? "approved date"}`}</Button>
+              {!setup.readyForAcceptance && <div className="space-y-3 rounded-md border p-3"><ul className="space-y-1 text-sm text-muted-foreground">{required.filter(gate => gate.status !== "PASS").map(gate => <li key={gate.id}>{gate.title}: {gate.detail}</li>)}</ul><label className="flex items-start gap-2 text-sm"><input type="checkbox" checked={acknowledgePendingChecks} onChange={event => setAcknowledgePendingChecks(event.target.checked)} disabled={busy || setup.readOnlyPreview} />Authorize live posting with these unresolved checks recorded as exceptions. They remain pending for follow-up.</label></div>}
+              <Button type="submit" disabled={busy || setup.readOnlyPreview || (!setup.readyForAcceptance && !acknowledgePendingChecks) || !setup.openingDate || !acceptanceReference.trim()}>{busy ? "Activating…" : `Activate opening from ${setup.openingDate ?? "approved date"}`}</Button>
             </form>}
           </>}
         </CardContent></Card>

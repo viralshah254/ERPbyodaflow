@@ -36,7 +36,7 @@ describe("operational preparation flow", () => {
     const ready = fixture(); ready.readyForAcceptance = true; ready.gates = ready.gates.map(gate => ({ ...gate, status: "PASS" }));
     state.fetch.mockResolvedValue(ready); state.patch.mockResolvedValue({ status: "ACTIVE" });
     render(<Page />);
-    const reference = await screen.findByLabelText("Opening review and client acceptance reference");
+    const reference = await screen.findByLabelText("Opening review, acceptance or exception approval reference");
     fireEvent.change(reference, { target: { value: "Signed review 001" } });
     fireEvent.click(screen.getByRole("button", { name: /Activate opening from/ }));
     await waitFor(() => expect(state.patch).toHaveBeenCalledWith("/api/settings/fmcg-setup/activate", { method: "POST", body: { openingDate: "2026-12-01", acceptanceReference: "Signed review 001" } }));
