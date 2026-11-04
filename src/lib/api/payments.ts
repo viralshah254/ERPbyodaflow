@@ -772,6 +772,8 @@ export async function fetchApOpenItemsApi(partyId: string): Promise<{
 export async function previewApSettlementApi(body: {
   partyId: string;
   amount: number;
+  reference?: string;
+  references?: string[];
 }): Promise<import("@/lib/types/ar").SettlementPreview> {
   requireLiveApi("AP settlement preview");
   return apiRequest("/api/ap/settlement-preview", { method: "POST", body });
@@ -830,4 +832,19 @@ export async function allocateApPaymentApi(paymentId: string, allocations: { doc
     method: "POST",
     body: { allocations },
   });
+}
+
+/** Use the receipt grid for supplier bills, preserving the same editable allocations. */
+export async function fetchApReceiptItemsApi(partyId: string): Promise<Awaited<ReturnType<typeof fetchArOpenItemsApi>>> {
+  const items = await fetchApOpenItemsApi(partyId);
+  const map = (row: { id: string; number: string; outstanding: number }, sourceType: "invoice" | "credit-note") => ({
+    ...row, date: "", customerId: partyId, customerName: "", total: row.outstanding, allocated: 0, status: "OPEN", sourceType,
+  });
+  return { invoices: items.bills.map(row => map(row, "invoice")), creditNotes: items.creditNotes.map(row => map(row, "credit-note")) };
+}
+
+export async function createBatchApPaymentApi(body: Parameters<typeof createArPaymentApi>[0] & { payeeName?: string }): Promise<{ id: string; number: string }> {
+  requireLiveApi("AP batch payment");
+  const { customerId, ...payment } = body;
+  return apiRequest("/api/ap/payments", { method: "POST", body: { ...payment, partyId: customerId } });
 }

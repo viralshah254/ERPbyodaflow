@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { createArPaymentApi, fetchArOpenItemsApi, previewArSettlementApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
+import { createArPaymentApi, fetchArOpenItemsApi, previewArSettlementApi, searchArCustomerOptionsApi, createBatchApPaymentApi, fetchApReceiptItemsApi, previewApSettlementApi, searchApSupplierOptionsApi } from "@/lib/api/payments";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import {
@@ -103,8 +103,8 @@ function referencePlaceholder(method: ReceiptMethod): string {
   return "Reference";
 }
 
-function matchText(row: ReceiptRow, currency: string): string {
-  if (!row.customerId) return "Choose a customer";
+function matchText(row: ReceiptRow, currency: string, payout: boolean): string {
+  if (!row.customerId) return payout ? "Choose a supplier" : "Choose a customer";
   if (row.openLoading && row.invoices.length === 0) return "Loading invoices…";
   const openTotal = sumAmounts(row.invoices.map((invoice) => invoice.outstanding));
   const amount = Number(row.amount);
@@ -148,6 +148,8 @@ function ReceiptLine({
   onChange,
   onAmountEnter,
   openCustomer,
+  onRemove,
+  payout,
 }: {
   row: ReceiptRow;
   index: number;
@@ -155,6 +157,8 @@ function ReceiptLine({
   onChange: (patch: Partial<ReceiptRow>) => void;
   onAmountEnter: () => void;
   openCustomer: boolean;
+  onRemove: () => void;
+  payout: boolean;
 }) {
   const onChangeRef = React.useRef(onChange);
   onChangeRef.current = onChange;
@@ -165,7 +169,7 @@ function ReceiptLine({
     if (!row.customerId) return;
     let cancelled = false;
     onChangeRef.current({ openLoading: true, error: undefined });
-    fetchArOpenItemsApi(row.customerId)
+    (payout ? fetchApReceiptItemsApi : fetchArOpenItemsApi)(row.customerId)
       .then((items) => {
         if (cancelled) return;
         onChangeRef.current({
@@ -185,7 +189,7 @@ function ReceiptLine({
     return () => {
       cancelled = true;
     };
-  }, [row.customerId, row.id]);
+  }, [row.customerId, row.id, payout]);
 
   React.useEffect(() => {
     const amount = Number(row.amount);
@@ -194,7 +198,7 @@ function ReceiptLine({
     const handle = window.setTimeout(() => {
       const references = referenceTokens(row.reference);
       onChangeRef.current({ matching: true });
-      previewArSettlementApi({
+      (payout ? previewApSettlementApi : previewArSettlementApi)({
         partyId: row.customerId,
         amount,
         ...(references.length ? { reference: row.reference.trim(), references } : {}),
@@ -226,7 +230,7 @@ function ReceiptLine({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [row.customerId, row.amount, row.reference, row.dirty, row.id]);
+  }, [row.customerId, row.amount, row.reference, row.dirty, row.id, payout]);
 
   const clearCustomerMatch = (customerId: string) => {
     if (customerId === row.customerId) return;
@@ -254,12 +258,12 @@ function ReceiptLine({
             value={row.customerId}
             onValueChange={clearCustomerMatch}
             onOptionSelect={(option) => onChange({ customer: option, customerId: option?.id ?? row.customerId })}
-            loadOptions={searchArCustomerOptionsApi}
+            loadOptions={payout ? searchApSupplierOptionsApi : searchArCustomerOptionsApi}
             selectedOption={row.customer}
-            placeholder="Customer"
+            placeholder={payout ? "Supplier" : "Customer"}
             searchPlaceholder="Type name, code, phone, or email"
             emptyMessage="No customers found."
-            recentStorageKey="lookup:recent-customers"
+            recentStorageKey={payout ? "lookup:recent-suppliers" : "lookup:recent-customers"}
             triggerClassName="h-9 min-h-9 py-1"
             openSignal={openCustomer ? row.id : undefined}
           />
@@ -284,7 +288,7 @@ function ReceiptLine({
             className="h-9"
             placeholder={referencePlaceholder(row.method)}
             value={row.reference}
-            onChange={(event) => onChange({ reference: event.target.value, error: undefined })}
+            onChange={(event) => onChange({ reference: event.target.value, dirty: false, matching: Number(row.amount) > 0, error: undefined })}
           />
         </TableCell>
         <TableCell className="w-36">
@@ -317,7 +321,7 @@ function ReceiptLine({
         </TableCell>
         <TableCell className="min-w-[220px]">
           <div className="flex items-start justify-between gap-2">
-            <p className="text-xs leading-5 text-muted-foreground">{matchText(row, currency)}</p>
+            <p className="text-xs leading-5 text-muted-foreground">{matchText(row, currency, payout)}</p>
             <Button
               type="button"
               variant="ghost"
@@ -331,10 +335,11 @@ function ReceiptLine({
           </div>
           {row.error ? <p className="mt-1 text-xs text-destructive">{row.error}</p> : null}
         </TableCell>
+        <TableCell><Button type="button" variant="ghost" size="sm" aria-label={`Remove line ${index + 1}`} onClick={onRemove}>Remove</Button></TableCell>
       </TableRow>
       {row.expanded ? (
         <TableRow>
-          <TableCell colSpan={6} className="bg-muted/30">
+          <TableCell colSpan={7} className="bg-muted/30">
             <div className="grid gap-2 md:grid-cols-2">
               <div className="max-h-48 divide-y overflow-auto rounded border bg-background">
                 {row.invoices.length === 0 ? (
@@ -408,7 +413,7 @@ function ReceiptLine({
   );
 }
 
-export function ReceiptCollectionGrid() {
+export function ReceiptCollectionGrid({ payout = false }: { payout?: boolean }) {
   const currency = useBaseCurrency();
   const [bankAccounts, setBankAccounts] = React.useState<Array<{ id: string; name: string }>>([]);
   const [bankAccountId, setBankAccountId] = React.useState("");
@@ -461,11 +466,11 @@ export function ReceiptCollectionGrid() {
   const postBatch = async () => {
     const ready = rows.filter(rowTouched);
     if (!ready.length) {
-      toast.error("Add at least one receipt.");
+      toast.error("Add at least one payment.");
       return;
     }
     if (!bankAccountId) {
-      toast.error("Select the bank account for this deposit.");
+      toast.error("Select the bank account for this batch.");
       return;
     }
     if (!depositDate) {
@@ -481,7 +486,7 @@ export function ReceiptCollectionGrid() {
         remaining.push(row);
         continue;
       }
-      const problem = rowProblem(row);
+      const problem = row.openLoading || row.matching ? "Wait for invoice matching to finish." : rowProblem(row) || (sumAmounts(Object.values(row.invoiceAmounts)) <= 0 ? "Allocate this payment to at least one invoice." : null);
       if (problem) {
         failed = true;
         remaining.push({ ...row, error: problem, expanded: true });
@@ -489,7 +494,8 @@ export function ReceiptCollectionGrid() {
       }
       try {
         const reference = row.reference.trim();
-        await createArPaymentApi({
+        await (payout ? createBatchApPaymentApi : createArPaymentApi)({
+          ...(payout ? { payeeName: row.customer?.label ?? "" } : {}),
           customerId: row.customerId,
           amount: Number(row.amount),
           date: depositDate,
@@ -522,7 +528,7 @@ export function ReceiptCollectionGrid() {
     }
     setPosting(false);
     if (posted) {
-      toast.success(posted === 1 ? "1 receipt posted." : `${posted} receipts posted.`);
+      toast.success(`${posted} ${payout ? "payout(s)" : "receipt(s)"} posted.`);
     }
     if (failed) {
       const blanks = remaining.some((row) => !rowTouched(row)) ? remaining : [...remaining, blankRow()];
@@ -533,7 +539,7 @@ export function ReceiptCollectionGrid() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+    <fieldset disabled={posting} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
       <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:items-end">
         <div className="space-y-2">
           <Label>Bank account</Label>
@@ -541,12 +547,12 @@ export function ReceiptCollectionGrid() {
             value={bankAccountId}
             onValueChange={setBankAccountId}
             options={bankAccounts.map((account) => ({ id: account.id, label: account.name }))}
-            placeholder="Deposit account"
+            placeholder={payout ? "Payment account" : "Deposit account"}
             searchPlaceholder="Type to search bank account"
           />
         </div>
         <div className="space-y-2">
-          <Label>Deposit date</Label>
+          <Label>{payout ? "Payment date" : "Deposit date"}</Label>
           <Input type="date" value={depositDate} onChange={(event) => setDepositDate(event.target.value)} />
         </div>
         <p className="pb-2 text-sm text-muted-foreground">
@@ -554,18 +560,19 @@ export function ReceiptCollectionGrid() {
         </p>
       </div>
       <p className="text-xs text-muted-foreground">
-        Enter on the amount starts the next line. Choosing a customer loads open invoices, then the amount is matched to the oldest invoices. Type an invoice number in the reference to prefer that invoice.
+        Enter on the amount starts the next line. Choosing a {payout ? "supplier" : "customer"} loads open invoices. A matching reference is preferred; otherwise open invoices are suggested. Reference matching is optional. Review or edit the split before posting.
       </p>
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead className="w-10">#</TableHead>
-              <TableHead>Customer</TableHead>
+              <TableHead>{payout ? "Supplier" : "Customer"}</TableHead>
               <TableHead className="w-36">Method</TableHead>
               <TableHead className="w-40">Reference</TableHead>
               <TableHead className="w-36">Amount</TableHead>
               <TableHead>Matched invoices</TableHead>
+              <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -578,6 +585,8 @@ export function ReceiptCollectionGrid() {
                 onChange={(patch) => updateRow(row.id, patch)}
                 onAmountEnter={() => startNextLine(row)}
                 openCustomer={focusRowId === row.id}
+                payout={payout}
+                onRemove={() => setRows(current => current.length === 1 ? [blankRow()] : current.filter(item => item.id !== row.id))}
               />
             ))}
           </TableBody>
@@ -588,9 +597,9 @@ export function ReceiptCollectionGrid() {
           Add line
         </Button>
         <Button type="button" onClick={postBatch} disabled={posting}>
-          {posting ? "Posting…" : "Post receipts"}
+          {posting ? "Posting…" : payout ? "Post payouts" : "Post receipts"}
         </Button>
       </div>
-    </div>
+    </fieldset>
   );
 }

@@ -28,8 +28,18 @@ describe("operational preparation flow", () => {
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "1");
     expect(screen.getByText(/Complete first: Posting account mappings/)).toBeInTheDocument();
     expect(screen.getAllByText("Needs reconciliation")).toHaveLength(4);
-    expect(screen.getByText(/does not authorize live posting/)).toBeInTheDocument();
+    expect(screen.getByText(/Complete the checks and record client acceptance/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Activate opening from/ })).toBeDisabled();
     if (process.env.ERP_SETUP_PREVIEW_HTML) writeFileSync(process.env.ERP_SETUP_PREVIEW_HTML, `<!doctype html><html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FMCG setup · synthetic design review</title><link rel="stylesheet" href="/setup.css"></head><body><div style="max-width:1440px;margin:0 auto">${document.body.innerHTML}</div></body></html>`);
+  });
+  it("records client acceptance and activates the reviewed opening", async () => {
+    const ready = fixture(); ready.readyForAcceptance = true; ready.gates = ready.gates.map(gate => ({ ...gate, status: "PASS" }));
+    state.fetch.mockResolvedValue(ready); state.patch.mockResolvedValue({ status: "ACTIVE" });
+    render(<Page />);
+    const reference = await screen.findByLabelText("Opening review and client acceptance reference");
+    fireEvent.change(reference, { target: { value: "Signed review 001" } });
+    fireEvent.click(screen.getByRole("button", { name: /Activate opening from/ }));
+    await waitFor(() => expect(state.patch).toHaveBeenCalledWith("/api/settings/fmcg-setup/activate", { method: "POST", body: { openingDate: "2026-12-01", acceptanceReference: "Signed review 001" } }));
   });
   it("takes the next task to its stage and filters checked work", async () => {
     render(<Page />); fireEvent.click(await screen.findByRole("button", { name: "Next: Posting account mappings" }));

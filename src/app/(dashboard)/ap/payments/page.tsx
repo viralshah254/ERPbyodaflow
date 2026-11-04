@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import Link from "next/link";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ReceiptCollectionGrid } from "@/components/finance/ReceiptCollectionGrid";
 import { ApChequeBoxSheet } from "@/components/finance/ApChequeBoxSheet";
 
 function supplierLabelForBill(
@@ -58,6 +59,7 @@ export default function APPaymentsPage() {
   const [allRows, setAllRows] = React.useState<APPaymentRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [wizardOpen, setWizardOpen] = React.useState(false);
+  const [batchOpen, setBatchOpen] = React.useState(false);
   const [chequeOpen, setChequeOpen] = React.useState(false);
   const [supplierId, setSupplierId] = React.useState("");
   const [supplierOptions, setSupplierOptions] = React.useState<Array<{ id: string; name: string }>>([]);
@@ -193,6 +195,7 @@ export default function APPaymentsPage() {
                 AP Bills
               </Link>
             </Button>
+            <Button onClick={() => setBatchOpen(true)}>Batch payouts</Button>
             <Button variant="outline" onClick={() => setChequeOpen(true)}>
               Record cheques
             </Button>
@@ -236,6 +239,13 @@ export default function APPaymentsPage() {
         </div>
         {loading ? <p className="text-sm text-muted-foreground">Loading AP payments...</p> : null}
       </div>
+
+      <Sheet open={batchOpen} onOpenChange={(open) => { setBatchOpen(open); if (!open) void refreshPayments(); }}>
+        <SheetContent side="right" className="flex w-full flex-col sm:w-[1200px] sm:max-w-[95vw]">
+          <SheetHeader><SheetTitle>Batch payouts</SheetTitle><SheetDescription>Enter multiple supplier payments and review the invoices each payment settles.</SheetDescription></SheetHeader>
+          <ReceiptCollectionGrid payout />
+        </SheetContent>
+      </Sheet>
 
       <ApChequeBoxSheet
         open={chequeOpen}
