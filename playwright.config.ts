@@ -8,6 +8,7 @@ export default defineConfig({
   workers: 1,
   reporter: "html",
   use: {
+    channel: process.env.PLAYWRIGHT_CHANNEL || undefined,
     baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
     trace: "on-first-retry",
     actionTimeout: 15_000,

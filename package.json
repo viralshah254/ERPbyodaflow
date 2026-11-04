@@ -20,7 +20,10 @@
     "prebuild": "node ./scripts/generate-firebase-messaging-sw.mjs",
     "ci": "npm run validate:env && npm run lint && npm run typecheck && npm run build:ci",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "tutorials:audit": "node node_modules/vite-node/vite-node.mjs --config vitest.config.ts scripts/check-screen-guides.ts",
+    "tutorials:test": "vitest run src/lib/tutorial src/components/tutorial src/components/manufacturing/BomPilotHelp.test.tsx src/config/tutorial-tours.test.ts",
+    "tutorials:e2e": "playwright test e2e/erp-guides.spec.ts e2e/bom-pilot.spec.ts e2e/tutorial.spec.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
