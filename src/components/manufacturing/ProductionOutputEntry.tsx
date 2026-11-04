@@ -11,7 +11,6 @@ import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
-import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses";
 import {
   previewProductionOutput, type ProductionOutputPreview, fetchProductionPlanDefaults, createManufacturingWorkOrder, fetchManufacturingWorkOrder,
   runManufacturingWorkOrderAction, type ManufacturingWorkOrder, type ProductionPlanRow,
@@ -28,12 +27,10 @@ export function ProductionOutputEntry() {
   const storageKey = `production-output-entry:${orgId}`;
   const [entry, setEntry] = React.useState<Entry | null>(null);
   const [products, setProducts] = React.useState<ProductionPlanRow[]>([]);
-  const [stores, setStores] = React.useState<BackendWarehouse[]>([]);
 
   const [busy, setBusy] = React.useState(false);
   const [order, setOrder] = React.useState<ManufacturingWorkOrder | null>(null);
   const [error, setError] = React.useState("");
-  const [ready, setReady] = React.useState(false);
   const pendingCreate = React.useRef(false);
 
   React.useEffect(() => {
@@ -41,7 +38,6 @@ export function ProductionOutputEntry() {
       const saved = sessionStorage.getItem(storageKey);
       setEntry(saved ? JSON.parse(saved) as Entry : blankEntry());
     } catch { setEntry(blankEntry()); }
-    void fetchWarehousesApi().then((rows) => { setStores(rows.filter((r) => r.status !== "INACTIVE")); setReady(true); }).catch((e) => setError(e.message));
   }, [storageKey]);
   React.useEffect(() => {
     let active = true;
@@ -138,12 +134,12 @@ export function ProductionOutputEntry() {
       {lines.length > 0 && <>
         <h2 className="font-semibold">{completed ? "Production posted" : "Formulation"}</h2>
         <p className="text-sm text-muted-foreground">Ingredient stores are selected automatically from usable stock. Finished goods: {outputs[0]?.warehouseName || outputs[0]?.warehouseId}. Finished output remains subject to QC release.</p>
-        <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Ingredient</th><th className="p-2">Quantity</th><th className="p-2">Unit</th><th className="p-2">Warehouse</th></tr></thead><tbody>{lines.map((line) => <tr key={line.lineId} className="border-b"><td className="p-2">{line.productName || line.productId}</td><td className="p-2 tabular-nums">{line.plannedQuantity}</td><td className="p-2">{line.uom}</td><td className="p-2">{line.warehouseName || stores.find((s) => s.id === line.warehouseId)?.name || line.warehouseId}</td></tr>)}</tbody></InteractiveTable></div>
+        <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Ingredient</th><th className="p-2">Quantity</th><th className="p-2">Unit</th><th className="p-2">Warehouse</th></tr></thead><tbody>{lines.map((line) => <tr key={line.lineId} className="border-b"><td className="p-2">{line.productName || line.productId}</td><td className="p-2 tabular-nums">{line.plannedQuantity}</td><td className="p-2">{line.uom}</td><td className="p-2">{line.warehouseName || line.warehouseId}</td></tr>)}</tbody></InteractiveTable></div>
         {!order && preview?.shortages.map((message) => <p key={message} role="alert" className="text-sm text-destructive">{message}</p>)}
       </>}
       {!locked && (preview?.shortages.length || error) ? <Button variant="outline" disabled={previewing} onClick={() => setPreviewRevision((v) => v + 1)}>Refresh formulation</Button> : null}
       <div className="flex flex-wrap gap-3">
-        {!completed && canWrite && <Button disabled={busy || !ready || (!entry.orderId && (!preview || previewing || preview.shortages.length > 0))} onClick={() => void record()}>{busy ? "Posting…" : "Approve and post"}</Button>}
+        {!completed && canWrite && <Button disabled={busy || (!entry.orderId && (!preview || previewing || preview.shortages.length > 0))} onClick={() => void record()}>{busy ? "Posting…" : "Approve and post"}</Button>}
         {completed && <Button onClick={() => { persist(blankEntry()); setOrder(null); setError(""); }}>Record next product</Button>}
         {entry.orderId && <Button variant="outline" asChild><Link href={`/manufacturing/work-orders/${encodeURIComponent(entry.orderId)}`}>Open production record</Link></Button>}
       </div>
