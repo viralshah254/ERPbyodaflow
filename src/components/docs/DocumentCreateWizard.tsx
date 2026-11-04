@@ -84,7 +84,7 @@ import {
   type TaxConfigRow,
 } from "@/lib/api/pricing";
 import { isPlantCatalogueTemplate } from "@/config/industry";
-import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { isFmcgOrg, JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
@@ -586,7 +586,10 @@ export function DocumentCreateWizard({
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
-  const sheetFinishedGoods = type === "sales-order" && !isEditMode && prefillFinishedGoods;
+  const sheetFinishedGoods = !isEditMode && (
+    (type === "sales-order" && prefillFinishedGoods) ||
+    (type === "invoice" && currentOrgId === JOY_SUPERBAKERS_ORG_ID)
+  );
   const billableLines = React.useMemo(
     () => (sheetFinishedGoods ? lines.filter((line) => line.qty > 0) : lines),
     [lines, sheetFinishedGoods]
