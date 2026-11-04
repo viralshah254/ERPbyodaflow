@@ -59,6 +59,7 @@ export function PageShell({ children, rightSlot, className }: PageShellProps) {
   if (rightSlot == null) {
     return (
       <div
+        data-guide-scroll
         className={cn(
           "flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden",
           className,
@@ -72,7 +73,7 @@ export function PageShell({ children, rightSlot, className }: PageShellProps) {
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
       <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-6 pb-6 pt-0">
+        <div data-guide-scroll className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-0 sm:px-6">
           {children}
         </div>
         <div

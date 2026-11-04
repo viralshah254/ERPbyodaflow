@@ -63,6 +63,7 @@ export function FiltersBar({
 
   return (
     <div
+      data-guide-filters
       className={cn(
         "flex flex-wrap items-center gap-3 p-4 border-b bg-card",
         className
@@ -76,6 +77,7 @@ export function FiltersBar({
         <Icons.Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
+          aria-label="Search records"
           placeholder={searchPlaceholder}
           value={searchValue}
           onChange={(e) => handleSearchChange(e.target.value)}
@@ -106,7 +108,7 @@ export function FiltersBar({
             value={internalValue}
             onValueChange={(v) => filter.onChange?.(mapToExternal(v))}
           >
-            <SelectTrigger className={cn("w-[180px]", filter.triggerClassName)}>
+            <SelectTrigger aria-label={filter.label} className={cn("w-full sm:w-[160px]", filter.triggerClassName)}>
               <SelectValue placeholder={filter.label} />
             </SelectTrigger>
             <SelectContent>

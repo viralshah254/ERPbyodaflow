@@ -1,0 +1,5692 @@
+[
+  {
+    "route": "/analytics/anomalies",
+    "title": "Anomalies",
+    "description": "Price inversion, margin collapse, stock shrinkage, payroll spikes, tax inconsistencies",
+    "sections": [
+      {
+        "title": "Investigate \u2192 workflow",
+        "description": "Each anomaly links to drill target. Severity and affected entities drive prioritization. Action layer (Week 4) wires to approval, notification, investigation."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/explore",
+    "title": "Explore",
+    "description": "One metric, up to 3 dimensions.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/finance",
+    "title": "Finance & cash intelligence",
+    "description": "Cash drivers, AR aging, FX impact, tax burden",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/insights",
+    "title": "Insights",
+    "description": "AI explains why, forecasts, recommends, and simulates",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/inventory",
+    "title": "Inventory intelligence",
+    "description": "Stockout root cause, dead stock, shrinkage, reorder health",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics",
+    "title": "Analytics Studio",
+    "description": "Explore reconciled figures. Forecasts and simulations are estimates.",
+    "sections": [
+      {
+        "title": "How to read these screens",
+        "description": "Figures follow the books and stock they cite. A simulation does not post anything."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/payroll",
+    "title": "Payroll intelligence",
+    "description": "Labor cost drivers, overtime hotspots, cost per branch, productivity proxy",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/pricing",
+    "title": "Pricing intelligence",
+    "description": "Price leakage, tier integrity, loss-making SKUs",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/products",
+    "title": "Product intelligence",
+    "description": "Margin waterfall, packaging profitability, channel margin",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/settings",
+    "title": "Analytics settings",
+    "description": "Metrics, dimensions, defaults \u2014 semantic engine registry",
+    "sections": [
+      {
+        "title": "Metrics",
+        "description": "Each metric: label, format, allowed dimensions, default viz, drill target."
+      },
+      {
+        "title": "Dimensions",
+        "description": "Available for slicing metrics. Explorer limits to 3 per view."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/analytics/simulations",
+    "title": "Simulation lab",
+    "description": "Estimates only. Nothing here posts to the books.",
+    "sections": [
+      {
+        "title": "Last applied simulation",
+        "description": "Most recent simulation suggestion applied to the demo workspace."
+      }
+    ],
+    "fields": [
+      "Price tier change %",
+      "Reorder points change %",
+      "Payroll increase %",
+      "FX move (USD +X% vs KES)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/ap/bills",
+    "title": "Bills",
+    "description": "Supplier bills (AP)",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ap/payments",
+    "title": "AP Payments",
+    "description": "Payments to suppliers",
+    "sections": [],
+    "fields": [
+      "Supplier",
+      "Bank account",
+      "Open bills",
+      "Linked bills"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/ap/statements",
+    "title": "Supplier statements",
+    "description": "Loading\u2026",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ap/suppliers/[id]",
+    "title": "Supplier account",
+    "description": "Review this supplier's outstanding balance, open bills and payment profile.",
+    "sections": [
+      {
+        "title": "Outstanding"
+      },
+      {
+        "title": "Open bills"
+      },
+      {
+        "title": "Status"
+      },
+      {
+        "title": "Profile",
+        "description": "Contact and payment details."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ap/suppliers",
+    "title": "AP Suppliers",
+    "description": "Suppliers and payment terms",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ap/three-way-match",
+    "title": "3-way match",
+    "description": "Match PO, GRN, and Bill lines. Resolve qty/price mismatches.",
+    "sections": [
+      {
+        "title": "PO lines",
+        "description": "Purchase orders (live)"
+      },
+      {
+        "title": "GRN lines",
+        "description": "Goods receipts (live)"
+      },
+      {
+        "title": "Bill lines",
+        "description": "Supplier bills (live)"
+      },
+      {
+        "title": "Match &amp; actions",
+        "description": "Select one unmatched document from each column, then confirm the match."
+      },
+      {
+        "title": "Match records",
+        "description": "All confirmed three-way matches."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/approvals/inbox",
+    "title": "Approvals Inbox",
+    "description": "Items requiring your approval",
+    "sections": [
+      {
+        "title": "Pending"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "approval-review-queue",
+      "approval-review-item"
+    ]
+  },
+  {
+    "route": "/approvals",
+    "title": "Approvals",
+    "description": "Inbox and submitted requests",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/approvals/requests",
+    "title": "My requests",
+    "description": "Items you submitted for approval",
+    "sections": [
+      {
+        "title": "Submitted"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "approval-request-status"
+    ]
+  },
+  {
+    "route": "/ar/aging",
+    "title": "AR Aging Report",
+    "description": "Outstanding invoice balances by days overdue",
+    "sections": [
+      {
+        "title": "Aging Schedule"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ar/customers",
+    "title": "Customer credit",
+    "description": "Loading\u2026",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ar/payments",
+    "title": "AR Payments",
+    "description": "Receive payments and allocate to invoices",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ar/receipts",
+    "title": "Collect receipts",
+    "description": "Post cheques and other customer payments against open invoices.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/ar/statements",
+    "title": "Customer statements",
+    "description": "Loading\u2026",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/assets/depreciation",
+    "title": "Depreciation run",
+    "description": "Select period, preview entries, post",
+    "sections": [
+      {
+        "title": "Preview entries",
+        "description": "Live journal lines prepared for depreciation posting."
+      },
+      {
+        "title": "Recent depreciation runs",
+        "description": "Latest posted periods and totals."
+      }
+    ],
+    "fields": [
+      "Period"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/assets/disposals",
+    "title": "Disposals",
+    "description": "Disposal wizard, gain/loss preview",
+    "sections": [
+      {
+        "title": "Disposals"
+      }
+    ],
+    "fields": [
+      "Asset",
+      "Disposal date",
+      "Sale price",
+      "Reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/assets/overview",
+    "title": "Fixed Assets",
+    "description": "Register, depreciation, disposals",
+    "sections": [
+      {
+        "title": "Active assets"
+      },
+      {
+        "title": "Total cost"
+      },
+      {
+        "title": "Disposals"
+      },
+      {
+        "title": "Depreciation"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/assets/register/[id]",
+    "title": "Asset record",
+    "description": "Inspect an asset's acquisition details and custody history.",
+    "sections": [
+      {
+        "title": "Details",
+        "description": "Financial master \u2014 cost, life, depreciation, identifiers."
+      },
+      {
+        "title": "Custody timeline",
+        "description": "Append-only assignment history (who held the asset, and franchise commercial terms per handover)."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/assets/register",
+    "title": "Asset register",
+    "description": "Custody (outlets & staff), depreciation, and linked source documents.",
+    "sections": [
+      {
+        "title": "Assets"
+      }
+    ],
+    "fields": [
+      "Custody"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/automation/ai-insights",
+    "title": "AI Insights",
+    "description": "Action cards, anomaly detection, pricing & payroll intelligence",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/automation/alerts",
+    "title": "Alerts & Notifications",
+    "description": "Alerts & Notifications lists configured alerts and notification history. Set up alerts for thresholds or events.",
+    "sections": [
+      {
+        "title": "Active Alerts"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/automation/integrations",
+    "title": "Integrations",
+    "description": "Integrations connects the ERP to external systems (e.g. WhatsApp, accounting). Configure and monitor connectors.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/automation",
+    "title": "Automation Dashboard",
+    "description": "Automation Dashboard shows automation status and recent runs. Open rules, workflows, or the work queue from here.",
+    "sections": [
+      {
+        "title": "Active Rules"
+      },
+      {
+        "title": "Active Alerts"
+      },
+      {
+        "title": "Scheduled Jobs"
+      },
+      {
+        "title": "AI Insights"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/automation/rules",
+    "title": "Automation Rules",
+    "description": "IF/THEN rules: triggers, conditions, actions",
+    "sections": [
+      {
+        "title": "Rules"
+      }
+    ],
+    "fields": [
+      "Trigger",
+      "Conditions",
+      "Action type",
+      "Actions"
+    ],
+    "hints": [
+      "automation-create-rule",
+      "automation-rules-list",
+      "automation-rule-builder"
+    ]
+  },
+  {
+    "route": "/automation/schedules",
+    "title": "Scheduled Jobs",
+    "description": "Manage automated tasks and report jobs.",
+    "sections": [
+      {
+        "title": "Scheduled Jobs"
+      }
+    ],
+    "fields": [
+      "Name",
+      "Cron expression",
+      "Task type",
+      "Maximum attempts",
+      "Enabled"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/automation/workflows",
+    "title": "Approvals Workflows",
+    "description": "Approvals Workflows defines approval chains for documents. Set who approves what and in what order.",
+    "sections": [
+      {
+        "title": "Approval Workflows",
+        "description": "Live approval workflow definitions saved in automation settings."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/control-tower",
+    "title": "Control Tower",
+    "description": "The Control Tower is the executive and operations cockpit: KPIs, exceptions, procurement variance, yield, franchise or cold-chain signals, and anything your org surfaces as \u201cneed attention now.\u201d Use it at the start of the day to see what changed and what is blocked\u2014not to do every task, but to prioritize.",
+    "sections": [
+      {
+        "title": "Generic Control Tower",
+        "description": "Template-specific command center appears when industry features are enabled."
+      },
+      {
+        "title": "Exception Center",
+        "description": "Weight mismatches and low-stock franchise alerts requiring action."
+      },
+      {
+        "title": "Open Weight Variances"
+      },
+      {
+        "title": "WIP by Work Center"
+      },
+      {
+        "title": "Pending Commission Runs",
+        "description": "Draft runs awaiting review and posting to the general ledger."
+      },
+      {
+        "title": "Low-Stock Alerts",
+        "description": "Outlets below reorder point \u2014 replenishment recommended."
+      }
+    ],
+    "fields": [
+      "From",
+      "To"
+    ],
+    "hints": [
+      "fmcg-control-tower-date-range"
+    ]
+  },
+  {
+    "route": "/crm/accounts",
+    "title": "Accounts",
+    "description": "Customers already on the party register.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/crm/activities",
+    "title": "Activities / Notes",
+    "description": "Track customer interactions, calls, and follow-up tasks.",
+    "sections": [
+      {
+        "title": "Activities"
+      },
+      {
+        "title": "Create activity"
+      }
+    ],
+    "fields": [
+      "Subject",
+      "Type",
+      "Due date",
+      "Account",
+      "Notes"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/crm/deals",
+    "title": "Deals / Opportunities",
+    "description": "Manage pipeline stages, ownership, and close forecasts.",
+    "sections": [
+      {
+        "title": "Deals"
+      }
+    ],
+    "fields": [
+      "Account",
+      "Deal name",
+      "Stage",
+      "Amount",
+      "Expected close date"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/crm/tickets",
+    "title": "Support / Tickets",
+    "description": "Manage support tickets with status, priority, and history.",
+    "sections": [
+      {
+        "title": "Support Tickets"
+      },
+      {
+        "title": "Ticket history"
+      }
+    ],
+    "fields": [
+      "Subject",
+      "Status",
+      "Priority",
+      "Account",
+      "Description",
+      "Add comment"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/dashboard",
+    "title": "Dashboard",
+    "description": "The Dashboard is your personal or role-based home: KPIs, widgets, recent activity, and shortcuts into documents and modules. Unlike the Control Tower (often org-wide), this screen is where most users land daily to pick up work and jump to Sales, Inventory, or Finance lists.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/distribution/collections",
+    "title": "Collections",
+    "description": "Collections list and aging",
+    "sections": [
+      {
+        "title": "Collections"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/distribution/deliveries",
+    "title": "Deliveries",
+    "description": "Deliveries list and status",
+    "sections": [
+      {
+        "title": "Deliveries"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/distribution/logistics/delivery-note",
+    "title": "DN outbound freight",
+    "description": "Review outbound freight against its delivery-note reference.",
+    "sections": [
+      {
+        "title": "Lookup delivery note",
+        "description": "Search the delivery note by number or customer. This view is the outbound freight allocated to that note."
+      },
+      {
+        "title": "Totals by line"
+      },
+      {
+        "title": "Allocation rows"
+      }
+    ],
+    "fields": [
+      "Delivery note"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/distribution/logistics/fleet",
+    "title": "Manage fleet",
+    "description": "Maintain the vehicles used by delivery and trip execution.",
+    "sections": [
+      {
+        "title": "Vehicles ( )",
+        "description": "Leased vehicles carry a monthly cost used for trip costing. Spot-hire vehicles are booked per trip."
+      },
+      {
+        "title": "Monthly lease invoices",
+        "description": "Upload the lessor invoice each month before payment and period close. Lease cost is split across completed trips at month end."
+      }
+    ],
+    "fields": [
+      "Leased vehicle",
+      "Period",
+      "Invoice amount (KES)",
+      "Invoice file",
+      "Type *",
+      "Code",
+      "Name / description",
+      "Registration plate",
+      "Monthly cost",
+      "Currency",
+      "Assumed trips / month"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/distribution/logistics/fuel",
+    "title": "Fuel audit",
+    "description": "Review fuel events and investigate exceptions against vehicles and trips.",
+    "sections": [
+      {
+        "title": "Log fuel purchase",
+        "description": "Add fuel from the web \u2014 same data as the dispatch mobile fuel screen."
+      },
+      {
+        "title": "Filters",
+        "description": "Narrow by vehicle or date range."
+      },
+      {
+        "title": "Events ( )"
+      }
+    ],
+    "fields": [
+      "Vehicle",
+      "Trip (optional)",
+      "Odometer (km)",
+      "Litres (optional)",
+      "Amount (KES)",
+      "Receipt (optional)",
+      "Note",
+      "Recorded from",
+      "Recorded to"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/distribution/logistics/period-close",
+    "title": "Vehicle period close",
+    "description": "Review vehicle operating records and unresolved exceptions for a period.",
+    "sections": [
+      {
+        "title": "Close month per vehicle",
+        "description": "Leased vehicles require a monthly invoice upload before close. Lease is split equally across completed trips."
+      },
+      {
+        "title": "Result"
+      }
+    ],
+    "fields": [
+      "Vehicle",
+      "Calendar period"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/distribution/routes",
+    "title": "Routes",
+    "description": "Route list and schedule",
+    "sections": [],
+    "fields": [
+      "Name",
+      "Description",
+      "Stops"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/distribution/transfer-planning",
+    "title": "Transfer Planning",
+    "description": "Plan hub, processor, and franchise transfers with truck assignment and quantity checks.",
+    "sections": [
+      {
+        "title": "Planning workspace"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/distribution/trips/[id]",
+    "title": "Delivery trip",
+    "description": "Review a delivery trip's stops, route legs, costs and activity.",
+    "sections": [
+      {
+        "title": "Trip Summary",
+        "description": "Leased vs spot hire movement with cost traceability."
+      },
+      {
+        "title": "Route legs",
+        "description": "GPS captured at sign events \u2014 haversine distance between stops."
+      },
+      {
+        "title": "Cost lines",
+        "description": "Fuel, driver, hire fee, toll allocated to this trip."
+      },
+      {
+        "title": "Activity & Audit"
+      }
+    ],
+    "fields": [
+      "Type",
+      "Amount ( )",
+      "Reference (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/distribution/trips",
+    "title": "Trips / Logistics",
+    "description": "Leased vs spot truck; trip-level cost allocation (inbound / outbound)",
+    "sections": [
+      {
+        "title": "Trips"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/docs/[type]/[id]/edit",
+    "title": "Edit document",
+    "description": "Edit the selected document using its available draft fields.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/docs/[type]/[id]",
+    "title": "Document record",
+    "description": "Review the selected document's lines, status, linked records and audit evidence.",
+    "sections": [
+      {
+        "title": "Apply credit note to invoice"
+      },
+      {
+        "title": "Send to customer"
+      }
+    ],
+    "fields": [
+      "Delivery address",
+      "Notes",
+      "Quantities to credit",
+      "Warehouse",
+      "Output template",
+      "Reason (required)",
+      "Product",
+      "Quantity",
+      "Signed DN file",
+      "Receiver name (optional)",
+      "Received date",
+      "Receipt status",
+      "Comments",
+      "Note (optional)",
+      "Qty received",
+      "Weight received (kg)",
+      "Variance reason (required)",
+      "Variance photos (\u22651)",
+      "Phone (optional)",
+      "Receiver signature (optional)",
+      "Invoice",
+      "Amount to apply",
+      "Payment method",
+      "Customer payment terms",
+      "Override email (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/docs/[type]/new",
+    "title": "Create document",
+    "description": "Prepare the selected type of document without posting it through the tutorial.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/docs/[type]",
+    "title": "Document list",
+    "description": "Find a document of the selected type and continue it in the correct state.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/docs/grn/[id]",
+    "title": "Goods receipt record",
+    "description": "Verify a goods receipt's source, received quantities, stock and audit evidence.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/docs/grn/new",
+    "title": "Create goods receipt",
+    "description": "Prepare receipt quantities against the correct supplier and purchase order.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/docs",
+    "title": "Documents",
+    "description": "The Document Center is the front door to every transactional document in the ERP: sales and purchase cycles, stock movements, invoicing, and manual journals. Think of it as the \u201cpaper trail\u201d browser\u2014nothing posts to the ledger or inventory until you create or open a document here (or via shortcuts elsewhere that land in the same flows).",
+    "sections": [
+      {
+        "title": "Sell"
+      },
+      {
+        "title": "Buy"
+      },
+      {
+        "title": "Corrections and the ledger"
+      },
+      {
+        "title": "Recent"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "doc-type-list"
+    ]
+  },
+  {
+    "route": "/documents/hub/groups",
+    "title": "Groups",
+    "description": "Drawers and document types. The classification list on a file is this same set of folders.",
+    "sections": [
+      {
+        "title": "Add a folder"
+      }
+    ],
+    "fields": [
+      "Folder name",
+      "Place it in",
+      "Find a folder"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/documents/hub",
+    "title": "Document Hub",
+    "description": "Upload a scan without sorting it first. The hub reads what it can, suggests a match, and keeps the original file.",
+    "sections": [
+      {
+        "title": "Inbox"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/documents/hub/rules",
+    "title": "Learned rules",
+    "description": "A memory of how you classified a supplier. It stays off until you confirm it.",
+    "sections": [
+      {
+        "title": "No rules yet"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/ap",
+    "title": "Accounts Payable (AP)",
+    "description": "Accounts Payable shows supplier balances and open bills. Pay bills via payment runs and track ageing.",
+    "sections": [
+      {
+        "title": "Open bills"
+      },
+      {
+        "title": "Outstanding"
+      },
+      {
+        "title": "Payments"
+      },
+      {
+        "title": "Open supplier balances"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/ar",
+    "title": "Accounts Receivable (AR)",
+    "description": "Accounts Receivable shows customer balances and open invoices. Post receipts and track ageing.",
+    "sections": [
+      {
+        "title": "Open invoices"
+      },
+      {
+        "title": "Outstanding"
+      },
+      {
+        "title": "Overdue"
+      },
+      {
+        "title": "Receipts"
+      },
+      {
+        "title": "Open receivables"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/audit",
+    "title": "Audit Log",
+    "description": "Audit Log shows a trail of changes or postings. Use it for compliance and to trace who did what and when.",
+    "sections": [
+      {
+        "title": "Audit Trail"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/bank-recon",
+    "title": "Bank Reconciliation",
+    "description": "Import bank statement CSV, review pay in / pay out lines, and match to bills or receivables",
+    "sections": [
+      {
+        "title": "Allocation authorization",
+        "description": "Suggest \u2192 approve \u2192 post \u2192 close. Each step requires a different authorized user; GAIA can only suggest. Review source documents and amounts before taking the next action."
+      },
+      {
+        "title": "Control-account reconciliation",
+        "description": "AR/AP subledger outstanding compared with GL control accounts."
+      },
+      {
+        "title": "Reconciliation session"
+      },
+      {
+        "title": "Bank statement lines",
+        "description": "Imported CSV lines with pay in (credit/receipt) and pay out (debit/payment) columns."
+      },
+      {
+        "title": "Match to bill or receivable"
+      },
+      {
+        "title": "System payments",
+        "description": "Match statement lines to existing posted payments ( unmatched)."
+      },
+      {
+        "title": "Recent reconciliations"
+      },
+      {
+        "title": "Adjustments",
+        "description": "Create a journal entry for bank charges, FX differences, or other unreconciled items."
+      }
+    ],
+    "fields": [
+      "Bank account",
+      "Counterparty",
+      "Allocate to open",
+      "Linked bills"
+    ],
+    "hints": [
+      "bank-close",
+      "bank-match-workspace"
+    ]
+  },
+  {
+    "route": "/finance/budgets",
+    "title": "Budgets",
+    "description": "Create, submit, approve, and review budget variance.",
+    "sections": [
+      {
+        "title": "Budgets"
+      },
+      {
+        "title": "Budget variance -"
+      }
+    ],
+    "fields": [
+      "Name",
+      "Fiscal Year",
+      "Currency",
+      "Cost center",
+      "Branch ID",
+      "Lines CSV (`accountCode,period,amount,actualAmount?` per line)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/chart-of-accounts",
+    "title": "Chart of Accounts",
+    "description": "Manage your live ledger account structure",
+    "sections": [
+      {
+        "title": "Accounts"
+      }
+    ],
+    "fields": [
+      "Name",
+      "Type",
+      "Parent account",
+      "Currency",
+      "Posting account",
+      "Description"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/commission-topup",
+    "title": "Commission / Top-up",
+    "description": "Finance control center for franchise top-up exposure and payout readiness.",
+    "sections": [
+      {
+        "title": "Top-up records"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/coolcatch-bs-inventory",
+    "title": "CoolCatch BS inventory",
+    "description": "Four live balance sheet inventory lines (In Processing, Warehouse, In Transit, Franchise).",
+    "sections": [
+      {
+        "title": "Snapshot"
+      },
+      {
+        "title": "Recent BS movements",
+        "description": "Trigger events moving inventory between lines."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/coolcatch-etims",
+    "title": "CoolCatch eTIMS",
+    "description": "Issue fiscal receipts and retry failed KRA transmissions.",
+    "sections": [
+      {
+        "title": "Issue receipt",
+        "description": "Franchise POS and institutional invoices. Production requires   and   on the API (stub when unset)."
+      },
+      {
+        "title": "Retry queue",
+        "description": "Process queued receipts after KRA API timeouts."
+      }
+    ],
+    "fields": [
+      "Source type",
+      "Receipt type"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/coolcatch-month-end",
+    "title": "CoolCatch month-end",
+    "description": "Consolidate stock take variances, commission, and net settlement per franchise.",
+    "sections": [
+      {
+        "title": "Generate reconciliation",
+        "description": "Variances are held until finance approves and posts in one batch journal."
+      }
+    ],
+    "fields": [
+      "Period (YYYY-MM)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/cutoff",
+    "title": "Cutoff drafts",
+    "description": "A second finance user signs a balanced opening draft. Posting the draft stays refused.",
+    "sections": [
+      {
+        "title": "Opening draft",
+        "description": "Search the chart for the debit and credit accounts. Saving keeps a draft. It does not post a journal."
+      },
+      {
+        "title": "Asset opening",
+        "description": "Pick an asset from the register, or add one. Cost and accumulated depreciation start from that asset and stay on a draft. Posting stays refused."
+      }
+    ],
+    "fields": [
+      "Cutoff date",
+      "Amount",
+      "Debit account",
+      "Credit account",
+      "Draft for the second signer",
+      "Asset",
+      "Cost",
+      "Accumulated depreciation",
+      "Asset draft"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/employee-expenses",
+    "title": "Employee Expenses",
+    "description": "Post HR-approved employee claims and record their confirmed accounting settlements.",
+    "sections": [
+      {
+        "title": "\u00b7"
+      }
+    ],
+    "fields": [
+      "Confirmed payment reference",
+      "Accounting date"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/fiscal-recovery",
+    "title": "Fiscal Recovery",
+    "description": "Recover uncertain fiscal signing attempts without issuing duplicate credits or invoices.",
+    "sections": [
+      {
+        "title": "A clear path from uncertainty to resolution"
+      }
+    ],
+    "fields": [
+      "Find a document or provider",
+      "Verified outcome",
+      "Original provider receipt number",
+      "Verified current eTIMS invoice counter",
+      "Evidence reference",
+      "Review reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/fixed-assets",
+    "title": "Fixed assets workspace",
+    "description": "Review asset cost, depreciation runs and lifecycle actions from finance.",
+    "sections": [
+      {
+        "title": "Asset Count"
+      },
+      {
+        "title": "Active Assets"
+      },
+      {
+        "title": "Total Cost"
+      },
+      {
+        "title": "Depreciation Runs"
+      },
+      {
+        "title": "Lifecycle Actions"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/fx-revaluations",
+    "title": "FX valuations",
+    "description": "Review foreign obligation closing values and exact journal reversals.",
+    "sections": [
+      {
+        "title": "From historical balance to a reviewed closing value"
+      },
+      {
+        "title": "Foreign obligations"
+      }
+    ],
+    "fields": [
+      "Closing rate \u00b7 base currency per",
+      "Closing rate source",
+      "Evidence reference",
+      "Preparation / review reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/gl",
+    "title": "General Ledger",
+    "description": "General Ledger is the central ledger. View balances and transactions by account; drill to source documents.",
+    "sections": [
+      {
+        "title": "Ledger Entries"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/input-vat",
+    "title": "Input Vat",
+    "description": "Review supplier VAT using finance-approved evidence and trace stock VAT into inventory, production and consumed costs.",
+    "sections": [
+      {
+        "title": "Supplier bills and corrections"
+      },
+      {
+        "title": "\u00b7"
+      },
+      {
+        "title": "Choose when the correction reaches the ledger"
+      },
+      {
+        "title": "Recoverable VAT by source line"
+      }
+    ],
+    "fields": [
+      "\u00b7 source VAT",
+      "Evidence reference",
+      "Preparation / review reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/journal-events",
+    "title": "Journal Events",
+    "description": "Preview conditional journal entries generated from operational events.",
+    "sections": [
+      {
+        "title": "Conditional journal preview"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/journals",
+    "title": "Journal Entries",
+    "description": "Create and manage journal entries",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/kra-signing",
+    "title": "KRA signing monitor",
+    "description": "Track invoices, credit notes, and debit notes sent to KRA \u2014 Incotex for existing clients, eTIMS OSCU for tenants who connected directly.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/ledger",
+    "title": "General Ledger",
+    "description": "View all accounting entries",
+    "sections": [
+      {
+        "title": "Filters"
+      },
+      {
+        "title": "Journal Entries"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/legacy-fx",
+    "title": "Legacy Fx",
+    "description": "Reconcile legacy FX applications from original posted base-currency control evidence.",
+    "sections": [
+      {
+        "title": "Ledger-backed reconciliation"
+      },
+      {
+        "title": "A clear path from legacy balances to settlement"
+      },
+      {
+        "title": "Foreign-currency obligations"
+      }
+    ],
+    "fields": [
+      "Adjustment posting date",
+      "Evidence reference",
+      "Preparation / review reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/mpesa-recon",
+    "title": "M-Pesa Till Reconciliation",
+    "description": "Match unmatched till / C2B payments to sales documents for Cool Catch HQ.",
+    "sections": [
+      {
+        "title": "Cool Catch HQ till queue",
+        "description": "Unmatched C2B/STK callbacks for org   . Match each payment to the correct sales order or invoice."
+      }
+    ],
+    "fields": [
+      "Invoice or sales order"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/notes",
+    "title": "Credit and debit notes",
+    "description": "Review financial corrections and their linked stock effects.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance",
+    "title": "Finance Dashboard",
+    "description": "Finance Dashboard shows key financial KPIs and links to GL, AR, AP, and reports. Use it as the starting point for finance tasks.",
+    "sections": [
+      {
+        "title": "Cash Balance"
+      },
+      {
+        "title": "AR Outstanding"
+      },
+      {
+        "title": "AP Outstanding"
+      },
+      {
+        "title": "Net Revenue (MTD)"
+      },
+      {
+        "title": "Overdue Receivables"
+      },
+      {
+        "title": "Upcoming Payables"
+      },
+      {
+        "title": "Recent Journal Entries"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/payments",
+    "title": "Payments & Receipts",
+    "description": "Payments & Receipts lists all payments and receipts. Use it to see cash movements and link to bank or ledger.",
+    "sections": [
+      {
+        "title": "Receipts"
+      },
+      {
+        "title": "Supplier payments"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/period-close",
+    "title": "Reconcile operations and close a period",
+    "description": "Close a period only after operations, subledgers and financial statements reconcile.",
+    "sections": [
+      {
+        "title": "Pre-Close Checklist"
+      },
+      {
+        "title": "Invoice COGS Recovery"
+      },
+      {
+        "title": "Close Actions"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "period-close-checklist",
+      "period-close-action"
+    ]
+  },
+  {
+    "route": "/finance/period-governance",
+    "title": "Period Governance",
+    "description": "Review controlled requests to reopen periods or waive specific close findings.",
+    "sections": [
+      {
+        "title": "Keep closed periods under control"
+      },
+      {
+        "title": "Prepare a period review"
+      }
+    ],
+    "fields": [
+      "Action",
+      "Accounting period",
+      "Current administrative warning",
+      "Reason",
+      "Evidence reference"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/procurement-review",
+    "title": "Procurement Review",
+    "description": "Finance review of PO vs cash disbursement vs received weight.",
+    "sections": [
+      {
+        "title": "Three-way control",
+        "description": "Exception-focused finance review for cash-heavy sourcing."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/reporting-policy",
+    "title": "Reporting Policy",
+    "description": "Configure approved accounting classifications used by financial reports.",
+    "sections": [
+      {
+        "title": "Reports that follow your approved accounting policy"
+      },
+      {
+        "title": "1. Classify posting accounts"
+      },
+      {
+        "title": "2. Allocate complex cash journals when required"
+      }
+    ],
+    "fields": [
+      "\u00b7",
+      "Policy reason",
+      "Finance evidence reference"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/statements/balance-sheet",
+    "title": "Balance Sheet",
+    "description": "Balance Sheet shows assets, liabilities, and equity at a point in time. Run for period-end reporting.",
+    "sections": [
+      {
+        "title": "Balance Sheet"
+      }
+    ],
+    "fields": [
+      "Currency"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/statements/cash-flow",
+    "title": "Cash Flow",
+    "description": "Cash Flow Statement shows cash movements from operating, investing, and financing activities. Run for liquidity analysis.",
+    "sections": [
+      {
+        "title": "Cash Flow Statement"
+      }
+    ],
+    "fields": [
+      "Currency"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/statements",
+    "title": "Financial Statements",
+    "description": "Financial Statements includes P&L, Balance Sheet, and Cash Flow. Run statements for a period and compare to budget if configured.",
+    "sections": [
+      {
+        "title": "Profit & Loss"
+      },
+      {
+        "title": "Balance Sheet"
+      },
+      {
+        "title": "Cash Flow"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/statements/pnl",
+    "title": "P&L",
+    "description": "Profit & Loss (P&L) shows revenue, cost, and profit for a period. Run for management reporting and variance analysis.",
+    "sections": [
+      {
+        "title": "Profit & Loss"
+      }
+    ],
+    "fields": [
+      "Currency"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/tax",
+    "title": "Tax / VAT",
+    "description": "Tax definitions, effective dates and financial evidence",
+    "sections": [],
+    "fields": [
+      "Code",
+      "Name",
+      "Type",
+      "Rate (%)",
+      "Effective from",
+      "Effective to"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/finance/trial-balance",
+    "title": "Trial Balance",
+    "description": "Review debit and credit balances for a defined accounting scope and period.",
+    "sections": [],
+    "fields": [],
+    "hints": [
+      "trial-balance"
+    ]
+  },
+  {
+    "route": "/franchise/[id]",
+    "title": "[id]",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/franchise/outlets/${id}${qs}",
+    "hints": []
+  },
+  {
+    "route": "/franchise/chase-list",
+    "title": "Franchise chase lists",
+    "description": "NFC/BD leads routed to outlet chase lists for franchise follow-up.",
+    "sections": [
+      {
+        "title": "HQ view (NFC source)"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/franchise/commission",
+    "title": "Commission & Rebates",
+    "description": "Franchise outlet earnings (per-product economics + HQ rules), margin guarantee top-ups, and WHT deductions",
+    "sections": [
+      {
+        "title": "Commission runs",
+        "description": "Weekly (or period) runs; post to create payout journal."
+      },
+      {
+        "title": "Commission rules"
+      },
+      {
+        "title": "Top-ups (margin guarantee)"
+      },
+      {
+        "title": "Commission summary (Cool Catch)",
+        "description": "Per-franchisee sales, commission, top-ups and total payout over a period."
+      }
+    ],
+    "fields": [
+      "Period start",
+      "Period end",
+      "From",
+      "To",
+      "Status"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/franchise/commission/runs/[id]",
+    "title": "Commission run record",
+    "description": "Review the period, outlet lines and state of a franchise commission run.",
+    "sections": [
+      {
+        "title": "Header"
+      },
+      {
+        "title": "Lines"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/franchise/comparison",
+    "title": "Franchise Performance Hub",
+    "description": "Track outlet sales, WhatsApp order mix, stock position, and growth across the network.",
+    "sections": [
+      {
+        "title": "Filters"
+      },
+      {
+        "title": "Order intake (not yet invoiced)",
+        "description": "Sales orders in period \u2014 includes WhatsApp demand before posting."
+      },
+      {
+        "title": "Channel breakdown"
+      },
+      {
+        "title": "Daily sales trend",
+        "description": "Posted revenue by \u2014 WhatsApp vs normal."
+      },
+      {
+        "title": "Outlets by channel performance"
+      },
+      {
+        "title": "Stock by outlet"
+      },
+      {
+        "title": "Stock by product",
+        "description": "Name, size, or barcode. A number is the pack size."
+      },
+      {
+        "title": "Outlet comparison"
+      }
+    ],
+    "fields": [
+      "Period",
+      "From",
+      "To",
+      "Outlet",
+      "Trend granularity"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/franchise/customers",
+    "title": "Network Customers",
+    "description": "Cross-franchise customer intelligence \u2014 view buying patterns and identity across all outlets",
+    "sections": [
+      {
+        "title": "Outlet Accounts"
+      },
+      {
+        "title": "Top Products"
+      },
+      {
+        "title": "Recent Orders"
+      },
+      {
+        "title": "All Network Customers"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/franchise/network/outlets",
+    "title": "Outlets",
+    "description": "Add franchisees (outlets) and give them login access. New outlets also get an HQ customer party and franchisee registry row for royalty and commission. Use Repair if older outlets pre-date that automation.",
+    "sections": [
+      {
+        "title": "Franchisees (outlets)",
+        "description": "  Each franchisee gets their own org and admin user on creation, plus HQ billing linkage."
+      }
+    ],
+    "fields": [
+      "Outlet / franchisee name",
+      "Outlet code",
+      "Admin email (for login)",
+      "Temporary password",
+      "Territory (optional)",
+      "Manager name (optional)",
+      "Manager phone (optional)",
+      "Weekly sales target (KES)",
+      "Weekly weight target (kg)",
+      "Territory",
+      "Store format",
+      "Manager name"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/franchise/network/overview",
+    "title": "Franchise",
+    "description": "Command centre: monitor all outlets, assign price lists, and track network performance.",
+    "sections": [
+      {
+        "title": "Outlets"
+      },
+      {
+        "title": "Branches"
+      },
+      {
+        "title": "Shortcuts"
+      }
+    ],
+    "fields": [
+      "Price list",
+      "Name",
+      "Code (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/franchise/network",
+    "title": "network",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/franchise/network/outlets",
+    "hints": []
+  },
+  {
+    "route": "/franchise/outlet",
+    "title": "My Outlet",
+    "description": "Everything you need to sell, order, and manage your stock \u2014 in one place.",
+    "sections": [
+      {
+        "title": "Quick actions"
+      },
+      {
+        "title": "Pending deliveries from HQ"
+      },
+      {
+        "title": "Recent Invoices"
+      },
+      {
+        "title": "Low Stock Watchlist"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/franchise/outlets/[id]",
+    "title": "Franchise outlet record",
+    "description": "Review an outlet's operational profile, location and product performance.",
+    "sections": [
+      {
+        "title": "Top products (30d)",
+        "description": "Best-selling products at this outlet by revenue"
+      },
+      {
+        "title": "GPS coordinates",
+        "description": "Used for nearest-outlet routing in WhatsApp commerce. When a retail customer shares their location, the system finds the closest outlet with valid coordinates."
+      }
+    ],
+    "fields": [
+      "Adjustment mode",
+      "Reason (required)",
+      "Latitude",
+      "Longitude"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/franchise/outlets",
+    "title": "outlets",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/franchise/network/outlets",
+    "hints": []
+  },
+  {
+    "route": "/franchise/overview",
+    "title": "overview",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/franchise/network/overview",
+    "hints": []
+  },
+  {
+    "route": "/franchise/royalties",
+    "title": "Royalty billing",
+    "description": "Monthly franchise royalty invoicing (typically KSH 15,000) and netting against commission runs.",
+    "sections": [
+      {
+        "title": "Manual month-end invoicing",
+        "description": "Creates royalty charges and POSTED invoices for each active franchise for the chosen calendar month. Defaults to the&nbsp; ."
+      },
+      {
+        "title": "Outlet royalty amount",
+        "description": "Override KES per outlet; leave empty in API to inherit org default (15,000)."
+      },
+      {
+        "title": "Charges",
+        "description": "Historical royalty assessments and withholding progress."
+      },
+      {
+        "title": "Franchisee registry (royalty overrides)"
+      }
+    ],
+    "fields": [
+      "Franchisee",
+      "Monthly royalty (KES)",
+      "Customer (invoice party)",
+      "Franchisee code",
+      "Display name",
+      "Outlet org id (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/franchise/vmi",
+    "title": "VMI & Replenishment",
+    "description": "Franchisee stock visibility and auto-replenishment from Cold Hub",
+    "sections": [
+      {
+        "title": "Reorder suggestions"
+      },
+      {
+        "title": "Replenishment orders",
+        "description": "Transfer orders from Cold Hub to franchisee."
+      },
+      {
+        "title": "Stock by franchisee",
+        "description": "VMI snapshots (webhook ingest or &quot;Sync snapshots from outlets&quot;). Not the same as posted Sell on-hand unless you sync."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inbox",
+    "title": "Work inbox",
+    "description": "Prioritise pending approvals, operational alerts and assigned tasks.",
+    "sections": [
+      {
+        "title": "Pending approvals"
+      },
+      {
+        "title": "Alerts"
+      },
+      {
+        "title": "Tasks"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/intercompany/overview",
+    "title": "Intercompany",
+    "description": "Multi-entity, IC transactions, consolidation",
+    "sections": [
+      {
+        "title": "Entities"
+      },
+      {
+        "title": "IC transactions"
+      },
+      {
+        "title": "Financial consolidation"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/intercompany/transactions",
+    "title": "IC Transactions",
+    "description": "Intercompany invoices and bills backed by the finance ledger.",
+    "sections": [
+      {
+        "title": "Transactions"
+      },
+      {
+        "title": "Tracking totals by currency",
+        "description": "Includes draft and legacy tracking records. These totals are not posted GL balances or consolidated accounts."
+      }
+    ],
+    "fields": [
+      "From entity",
+      "To entity",
+      "Amount",
+      "Currency",
+      "Date",
+      "Reference"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/inventory/costing",
+    "title": "Inventory costing",
+    "description": "Apply additional costs and run inventory valuation",
+    "sections": [
+      {
+        "title": "Step 1: Currency conversion"
+      },
+      {
+        "title": "Step 2: Additional costs"
+      },
+      {
+        "title": "Step 3: Processing &amp; packing costs"
+      },
+      {
+        "title": "Step 4: Summary &amp; confirm"
+      },
+      {
+        "title": "Stock valuation summary"
+      },
+      {
+        "title": "Additional costs allocation",
+        "description": "Select a GRN or Bill and use the guided wizard to allocate currency conversion, additional costs, and inbound logistics. Costs are distributed by weight and posted to GL automatically."
+      },
+      {
+        "title": "Costing activity",
+        "description": "Recent other cost allocations and costing runs."
+      }
+    ],
+    "fields": [
+      "Cost lines",
+      "Cost type",
+      "Amount",
+      "Currency",
+      "Reference / number  ",
+      "Evidence  ",
+      "Processing type",
+      "Cost lines \u2014 edit to override",
+      "Amount (KES)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/inventory/movements",
+    "title": "Stock Movements",
+    "description": "Track inventory movements and transactions",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/products",
+    "title": "Products",
+    "description": "Manage your product catalog",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/quality",
+    "title": "Quality, Loss & Recall",
+    "description": "Contain lots, trace recalls to deliveries, post approved losses, and require CAPA before close.",
+    "sections": [
+      {
+        "title": "Open a case"
+      },
+      {
+        "title": "Cases"
+      }
+    ],
+    "fields": [
+      "Type",
+      "Lot",
+      "Affected quantity",
+      "Reason / evidence"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/inventory/receipts/[id]",
+    "title": "Inventory receipt record",
+    "description": "Inspect a receipt's supplier, stock lines, tax and posting history.",
+    "sections": [
+      {
+        "title": "Receipt Summary"
+      },
+      {
+        "title": "Receipt Lines",
+        "description": "Received quantity and financial value per line."
+      },
+      {
+        "title": "Tax"
+      },
+      {
+        "title": "Activity & Audit"
+      }
+    ],
+    "fields": [
+      "Date",
+      "Reference",
+      "Warehouse ID",
+      "Notes"
+    ],
+    "hints": [
+      "grn-lot-qc-measurement",
+      "grn-confirm-processing"
+    ]
+  },
+  {
+    "route": "/inventory/receipts",
+    "title": "Goods Receipt (GRN)",
+    "description": "Receive against a purchase order, post the receipt, then put the goods away.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/receiving",
+    "title": "Receiving Queue",
+    "description": "Queue of inbound lines awaiting weigh-in or variance resolution.",
+    "sections": [
+      {
+        "title": "Inbound receiving queue"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/replenishment-policy",
+    "title": "Replenishment Policy",
+    "description": "Set replenishment parameters by product and store.",
+    "sections": [
+      {
+        "title": "Replenish where the stock is needed"
+      },
+      {
+        "title": "Approved store policies \u00b7"
+      },
+      {
+        "title": "Prepare a store policy"
+      }
+    ],
+    "fields": [
+      "Item",
+      "Store",
+      "Preferred supplier \u00b7 optional",
+      "Reason",
+      "Usage and supplier evidence"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/inventory/stock",
+    "title": "Stock workspace",
+    "description": "Review stock at the current product and warehouse scope.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/stock-explorer",
+    "title": "Stock Explorer",
+    "description": "Global stock view by SKU, location, ownership, reserved status, and age.",
+    "sections": [
+      {
+        "title": "Global stock explorer",
+        "description": "Server-filtered inventory by SKU and warehouse. Search uses the product catalog index; quantity, age, and status filters run on the API."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/stock-levels/[id]",
+    "title": "Stock location record",
+    "description": "Inspect a product's stock at one location and compare other locations.",
+    "sections": [
+      {
+        "title": "Stock at this location"
+      },
+      {
+        "title": "Same SKU at other locations",
+        "description": "Stock for in other warehouses."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/stock-levels",
+    "title": "Stock Levels",
+    "description": "Stock Levels is the operational truth table: quantity per product and warehouse (and sometimes location). It is the first screen to open when someone says \u201cwe\u2019re out of stock\u201d or \u201cwe have too much.\u201d Pair it with movements when you need to explain why the number changed.",
+    "sections": [],
+    "fields": [
+      "Adjustment type",
+      "Adjustment quantity",
+      "Reason (optional)",
+      "Product",
+      "Warehouse",
+      "Quantity",
+      "Reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/inventory/valuation",
+    "title": "Inventory Valuation",
+    "description": "Latest costing snapshot per SKU and warehouse\\u2014run costing to refresh; GL tie-out is done with finance outside this screen.",
+    "sections": [
+      {
+        "title": "Valuation layers"
+      },
+      {
+        "title": "Franchise network \\u2014 stock at outlets"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/inventory/warehouses",
+    "title": "Warehouses & Locations",
+    "description": "Warehouses & Locations under Inventory emphasises structure: which sites exist, how locations/bins nest, and how stock rolls up. It complements Masters \u2192 Warehouses with an operations lens (capacity, pick paths).",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/boms/[id]",
+    "title": "BOM record",
+    "description": "Review output, components and routing for the selected BOM revision.",
+    "sections": [
+      {
+        "title": "Components"
+      },
+      {
+        "title": "Routing link",
+        "description": "Assign the routing used by production work orders. Changes save immediately."
+      }
+    ],
+    "fields": [
+      "Yield tolerance %",
+      "Production routing"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/boms/new",
+    "title": "New BOM",
+    "description": "Define a BOM's product and batch output, then add components on its record.",
+    "sections": [
+      {
+        "title": "Define your batch",
+        "description": "Start with the output. You will add ingredient or component lines on the next screen."
+      }
+    ],
+    "fields": [
+      "Code preview",
+      "Recipe name",
+      "Finished product",
+      "Batch output",
+      "Output unit",
+      "Production method",
+      "Output warehouse"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/boms",
+    "title": "Bills of Material (BOM)",
+    "description": "Recipes define what goes into a batch and how much it makes. Link a routing to describe the production steps.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/byproducts",
+    "title": "Byproducts",
+    "description": "Track byproduct stock, valuation, reservation, and destination channel.",
+    "sections": [
+      {
+        "title": "Byproduct inventory"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/capacity",
+    "title": "Capacity",
+    "description": "Reserve finite production capacity against configured resources.",
+    "sections": [
+      {
+        "title": "Give every operation a place in the day"
+      },
+      {
+        "title": "Reserved production time"
+      },
+      {
+        "title": "1. Prepare a schedule"
+      },
+      {
+        "title": "Release a schedule"
+      }
+    ],
+    "fields": [
+      "Start no earlier than",
+      ".",
+      "Work order",
+      "Reason",
+      "Resource",
+      "Resource name",
+      "Routing work centre key",
+      "Branch"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/mrp",
+    "title": "MRP",
+    "description": "What to make and what to buy so open orders can be packed.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/production-plan",
+    "title": "Production Plan",
+    "description": "Turn finished-output targets into formula totals, material requirements and draft production batches. Calculation and printing do not post stock.",
+    "sections": [
+      {
+        "title": "From today\u2019s plan to verified stock"
+      },
+      {
+        "title": "Total formula & material requirements"
+      },
+      {
+        "title": "Full formula \u00b7 before using intermediate stock"
+      },
+      {
+        "title": "Purchased materials for new batches \u00b7 includes materials already on hand"
+      },
+      {
+        "title": "Make in production"
+      },
+      {
+        "title": "Buy from suppliers"
+      },
+      {
+        "title": "Pack today"
+      },
+      {
+        "title": "Recipe tree"
+      }
+    ],
+    "fields": [
+      "Verification for new batches"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/quality",
+    "title": "Production quality release",
+    "description": "Review finished batches before they become available for allocation.",
+    "sections": [],
+    "fields": [
+      "Decision",
+      "Expiry date",
+      "QC findings / reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/recipe-governance",
+    "title": "Recipe Governance",
+    "description": "Review recipe revisions and release an approved production formula.",
+    "sections": [
+      {
+        "title": "A clear path from recipe change to production"
+      },
+      {
+        "title": "Recipe revisions"
+      },
+      {
+        "title": "Submit a draft for release"
+      }
+    ],
+    "fields": [
+      "Draft recipe",
+      "Reason for revision",
+      "Approved formula or trial evidence"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/routing",
+    "title": "Routing",
+    "description": "Routings describe how a batch is made: mixing, baking, cooling and packing. Ingredients and quantities belong in the BOM.",
+    "sections": [],
+    "fields": [
+      "Code",
+      "Name",
+      "Description",
+      "Operations",
+      "Sequence",
+      "Critical completion gate",
+      "Operation QC required",
+      "Work center",
+      "Setup min",
+      "Run min/unit"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/subcontracting/orders/[id]",
+    "title": "Subcontract order record",
+    "description": "Trace a subcontract order through inputs, outputs, transport and cost evidence.",
+    "sections": [
+      {
+        "title": "Outbound trip"
+      },
+      {
+        "title": "Lines (input / output)"
+      },
+      {
+        "title": "Batch cost chain"
+      },
+      {
+        "title": "Fee-to-COGS variance"
+      },
+      {
+        "title": "Yield batches"
+      },
+      {
+        "title": "Activity & audit"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/subcontracting/orders",
+    "title": "Subcontract orders",
+    "description": "Locate subcontract production orders and inspect processor, progress and material linkage.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/subcontracting",
+    "title": "Subcontracting / Job Work",
+    "description": "WIP at external work centers \u2014 factories and women's groups. Processing fees auto-post to GL on receive.",
+    "sections": [
+      {
+        "title": "Subcontract orders"
+      },
+      {
+        "title": "WIP at processors"
+      },
+      {
+        "title": "External work centers"
+      }
+    ],
+    "fields": [
+      "GRN *",
+      "Linked purchase order",
+      "Send quantity (kg) *",
+      "Work center *",
+      "Species",
+      "Process type *",
+      "Code",
+      "Name",
+      "Type",
+      "Address (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/trusted-devices",
+    "title": "Trusted Devices",
+    "description": "Manage trusted weighing devices and their production readings.",
+    "sections": [
+      {
+        "title": "From calibrated scale to accountable completion"
+      },
+      {
+        "title": "Device inventory"
+      },
+      {
+        "title": "Reading review queue"
+      }
+    ],
+    "fields": [
+      "Outcome",
+      "Review reason",
+      "Device name",
+      "Branch",
+      "Ed25519 public key (PEM)",
+      "Calibration evidence reference",
+      "Calibration valid until \u00b7 local time",
+      "Reading validity window (seconds)",
+      "Device",
+      "Revocation reason"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/work-orders/[id]",
+    "title": "Production work order",
+    "description": "Prepare and execute this production order using its saved recipe and measurement controls.",
+    "sections": [
+      {
+        "title": "Production steps"
+      },
+      {
+        "title": "Materials in the warehouse",
+        "description": "Completing issues real on-hand stock. Production Plan \u201cCovered\u201d can include other work orders that are not finished yet \u2014 those are not in the warehouse until you complete them first"
+      },
+      {
+        "title": "Production reconciliation",
+        "description": "Actual WIP, mass, count, and cost closure from posted partial completions."
+      }
+    ],
+    "fields": [
+      "Actual verified output ( )",
+      "Measured weight",
+      "Supervisor yield-variance approval reason (tolerance %)"
+    ],
+    "hints": [
+      "work-order-lifecycle",
+      "work-order-measurement",
+      "work-order-reconciliation"
+    ]
+  },
+  {
+    "route": "/manufacturing/work-orders",
+    "title": "Work Orders",
+    "description": "Open a work order to release, start, and complete it. Actions are not on the list so similar products are harder to mix up.",
+    "sections": [],
+    "fields": [
+      "GRN batch",
+      "Product",
+      "Formula / BOM",
+      "Routing",
+      "Quantity",
+      "Input stores",
+      "Output store",
+      "Production measurement",
+      "Due date"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/yield/[id]",
+    "title": "Yield record",
+    "description": "Inspect a production yield record's source batch, output lines and history.",
+    "sections": [
+      {
+        "title": "Yield Record Summary",
+        "description": "Transformation from raw input into sellable outputs and byproducts."
+      },
+      {
+        "title": "Output lines",
+        "description": "Primary, secondary, and waste by SKU."
+      },
+      {
+        "title": "Activity & Audit"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/manufacturing/yield",
+    "title": "Yield / Mass balance",
+    "description": "Record actual outputs per batch; compare to BOM-expected. Process loss = input \u2212 primary \u2212 secondary.",
+    "sections": [
+      {
+        "title": "Yield records"
+      },
+      {
+        "title": "Mass balance report"
+      }
+    ],
+    "fields": [
+      "From",
+      "To",
+      "Work order (batch)",
+      "Or: subcontract order (WIP)",
+      "Input weight (kg) *",
+      "Expected (kg)",
+      "Actual (kg)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/categories",
+    "title": "Categories",
+    "description": "Maintain product categories used to organise the catalogue and filter operational reports.",
+    "sections": [],
+    "fields": [
+      "Name",
+      "Code (optional)",
+      "Parent category"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/departments",
+    "title": "Departments",
+    "description": "Group product categories into departments for reporting and filters",
+    "sections": [],
+    "fields": [
+      "Name",
+      "Code (optional)",
+      "Categories"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master",
+    "title": "Masters",
+    "description": "Masters is the foundation layer: products (what you sell or buy), parties (who you sell to or buy from), and warehouses (where stock lives). Poor master data causes wrong prices, failed deliveries, and reconciliation pain\u2014so invest time here before scaling transaction volume.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/master/parties",
+    "title": "Parties",
+    "description": "Parties unify customers and suppliers in one record model: legal name, contacts, addresses, payment terms, credit limits, default currency, and tax IDs. The same party can sometimes act as both customer and supplier\u2014use roles carefully to avoid duplicate balances.",
+    "sections": [],
+    "fields": [
+      "Name",
+      "Email",
+      "Phone",
+      "Customer type",
+      "Customer category",
+      "Franchisee type",
+      "Payment terms",
+      "Credit control mode",
+      "Credit amount limit",
+      "Max outstanding invoice age (days)",
+      "Per-invoice days-to-pay cap",
+      "Warning threshold (%)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/products/[id]/attributes",
+    "title": "Product attributes",
+    "description": "Review attribute definitions and variants for the selected product.",
+    "sections": [
+      {
+        "title": "Attribute definitions",
+        "description": "Org-level. definition(s). Options (e.g. 1kg, 5kg) used when creating variants."
+      },
+      {
+        "title": "Variants using attributes",
+        "description": "Product has variant(s)."
+      }
+    ],
+    "fields": [
+      "Name",
+      "Kind",
+      "Options (comma-separated)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/products/[id]/packaging",
+    "title": "Product packaging",
+    "description": "Inspect unit conversions and packaging for this product.",
+    "sections": [
+      {
+        "title": "UOM conversions",
+        "description": "Base UOM: . Default sales/purchase, barcode, dimensions, weight."
+      }
+    ],
+    "fields": [
+      "Allow decimals for conversions",
+      "UOM",
+      "Units per (base: )",
+      "Barcode",
+      "Default sales UOM",
+      "Default purchase UOM",
+      "Dimensions (L \u00d7 W \u00d7 H)",
+      "Weight"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/products/[id]",
+    "title": "Product record",
+    "description": "Review a product's identity, classification, pricing and validations.",
+    "sections": [
+      {
+        "title": "Product details",
+        "description": "Identity, category, and base unit."
+      },
+      {
+        "title": "Classification",
+        "description": "Determines which flows this product appears in."
+      },
+      {
+        "title": "Pricing"
+      },
+      {
+        "title": "This product on price tags",
+        "description": "Piece price by tag. Edit prices in Pricing \u2192 Price tags."
+      },
+      {
+        "title": "Validations"
+      },
+      {
+        "title": "Compare price lists",
+        "description": "Effective per across all price lists."
+      },
+      {
+        "title": "Tiers \u2014",
+        "description": "Min / max qty, UOM, price. Effective per base unit."
+      },
+      {
+        "title": "Alternate Units &amp; Packs",
+        "description": "Base UOM plus chained Alternate UOMs for this SKU only. Conversions are never taken from customer POs or imports."
+      },
+      {
+        "title": "UOM conversions"
+      },
+      {
+        "title": "Option types",
+        "description": "Define the options available for variants (e.g. Size: 1kg, 5kg; Grade: A, B)."
+      },
+      {
+        "title": "Variants",
+        "description": "Each variant has a unique SKU. variant defined."
+      }
+    ],
+    "fields": [
+      "Notes",
+      "Material type",
+      "Product type",
+      "Default tax code",
+      "Gross weight (kg)",
+      "Gross volume (m\u00b3)",
+      "Price list",
+      "Allow decimals",
+      "Min qty",
+      "Max qty (optional)",
+      "UOM",
+      "Price ( )",
+      "Pack name",
+      "Pieces packed",
+      "Units per (base: )",
+      "Default purchase UOM",
+      "Dimensions L \u00d7 W \u00d7 H (optional)",
+      "Weight (optional)",
+      "SKU",
+      "Name (optional)",
+      "Size",
+      "Packaging type",
+      "Grade",
+      "Barcode (optional)",
+      "Status",
+      "Name",
+      "Kind",
+      "Options",
+      "Include option types",
+      "Combinations ( / selected)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/products/[id]/pricing",
+    "title": "Product pricing",
+    "description": "Review a product's prices, tiers and validation across price lists.",
+    "sections": [
+      {
+        "title": "Validations"
+      },
+      {
+        "title": "Compare price lists",
+        "description": "Effective per across enabled price lists."
+      },
+      {
+        "title": "Tiers \u2014",
+        "description": "Min/max qty, UOM, price. Effective per base unit."
+      }
+    ],
+    "fields": [
+      "Price list",
+      "Min qty",
+      "Max qty (optional)",
+      "UOM",
+      "Price ( )"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/products/[id]/variants",
+    "title": "Product variants",
+    "description": "Inspect variants associated with the selected base product.",
+    "sections": [
+      {
+        "title": "Variants",
+        "description": "Each variant has a unique SKU. Attributes: size, packaging type, grade."
+      }
+    ],
+    "fields": [
+      "SKU",
+      "Name (optional)",
+      "Size",
+      "Packaging type",
+      "Grade",
+      "Status"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/products",
+    "title": "Products",
+    "description": "Products are the SKU catalog: identifiers, units of measure, categories, and often pricing or variant relationships. Every order line, stock record, and cost roll-up references a product\u2014accuracy here prevents wrong shipments and margin leakage.",
+    "sections": [],
+    "fields": [
+      "Material type",
+      "Product name",
+      "Barcode  ",
+      "SKU",
+      "Size",
+      "Category (optional)",
+      "Base unit of measure",
+      "Packing (optional)",
+      "Pack name",
+      "Pieces",
+      "Product code",
+      "Barcode",
+      "Product type",
+      "Product family (optional)",
+      "Default tax code (optional)",
+      "Name",
+      "Code (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/master/warehouses",
+    "title": "Warehouses",
+    "description": "Know where stock belongs, which stores can supply demand and which need review.",
+    "sections": [],
+    "fields": [
+      "Code",
+      "Name",
+      "Purpose",
+      "Capabilities",
+      "Branch"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/onboarding",
+    "title": "Organisation setup",
+    "description": "Complete the ERP setup checklist in dependency order.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/operations/dispatch-alerts",
+    "title": "Dispatch alerts",
+    "description": "Dispatches unacknowledged by franchise intake beyond the threshold.",
+    "sections": [
+      {
+        "title": "Unacknowledged deliveries",
+        "description": "Showing dispatches older than hours without franchise intake step 1."
+      }
+    ],
+    "fields": [
+      "Threshold (hours)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/operations/supply-chain",
+    "title": "Supply chain journey",
+    "description": "From sourcing through processing and logistics to franchise outlets \u2014 quick links and live counts.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/payroll/employees/[id]",
+    "title": "Employee record",
+    "description": "Review an employee's employment, statutory and payout readiness.",
+    "sections": [
+      {
+        "title": "Employment profile",
+        "description": "Branch, role, and payroll basis for this employee."
+      },
+      {
+        "title": "Statutory context",
+        "description": "Global statutory definitions currently active in payroll settings."
+      },
+      {
+        "title": "Bank and payout readiness",
+        "description": "Employee bank and beneficiary fields are managed through payroll employee updates."
+      }
+    ],
+    "fields": [
+      "Pay basis",
+      "Agreed rate per completed unit"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/employees",
+    "title": "Employees",
+    "description": "Personal, job, compensation, and statutory setup for Kenya & Uganda payroll. Monthly gross is the contract amount; pay runs prorate pay when someone joins or leaves mid-month.",
+    "sections": [
+      {
+        "title": "Employees"
+      }
+    ],
+    "fields": [
+      "First name *",
+      "Last name",
+      "Department",
+      "Job title",
+      "Branch",
+      "Pay basis",
+      "Agreed rate per completed unit",
+      "Employment type",
+      "Tax jurisdiction",
+      "Residency status (WHT rate)",
+      "NSSF number",
+      "SHIF number",
+      ")",
+      "Daily / consulting rate ( )",
+      "Hourly cost override ( ) \u2014 optional"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/leave/balances",
+    "title": "Leave balances",
+    "description": "Review employees' available leave by policy and period.",
+    "sections": [
+      {
+        "title": "Leave balances \u2014"
+      }
+    ],
+    "fields": [
+      "Year",
+      "Filter by employee"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/leave/calendar",
+    "title": "Leave calendar",
+    "description": "Review approved leave and staffing impact for the selected month.",
+    "sections": [
+      {
+        "title": "approved leave(s) in",
+        "description": "Only approved leaves are shown."
+      },
+      {
+        "title": "All leaves this month"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/payroll/leave",
+    "title": "Leave",
+    "description": "Policies, balances, and requests. Unpaid leave approved here feeds pay-run calculations when auto-unpaid is enabled.",
+    "sections": [
+      {
+        "title": "New request",
+        "description": "Submit for approval. Paid leave does not reduce gross pay; unpaid does in payroll."
+      },
+      {
+        "title": "All requests ( )",
+        "description": "Approve or reject pending requests (requires finance.approve)."
+      },
+      {
+        "title": "Initialize balance",
+        "description": "Creates the per-year balance row if missing (annual days entitled, min 21)."
+      },
+      {
+        "title": "Balances"
+      },
+      {
+        "title": "Create policy",
+        "description": "Kenya defaults: 21 annual, 14 sick, 90 maternity, 14 paternity."
+      },
+      {
+        "title": "Existing policies"
+      }
+    ],
+    "fields": [
+      "Employee",
+      "Type",
+      "Extra label",
+      "Start",
+      "End",
+      "Notes",
+      "Year",
+      "Annual days",
+      "Name",
+      "Country",
+      "Annual days (min 21)",
+      "Sick",
+      "Maternity",
+      "Paternity"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/leave/policies",
+    "title": "Leave policies",
+    "description": "Configure leave entitlement and approval policy using approved HR rules.",
+    "sections": [],
+    "fields": [
+      "Policy name",
+      "Jurisdiction",
+      "Annual leave (days)",
+      "Sick leave (days)",
+      "Maternity leave (days)",
+      "Paternity leave (days)",
+      "Label",
+      "Days",
+      "Paid"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/leave/requests",
+    "title": "Leave requests",
+    "description": "Review employee leave requests and their approval state.",
+    "sections": [
+      {
+        "title": "Requests"
+      }
+    ],
+    "fields": [
+      "Employee",
+      "Leave type",
+      "Extra leave type",
+      "Start date",
+      "End date",
+      "Notes (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/overview",
+    "title": "Payroll",
+    "description": "Kenya & Uganda payroll \u2014 employees, auto-tax calculations, pay runs, leave management.",
+    "sections": [
+      {
+        "title": "Employees"
+      },
+      {
+        "title": "Pay runs"
+      },
+      {
+        "title": "Total gross"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/payroll/p9",
+    "title": "P9 Tax Deduction Cards",
+    "description": "Annual employee PAYE cards for Kenya full-time employees. Auto-generated when a pay run is posted.",
+    "sections": [
+      {
+        "title": "P9 Cards \u2014"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/payroll/pay-runs/[id]",
+    "title": "Payroll run record",
+    "description": "Inspect a pay run's period, employee lines and payroll totals.",
+    "sections": [
+      {
+        "title": "Summary",
+        "description": "Gross \u2192 statutory \u2192 net."
+      },
+      {
+        "title": "Lines",
+        "description": "Open a line to view details (E2E: open pay run line)."
+      }
+    ],
+    "fields": [
+      "HR signature"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/pay-runs",
+    "title": "Pay runs",
+    "description": "Create a pay run with auto-calculated Kenya & Uganda statutory deductions. Gross pay is the amount for that calendar month, prorated when someone joins or leaves mid-month (Employees shows full monthly contract).",
+    "sections": [
+      {
+        "title": "Pay runs"
+      }
+    ],
+    "fields": [
+      "Month",
+      "Branch",
+      "Department",
+      "Payroll team",
+      "\u2014 completed output \u00d7 per unit",
+      "Manual deductions"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/payroll/payslips",
+    "title": "Payslips",
+    "description": "Preview and export payslips.",
+    "sections": [
+      {
+        "title": "Payslips"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/payroll/statutories",
+    "title": "Statutory rates",
+    "description": "Current statutory deduction reference \u2014 Kenya and Uganda (2025/2026 fiscal year).",
+    "sections": [
+      {
+        "title": "Kenya \u2014 Statutory Deductions",
+        "description": "Rates effective 2025/2026. NHIF replaced by SHIF (Oct 2024). NSSF under 2023 Act."
+      },
+      {
+        "title": "Uganda \u2014 Statutory Deductions",
+        "description": "Rates effective 2025/2026 \u2014 Uganda Revenue Authority (URA)."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/pricing/daily-review",
+    "title": "daily review",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/pricing/workspace/approvals",
+    "hints": []
+  },
+  {
+    "route": "/pricing/overview",
+    "title": "overview",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/pricing/workspace/overview",
+    "hints": []
+  },
+  {
+    "route": "/pricing/price-lists/[id]",
+    "title": "Price list record",
+    "description": "Review prices and the supported pricing engine for this list.",
+    "sections": [
+      {
+        "title": "Smart pricing engine",
+        "description": "Suggested prices from batch cost + markup rules. Publishing updates today&apos;s daily price row."
+      },
+      {
+        "title": "\u00b7"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/pricing/price-lists",
+    "title": "Pricing",
+    "description": "Pricing in the Inventory reporting workspace.",
+    "sections": [],
+    "fields": [],
+    "redirect": "/pricing/workspace/lists",
+    "hints": []
+  },
+  {
+    "route": "/pricing/rules",
+    "title": "Pricing rules",
+    "description": "Discount policies, validity, approval linkage. Link to approvals below.",
+    "sections": [
+      {
+        "title": "Discount policies",
+        "description": "Volume, promo, channel. Optional approval before apply. Data from API when configured."
+      },
+      {
+        "title": "Customer default price list",
+        "description": "Assign default price list per customer. Configure below when API is set."
+      },
+      {
+        "title": "Supplier default cost list",
+        "description": "Assign default cost list per supplier for purchase orders. Price lists can be used as cost lists."
+      }
+    ],
+    "fields": [
+      "Name",
+      "Type",
+      "Requires approval before apply",
+      "Validity start (optional)",
+      "Validity end (optional)",
+      "Current assignments",
+      "Set default",
+      "Customer",
+      "Price list",
+      "Supplier",
+      "Cost list (price list)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/approvals",
+    "title": "Approvals",
+    "description": "Open items from the smart pricing-engine queue (needs attention before publish).",
+    "sections": [
+      {
+        "title": "Open approvals",
+        "description": "Resolve in each price list: generate suggestions, approve, publish."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/commissions",
+    "title": "Franchise commissions",
+    "description": "Set network-wide default commission per SKU. Zone defaults override org defaults; outlets can override further on their Pricing tab.",
+    "sections": [
+      {
+        "title": "Commission defaults",
+        "description": "Guide retail at each outlet = zone base price + effective commission (outlet override \u2192 zone default \u2192 network default)."
+      }
+    ],
+    "fields": [
+      "Pricing zone"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/lists",
+    "title": "Price lists",
+    "description": "Loading\u2026",
+    "sections": [],
+    "fields": [
+      "Name",
+      "Currency",
+      "Default tag when customer has none",
+      "Catalog label",
+      "Pricing channel (engine)",
+      "Pricing zone",
+      "Add-on type",
+      "Add-on value",
+      "Default price list"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/overview",
+    "title": "Pricing Overview",
+    "description": "Price lists, franchise zones, daily kg prices, and discount policies.",
+    "sections": [
+      {
+        "title": "How pricing works",
+        "description": "Named hold piece prices for your products. On a sales order or invoice you pick which tag to use \u2014 linking a tag to a customer is optional (it only sets their default)."
+      },
+      {
+        "title": "Sellable products"
+      },
+      {
+        "title": "Customers with a tag"
+      },
+      {
+        "title": "Cost basis \u2014 recent batches",
+        "description": "Set selling prices above the cost/kg below to ensure profitability. Margin shown at 30%."
+      },
+      {
+        "title": "Price lists",
+        "description": "Currency, channel, franchise zone linkage."
+      },
+      {
+        "title": "Products with pricing",
+        "description": "Products that have tiers on at least one price list."
+      },
+      {
+        "title": "Discount policies"
+      },
+      {
+        "title": "Prices today"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/packs",
+    "title": "Product pack configuration",
+    "description": "Review product units and packaging in the catalogue workspace.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace",
+    "title": "workspace",
+    "description": "",
+    "sections": [],
+    "fields": [],
+    "redirect": "/pricing/workspace/overview",
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/tax-tags",
+    "title": "Tax tags",
+    "description": "Named VAT configurations for invoicing \u2014 pick exclusive or inclusive pricing, same idea as price tags.",
+    "sections": [
+      {
+        "title": "Exclusive vs inclusive",
+        "description": "Inclusive does not mean \u201chas VAT\u201d. Both tags can use 16% Kenya VAT. Exclusive adds VAT on top of the unit price (100 \u2192 116). Inclusive means the selling price already includes VAT (116 \u2192 net 100, tax 16)."
+      }
+    ],
+    "fields": [
+      "Name",
+      "Code (optional)",
+      "Tax code (rate)",
+      "Prices are tax-inclusive",
+      "Org default"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/pricing/workspace/zones",
+    "title": "Franchise pricing zones",
+    "description": "Set prices once per zone on the master list \u2014 all outlets in the zone inherit. Override per outlet on the derived list if needed.",
+    "sections": [
+      {
+        "title": "Setup checklist",
+        "description": "Zone \u2192 master list \u2192 publish today&apos;s prices \u2192 assign outlets. WhatsApp and mobile Sell use the published shelf price."
+      },
+      {
+        "title": "Add pricing zone",
+        "description": "After creating a zone, link or create a FRANCHISE master list below, then set today&apos;s prices on that list."
+      },
+      {
+        "title": "Zones",
+        "description": "One FRANCHISE master list per zone. Outlets in the zone inherit prices from the master (with optional per-outlet overrides)."
+      }
+    ],
+    "fields": [
+      "Name",
+      "Tier",
+      "Description (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/projects/[id]",
+    "title": "Project record",
+    "description": "Review a project's budget, time and linked source costs.",
+    "sections": [
+      {
+        "title": "Budget"
+      },
+      {
+        "title": "Timesheet hours"
+      },
+      {
+        "title": "Linked source value"
+      },
+      {
+        "title": "Recorded labor estimate"
+      },
+      {
+        "title": "Planning estimate vs budget"
+      },
+      {
+        "title": "Details",
+        "description": "Cost center mapping, live metadata, and timesheet costing policy."
+      },
+      {
+        "title": "Costing links",
+        "description": "Timesheet and document links used for project cost tracking."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/projects/financials",
+    "title": "Financials",
+    "description": "Review project income, cost and budget evidence in the permitted scope.",
+    "sections": [
+      {
+        "title": "See what the project has actually earned and spent"
+      },
+      {
+        "title": "Report scope"
+      },
+      {
+        "title": "Review an assignment or budget revision"
+      }
+    ],
+    "fields": [
+      "Project",
+      "From",
+      "To",
+      "Ledger currency",
+      "Action",
+      "Source type",
+      "Posted source",
+      "\u00b7",
+      "Reason",
+      "Retained source or approved budget reference"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/projects/list",
+    "title": "Projects",
+    "description": "List, budget, cost center mapping",
+    "sections": [
+      {
+        "title": "Projects"
+      }
+    ],
+    "fields": [
+      "Code",
+      "Name",
+      "Client",
+      "Start date",
+      "End date",
+      "Budget",
+      "Timesheet costing mode",
+      "Default hourly rate (KES)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/projects/overview",
+    "title": "Projects & Cost Centers",
+    "description": "Projects, budget vs actual, timesheets",
+    "sections": [
+      {
+        "title": "Active projects"
+      },
+      {
+        "title": "Cost to date"
+      },
+      {
+        "title": "Timesheets"
+      },
+      {
+        "title": "Burn vs budget"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/cash-weight-audit/override/[id]",
+    "title": "Weight correction request",
+    "description": "Review a requested weight correction against its original measurement evidence.",
+    "sections": [
+      {
+        "title": "Weight comparison"
+      },
+      {
+        "title": "Decision"
+      }
+    ],
+    "fields": [
+      "Rejection note"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/cash-weight-audit",
+    "title": "Cash-to-Weight Audit",
+    "description": "Track every farm-gate procurement \u2014 compare what was paid vs what was received.",
+    "sections": [
+      {
+        "title": "Procurement Audits",
+        "description": "One row per purchase order. Click &ldquo;View audit&rdquo; to inspect weight details and resolve exceptions."
+      },
+      {
+        "title": "Cash disbursements"
+      },
+      {
+        "title": "Product lines \u2014 weight audit"
+      },
+      {
+        "title": "Exceptions"
+      }
+    ],
+    "fields": [
+      "Purchase order",
+      "Payment type",
+      "GRN",
+      "Amount paid",
+      "Currency",
+      "How paid",
+      "Date paid",
+      "Supplier invoice or receipt *",
+      "Paid weight (kg)  ",
+      "Paid weight per product (kg)",
+      "Paid weight (kg)",
+      "Received weight (kg)",
+      "Reason for correction"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/coolcatch-sourcing",
+    "title": "CoolCatch new batch",
+    "description": "Record sourcing Models 1\u20133; EMP/kg recalculates on save.",
+    "sections": [
+      {
+        "title": "Sourcing entry",
+        "description": "Model 3 apportions shared costs by KG contribution across SKU lines (workbook T2)."
+      }
+    ],
+    "fields": [
+      "Sourcing model",
+      "Supplier",
+      "Farm / landing",
+      "Input KG",
+      "Yield %",
+      "Sellable KG",
+      "Product price / kg (KES)",
+      "SKU outputs",
+      "Total sellable KG"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/coolcatch-sourcing-batches",
+    "title": "CoolCatch sourcing batches",
+    "description": "Audit trail of sourcing batches with EMP/kg at entry.",
+    "sections": [
+      {
+        "title": "Recent batches"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/exceptions",
+    "title": "Exceptions",
+    "description": "Resolve purchasing match exceptions using source evidence.",
+    "sections": [
+      {
+        "title": "A controlled path for supplier exceptions"
+      },
+      {
+        "title": "Prepare a request"
+      }
+    ],
+    "fields": [
+      "Action",
+      "Receipt",
+      "Correct supplier invoice number",
+      "Correct supplier CU number",
+      "Reason",
+      "Evidence reference"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/goods-receipt",
+    "title": "Goods receipts",
+    "description": "Find goods receipts and verify purchase linkage before receiving stock.",
+    "sections": [
+      {
+        "title": "Goods Receipt Notes"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/match-policy",
+    "title": "Match Policy",
+    "description": "Configure approved purchase matching tolerances.",
+    "sections": [
+      {
+        "title": "One policy from receipt to settlement"
+      },
+      {
+        "title": "Effective policy \u00b7 revision"
+      },
+      {
+        "title": "Revision awaits independent approval"
+      },
+      {
+        "title": "Prepare a policy revision"
+      }
+    ],
+    "fields": [
+      "Reason for this change"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/orders/[id]",
+    "title": "Purchase order record",
+    "description": "Trace a purchase order's requested quantities, receipts, bills and additional costs.",
+    "sections": [
+      {
+        "title": "Purchase Order Summary",
+        "description": "Cross-border procurement context for Kenya/Uganda sourcing."
+      },
+      {
+        "title": "Goods receipts (GRN)",
+        "description": "Receipts recorded against this purchase order."
+      },
+      {
+        "title": "Linked supplier bills",
+        "description": "Bills created from goods receipts on this PO. Match against supplier invoices."
+      },
+      {
+        "title": "Purchase vs received (lines)",
+        "description": "Ordered from the PO; received totals come from linked GRN lines."
+      },
+      {
+        "title": "Additional costs",
+        "description": "Loading allocation from GRN\u2026"
+      },
+      {
+        "title": "Related Subcontract Orders",
+        "description": "subcontract order linked to this PO"
+      },
+      {
+        "title": "Activity"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/orders",
+    "title": "Purchase Orders",
+    "description": "Orders sent to suppliers, and what is still waiting to be received.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/purchase-orders",
+    "title": "Purchase orders workspace",
+    "description": "Find and inspect supplier purchase orders.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/purchase-returns",
+    "title": "Supplier Returns / Credit Notes",
+    "description": "Manage returns to suppliers",
+    "sections": [],
+    "fields": [],
+    "hints": [
+      "purchase-return-submit",
+      "purchase-return-post"
+    ]
+  },
+  {
+    "route": "/purchasing/requests",
+    "title": "Purchase Requests",
+    "description": "Requisitions and approval flow",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/sourcing-flow",
+    "title": "Procurement sourcing journey",
+    "description": "Your step-by-step guide from farm-gate sourcing to final inventory valuation",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/purchasing/supplier-invoices",
+    "title": "Supplier invoices",
+    "description": "Find supplier bills and review their purchase and receipt linkage.",
+    "sections": [
+      {
+        "title": "Supplier Invoices"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/batch-costing",
+    "title": "Batch costing report",
+    "description": "Review production costs by batch without combining unlike units.",
+    "sections": [
+      {
+        "title": "Filters"
+      },
+      {
+        "title": "KES",
+        "description": "Avg Cost / kg (raw)"
+      },
+      {
+        "title": "Cost breakdown by batch",
+        "description": "Each row is one GRN batch. Cost layers sum to the total landed cost. Set margin % above to see recommended selling price."
+      }
+    ],
+    "fields": [
+      "From",
+      "To",
+      "Margin %",
+      "Target price list",
+      "Prices to set (KES / kg)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/reports/commission-reconciliation",
+    "title": "Commission reconciliation",
+    "description": "Compare commission calculations with their run and source evidence.",
+    "sections": [
+      {
+        "title": "Run reconciliation"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/exports",
+    "title": "Exports",
+    "description": "Export history and downloads",
+    "sections": [
+      {
+        "title": "Export history",
+        "description": "export(s). Download or re-run exports from report actions."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/kra-cu",
+    "title": "KRA CU numbers",
+    "description": "Invoice number and KRA Control Unit number together, for sales and purchases.",
+    "sections": [
+      {
+        "title": "Period",
+        "description": "Sales CU numbers come from KRA signing. Purchase CU numbers are typed on the supplier bill."
+      },
+      {
+        "title": "Sales"
+      },
+      {
+        "title": "Purchases"
+      },
+      {
+        "title": "Compare purchases with KRA",
+        "description": "Paste the purchase list from KRA, or upload the CSV. The first column, or a column named CU invoice number, is matched to the CU typed on each bill."
+      }
+    ],
+    "fields": [
+      "From",
+      "To",
+      "KRA purchase file"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/reports/manufacturing/[reportId]",
+    "title": "Manufacturing report",
+    "description": "Review this manufacturing report's filters, basis, units and production evidence.",
+    "sections": [],
+    "fields": [
+      "Output quantity in recipe UOM",
+      "Created from"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/reports/operations/[reportId]",
+    "title": "Operations report",
+    "description": "Review this operational report using its declared source basis and filters.",
+    "sections": [
+      {
+        "title": "No matching records"
+      }
+    ],
+    "fields": [
+      "From",
+      "Through",
+      "Warehouse",
+      "Product / SKU",
+      "Customer / supplier"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/reports",
+    "title": "Report Library",
+    "description": "Reports, saved views, schedules, and exports",
+    "sections": [
+      {
+        "title": "Report library",
+        "description": "Browse report templates, run them, and capture export history."
+      }
+    ],
+    "fields": [
+      "Schedule name",
+      "Frequency",
+      "Recipients (comma-separated emails)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/reports/saved",
+    "title": "Saved Views",
+    "description": "Your saved report views",
+    "sections": [
+      {
+        "title": "Saved views",
+        "description": "saved view(s). Run or edit from here."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/scheduled",
+    "title": "Scheduled Reports",
+    "description": "Automated report schedules",
+    "sections": [
+      {
+        "title": "Scheduled reports",
+        "description": "schedule(s). Reports run automatically and can be emailed."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/snapshots",
+    "title": "Snapshots",
+    "description": "Reopen saved report evidence with its filters, generation time and source basis.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/vat-summary",
+    "title": "VAT summary",
+    "description": "Sales and purchase VAT with source-document drilldown.",
+    "sections": [
+      {
+        "title": "VAT summary",
+        "description": "VAT counted once from canonical posted documents."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/reports/wht-summary",
+    "title": "WHT summary",
+    "description": "Withholding income tax deductions recorded against supplier payments.",
+    "sections": [
+      {
+        "title": "WHT summary",
+        "description": "Recorded withholding deductions. Ordinary purchase VAT and withholding VAT are reported separately."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/retail/promotions",
+    "title": "Promotions",
+    "description": "Promotions defines and tracks promotions (discounts, bundles). Apply to products or customers and track uplift.",
+    "sections": [
+      {
+        "title": "Promotions"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/retail/replenishment",
+    "title": "Replenishment",
+    "description": "Replenishment suggestions \u2014 review and approve",
+    "sections": [
+      {
+        "title": "Suggestions"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/retail/store-performance",
+    "title": "Store Performance",
+    "description": "Store Performance shows metrics per store: sales, margin, traffic. Use it to compare stores and identify top or underperforming locations.",
+    "sections": [
+      {
+        "title": "By"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/customer-approvals",
+    "title": "Pending approval",
+    "description": "Direct customers sent from SFA. Approve them before they join the customer list.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/customer-directory",
+    "title": "Delivery Addresses",
+    "description": "Delivery Addresses in the Accounts Receivable reporting workspace.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/customers/[id]",
+    "title": "Customer account",
+    "description": "Review the selected customer's credit, invoices, payments and account details.",
+    "sections": [
+      {
+        "title": "Outstanding"
+      },
+      {
+        "title": "Available credit"
+      },
+      {
+        "title": "Credit limit"
+      },
+      {
+        "title": "Pay within"
+      },
+      {
+        "title": "Not paid"
+      },
+      {
+        "title": "Cleared invoices"
+      },
+      {
+        "title": "Profile",
+        "description": "Contact and identity on file."
+      },
+      {
+        "title": "Credit notes"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "record-actions",
+      "customer-tabs",
+      "customer-kpis",
+      "customer-profile"
+    ]
+  },
+  {
+    "route": "/sales/customers",
+    "title": "Customers",
+    "description": "Customers is the commercial face of party master data: credit, pricing, contacts, and open orders. Sales uses this daily; finance relies on it for AR truth.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/deliveries",
+    "title": "Deliveries",
+    "description": "Delivery notes and shipments",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/invoices",
+    "title": "Invoices",
+    "description": "Bills for what left the gate. Delivery sales are invoiced from the delivery note after proof of delivery.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/odaflow-customer-matching",
+    "title": "Customer matching",
+    "description": "Link SFA direct customers and supermarket HQs to ERP. Create missing directs either way.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/odaflow-product-matching",
+    "title": "Product matching",
+    "description": "Sync ERP products into SFA catalogs and keep price lists aligned for the field.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/odaflow-sync-queue",
+    "title": "Failed Odaflow orders",
+    "description": "Orders from Odaflow that need a quick review. Open one, match the customer and products, then send it to Sales Orders.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/orders/franchise-inbound/[outletOrgId]/[prId]",
+    "title": "Franchise inbound order",
+    "description": "Review an outlet purchase request before accepting it as a franchise sales order.",
+    "sections": [
+      {
+        "title": "Summary",
+        "description": "Purchase request on outlet org (HQ read-only)."
+      },
+      {
+        "title": "Notes"
+      },
+      {
+        "title": "Lines",
+        "description": "line(s)"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/orders/franchise-inbound/new",
+    "title": "Create franchise order",
+    "description": "Prepare an order for the correct franchise outlet and product scope.",
+    "sections": [
+      {
+        "title": "Franchise outlet",
+        "description": "Who is this order for? Search by name or code."
+      },
+      {
+        "title": "Products",
+        "description": "Stock-request catalog for  "
+      },
+      {
+        "title": "Order summary"
+      }
+    ],
+    "fields": [
+      "Notes (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/sales/orders",
+    "title": "Sales Orders",
+    "description": "Orders and fulfillment",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/overview",
+    "title": "Sales",
+    "description": "From the order on the desk to the truck leaving the gate.",
+    "sections": [
+      {
+        "title": "Order to delivery"
+      },
+      {
+        "title": "Recent orders"
+      },
+      {
+        "title": "Quick actions"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "sales-kpis"
+    ]
+  },
+  {
+    "route": "/sales/quotes",
+    "title": "Quotes",
+    "description": "Create and manage sales quotes",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/sales/returns",
+    "title": "Return customer goods and issue the correct credit",
+    "description": "Keep physical returns, stock condition, fiscal credit and customer allocations traceable.",
+    "sections": [
+      {
+        "title": "A controlled path from customer to stock"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/approval-policy",
+    "title": "Approval policy configurator",
+    "description": "Configure maker-checker rules by document type, amount threshold, and branch.",
+    "sections": [
+      {
+        "title": "Rules \u00b7 version",
+        "description": "First matching rule with the highest amount threshold is applied."
+      }
+    ],
+    "fields": [
+      "Maker-checker required",
+      "Active"
+    ],
+    "hints": [
+      "approval-policy-save",
+      "approval-policy-rules",
+      "approval-policy-add"
+    ]
+  },
+  {
+    "route": "/settings/audit-log",
+    "title": "Audit Log",
+    "description": "Who did what, when. Before/after preview for changes.",
+    "sections": [
+      {
+        "title": "Activity"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/billing",
+    "title": "Billing",
+    "description": "Seat usage, franchise allocations, pending prorations, and internal invoices.",
+    "sections": [
+      {
+        "title": "Unified billing invoices"
+      },
+      {
+        "title": "Franchise outlets"
+      },
+      {
+        "title": "Included seats"
+      },
+      {
+        "title": "Active users"
+      },
+      {
+        "title": "Billable extra seats"
+      },
+      {
+        "title": "Pending prorations"
+      },
+      {
+        "title": "Current month projection"
+      },
+      {
+        "title": "Billing breakdown",
+        "description": "Live monthly lines driving the projected total."
+      },
+      {
+        "title": "Pending checkout",
+        "description": "Stage multiple users and franchise outlets, then confirm one consolidated prorated invoice."
+      },
+      {
+        "title": "Payment method",
+        "description": "Card on file for automatic charges when confirming checkout."
+      },
+      {
+        "title": "Recent internal invoices",
+        "description": "Prorations and month-end invoices generated for this organization."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/branches",
+    "title": "Branches",
+    "description": "Manage organization branches and default operational branch.",
+    "sections": [
+      {
+        "title": "Branches"
+      }
+    ],
+    "fields": [
+      "Name",
+      "Code",
+      "Address line",
+      "City",
+      "Region",
+      "Country",
+      "GPS coordinates",
+      "Latitude",
+      "Longitude"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/compliance",
+    "title": "Compliance",
+    "description": "Tax IDs, invoice templates, e-invoicing, and withholding control settings.",
+    "sections": [
+      {
+        "title": "Tax IDs",
+        "description": "Organization tax identifiers used for statutory documents."
+      },
+      {
+        "title": "Invoice templates",
+        "description": "Default document print layouts for operational entities."
+      },
+      {
+        "title": "E-invoicing",
+        "description": "KRA tax invoice signing is configured per organisation. Incotex clients stay on their existing connection; other tenants connect to eTIMS from the KRA page."
+      },
+      {
+        "title": "Withholding tax",
+        "description": "Control withholding behavior before tax configuration and posting."
+      }
+    ],
+    "fields": [
+      "Tax PIN / VAT number",
+      "Default invoice template",
+      "Enable e-invoicing reminder",
+      "Enable withholding tax"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/coolcatch-readiness",
+    "title": "Coolcatch Readiness",
+    "description": "Review seafood-template setup readiness before go-live.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/customer-categories",
+    "title": "Customer categories",
+    "description": "Segment customers into categories for pricing, credit policy, and reporting.",
+    "sections": [],
+    "fields": [
+      "Code",
+      "Name",
+      "Description (optional)",
+      "Active"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/customization",
+    "title": "ERP customisation",
+    "description": "Open the available customisation workspace for modules, workflows or dashboards.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/customizer/dashboards",
+    "title": "Dashboards",
+    "description": "Create, publish, and assign custom dashboards.",
+    "sections": [
+      {
+        "title": "Custom Dashboards"
+      }
+    ],
+    "fields": [
+      "Name",
+      "Layout JSON",
+      "Role IDs (comma-separated)",
+      "Branch IDs (comma-separated)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/customizer/fields",
+    "title": "Custom fields",
+    "description": "Custom Fields adds user-defined fields to products, parties, or documents. Extend the data model without code.",
+    "sections": [
+      {
+        "title": "Product Custom Fields"
+      },
+      {
+        "title": "Sales Order Custom Fields"
+      },
+      {
+        "title": "Customer Custom Fields"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/customizer/modules",
+    "title": "Modules",
+    "description": "Customizer Modules enables or configures optional modules. Turn on features like manufacturing or franchise.",
+    "sections": [
+      {
+        "title": "Module Configuration"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/customizer/workflows",
+    "title": "Workflows",
+    "description": "Configure advanced custom workflow state machines.",
+    "sections": [
+      {
+        "title": "Custom Workflows"
+      }
+    ],
+    "fields": [
+      "Name",
+      "Entity type",
+      "States (comma-separated)",
+      "Transitions (comma-separated FROM-&gt;TO)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/display",
+    "title": "Display",
+    "description": "Set how product names are displayed across the organisation.",
+    "sections": [
+      {
+        "title": "Product names",
+        "description": "Choose how product names are shown. The spelling saved on each product stays as entered."
+      }
+    ],
+    "fields": [
+      "Product names in capitals"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/environment",
+    "title": "Environment",
+    "description": "Review whether the organisation is operating in a test or live environment.",
+    "sections": [
+      {
+        "title": "Current mode",
+        "description": "Switch between Sandbox (practice) and Live. Going Live clears only the data you leave unchecked. Moving to Sandbox does not delete existing data."
+      },
+      {
+        "title": "Dummy data",
+        "description": "Adds sample products, a customer and supplier, stock (if a warehouse exists), and draft sales/purchase orders tagged as sandbox seed."
+      },
+      {
+        "title": "Go Live",
+        "description": "Everything is selected by default. Uncheck what you do not want to keep into Live (uncheck document numbers to restart at 1). Type   to confirm."
+      },
+      {
+        "title": "Move to Sandbox",
+        "description": "Switch this account to Sandbox so you can load dummy data and practise. Existing data stays until you Go Live and choose what to clear. Type   to confirm."
+      }
+    ],
+    "fields": [
+      "Organization name"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial/chart-of-accounts",
+    "title": "Chart of accounts",
+    "description": "Chart of Accounts (under Financial) defines the account structure. Create or edit accounts for posting and reporting.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial/currencies",
+    "title": "Currencies",
+    "description": "Set base currency and enabled currencies for this business.",
+    "sections": [
+      {
+        "title": "Enabled currencies",
+        "description": "Enable or disable currencies for documents and reporting."
+      },
+      {
+        "title": "Tax pricing",
+        "description": "Controls whether prices entered on document lines include tax or not."
+      }
+    ],
+    "fields": [
+      "Currency",
+      "Code",
+      "Name",
+      "Symbol",
+      "Decimals"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial/exchange-rates",
+    "title": "Exchange rates",
+    "description": "Exchange rates stores historical and current rates for foreign currencies. Update rates for accurate FX valuation.",
+    "sections": [
+      {
+        "title": "Rates"
+      }
+    ],
+    "fields": [
+      "Date",
+      "From",
+      "To",
+      "Rate"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial/fiscal-years",
+    "title": "Fiscal years",
+    "description": "Years and periods backed by the finance close calendar.",
+    "sections": [
+      {
+        "title": "No fiscal calendar yet",
+        "description": "Fiscal years live in Organization settings storage; posting periods are what Period Close locks. Nothing is configured for this org yet\u2014run the quick setup below (requires Settings admin for the fiscal year and Period Close permission for periods), or POST via API/scripts."
+      },
+      {
+        "title": "No posting periods in range",
+        "description": "This fiscal year has dates but no matching FiscalPeriod rows. Generate calendar months matching the posting year code below."
+      },
+      {
+        "title": "FY",
+        "description": "\u2014 . Period status open / closed."
+      }
+    ],
+    "fields": [
+      "Fiscal year name",
+      "Posting year code",
+      "Start date",
+      "End date"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial",
+    "title": "Financial settings",
+    "description": "Currencies, exchange rates, and related configuration",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial/posting-mappings",
+    "title": "Posting accounts",
+    "description": "Connect operational events to the right accounts in your chart.",
+    "sections": [],
+    "fields": [
+      "Needs attention only"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/financial/taxes",
+    "title": "Taxes",
+    "description": "Tax codes: rate, inclusive/exclusive, effective dates",
+    "sections": [
+      {
+        "title": "Tax codes",
+        "description": "Create and edit tax codes for documents."
+      }
+    ],
+    "fields": [
+      "Code",
+      "Name",
+      "Rate %",
+      "Inclusive",
+      "Effective from",
+      "Effective to (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/fmcg-setup",
+    "title": "FMCG operational setup",
+    "description": "One workspace to prepare your team, stores, opening balances and fiscal connections.",
+    "sections": [
+      {
+        "title": "Setup checks are unavailable"
+      },
+      {
+        "title": "Build a confident first posting day"
+      },
+      {
+        "title": "Official opening"
+      },
+      {
+        "title": "Costing policy"
+      },
+      {
+        "title": "Preparation status"
+      },
+      {
+        "title": "Current reconciliation snapshot"
+      },
+      {
+        "title": "Kenya tax profile"
+      }
+    ],
+    "fields": [
+      "Needs attention only",
+      "Opening review, acceptance or exception approval reference",
+      "Certificate or finance-review reference"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/integrations/coolcatch-bot",
+    "title": "Coolcatch WhatsApp bot",
+    "description": "Connect your WhatsApp ordering bot to your product catalogue and franchise outlets.",
+    "sections": [
+      {
+        "title": "API key",
+        "description": "The bot uses this key to connect. Generate one and configure it in your bot."
+      },
+      {
+        "title": "Franchise outlets",
+        "description": "Connect your outlets so the bot knows which shops, WhatsApp numbers, and prices to use."
+      },
+      {
+        "title": "Test connection",
+        "description": "Verify that the bot can reach your products and prices before going live."
+      },
+      {
+        "title": "API endpoints",
+        "description": "The bot connects to these endpoints using the API key above."
+      }
+    ],
+    "fields": [
+      "Auto-approve sales orders from the bot",
+      "HMAC secret (optional extra security)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/integrations/kra",
+    "title": "KRA eTIMS",
+    "description": "Connect this organisation to KRA so posted tax invoices can be signed.",
+    "sections": [
+      {
+        "title": "Invoice posting mode",
+        "description": "Accounting-only posts real sales to the ledger without sending invoices or adjustment notes to KRA. They remain not submitted to KRA. Enabling signing later applies to future posting attempts; it does not automatically sign earlier invoices."
+      },
+      {
+        "title": "Connected via Incotex",
+        "description": "This organisation already signs tax invoices through the Incotex bridge. That path is unchanged \u2014 do not enter eTIMS device credentials here."
+      },
+      {
+        "title": "Connection checklist",
+        "description": "Sign and post sends the invoice to KRA first. Posting runs only after KRA accepts the signature."
+      },
+      {
+        "title": "Organisation PIN",
+        "description": "Seller KRA PIN used on every tax invoice. Stored on the organisation profile."
+      },
+      {
+        "title": "eTIMS OSCU device",
+        "description": "After KRA certifies OdaFlow and you onboard on the eTIMS portal, paste the device details here."
+      }
+    ],
+    "fields": [
+      "Enable eTIMS signing when posting invoices",
+      "Environment",
+      "Device serial",
+      "Branch office ID (BHF)",
+      "Communication key (CMC)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/integrations/odaflow",
+    "title": "Odaflow SFA connector",
+    "description": "Connect Odaflow, match customers and products, and resolve unmatched orders.",
+    "sections": [
+      {
+        "title": "Your organisation ID",
+        "description": "Share this ID when linking Odaflow to this ERP account."
+      },
+      {
+        "title": "Connection credentials",
+        "description": "Link this ERP account to your Odaflow manufacturer. The API key is shown only once when you generate or rotate it \u2014 copy it somewhere safe."
+      },
+      {
+        "title": "Queue Summary"
+      },
+      {
+        "title": "Enabled Event Types",
+        "description": "Which Odaflow event types this ERP tenant accepts."
+      },
+      {
+        "title": "Customer matching",
+        "description": "Link SFA direct customers and supermarket HQs to ERP. Create missing directs either way."
+      },
+      {
+        "title": "Product matching",
+        "description": "Sync ERP products into SFA catalogs and keep price lists aligned for the field."
+      },
+      {
+        "title": "How This Works"
+      }
+    ],
+    "fields": [
+      "Odaflow manufacturer ID",
+      "Keep connection active (receive orders and updates from Odaflow)",
+      "API key",
+      "HMAC secret"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/integrations/whatsapp",
+    "title": "WhatsApp orders",
+    "description": "Route Meta WhatsApp Business messages into sales orders for this organization.",
+    "sections": [
+      {
+        "title": "Webhook callback (shared URL)",
+        "description": "Odaflow exposes HTTPS endpoint for every tenant. Meta still sends events only for   phone numbers; we route by below."
+      },
+      {
+        "title": "Organization routing",
+        "description": "Paste the from Meta Developer / WhatsApp \u2192 API Setup. Product codes in catalog or free-text orders must match SKU or code in your product master."
+      },
+      {
+        "title": "Meta Commerce catalog sync",
+        "description": "Push your ERP product catalog to Meta Commerce so retail customers see your products in WhatsApp shopping. Product SKU / code must match the   in your Meta catalog for order parsing to work."
+      },
+      {
+        "title": "Setup checklist",
+        "description": "Complete all steps for seamless WhatsApp retail commerce."
+      }
+    ],
+    "fields": [
+      "Callback URL",
+      "Your webhook verify token (optional)",
+      "Your Meta App secret (optional)",
+      "Enable WhatsApp order ingestion for this organization",
+      "Phone number IDs (one per line or comma-separated)",
+      "Default branch (optional)",
+      "Default country dial (digits)",
+      "Default order currency",
+      "Auto-submit and approve sales orders",
+      "Document actor user (optional)",
+      "Meta System User access token",
+      "Catalog ID",
+      "Business Account ID"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/inventory/costing",
+    "title": "Inventory costing settings",
+    "description": "Costing method, landed cost templates, valuation accounts",
+    "sections": [
+      {
+        "title": "Costing method",
+        "description": "Default method for inventory valuation and live costing runs."
+      },
+      {
+        "title": "Valuation accounts",
+        "description": "Map to COA. Link inventory valuation to GL."
+      },
+      {
+        "title": "Landed cost templates",
+        "description": "Freight, insurance, duty. Allocation basis (qty/value/weight)."
+      }
+    ],
+    "fields": [
+      "Method",
+      "Default inventory valuation account",
+      "Code",
+      "Name",
+      "Type",
+      "Allocation basis",
+      "Category"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/master-data-governance",
+    "title": "Master data governance",
+    "description": "Review and approve critical master data changes with version tracking.",
+    "sections": [
+      {
+        "title": "Pending and recent change requests",
+        "description": "Products, pricing rules, taxes, and mappings."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/migrations",
+    "title": "Migration Console",
+    "description": "Run dry-runs, review conflicts, and reconcile migrations from Zoho Books, QuickBooks, and SAP Business One.",
+    "sections": [
+      {
+        "title": "Start import run",
+        "description": "Normalize provider payloads into canonical OdaFlow masters. Dry-run is recommended before any committed import."
+      },
+      {
+        "title": "Latest runs",
+        "description": "Pick a run to inspect staged records, conflicts, and reconciliation details."
+      },
+      {
+        "title": "Selected run",
+        "description": "Summary, dependency order, and entity scope for the current run."
+      },
+      {
+        "title": "Batch execution",
+        "description": "Ordered batches reflect dependency-aware import execution."
+      },
+      {
+        "title": "Staged records",
+        "description": "Review normalized payloads, proposed actions, and duplicate-match reasons before a live import."
+      },
+      {
+        "title": "Conflict candidates",
+        "description": "Rows that matched multiple canonical records or could not be safely resolved."
+      },
+      {
+        "title": "Row errors",
+        "description": "Validation and duplicate-resolution issues captured during staging."
+      },
+      {
+        "title": "Recent runs",
+        "description": "Use this to audit migration activity and provider health over time."
+      },
+      {
+        "title": "Recent errors",
+        "description": "The latest validation or reconciliation issues across providers."
+      },
+      {
+        "title": "Export masters",
+        "description": "Download products, packaging, variants, customers, or suppliers as CSV. Use for backup or migration. Import products before packaging/variants."
+      },
+      {
+        "title": "Import from CSV",
+        "description": "Add customers, suppliers, products, price tags, opening stock, AR/AP balances, packaging, or variants via CSV. Download a template for required fields."
+      }
+    ],
+    "fields": [
+      "Provider",
+      "Mapping profile ID",
+      "Dry-run only",
+      "Provider payload",
+      "Source metadata",
+      "Resolution",
+      "Matched canonical entity ID",
+      "Entity type"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/notifications",
+    "title": "Notifications",
+    "description": "Email, SMS, WhatsApp toggles. Notification rules link to automation.",
+    "sections": [
+      {
+        "title": "Channels",
+        "description": "Channel preferences are saved to backend org settings."
+      },
+      {
+        "title": "Push notifications",
+        "description": "Browser and mobile apps register FCM device tokens on login. Allow notifications when prompted, then send a test alert."
+      },
+      {
+        "title": "Notification rules",
+        "description": "Links to automation rules. Configure triggers and actions there."
+      }
+    ],
+    "fields": [
+      "Email",
+      "SMS",
+      "WhatsApp"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/ops-runbook",
+    "title": "Operational runbook",
+    "description": "Track readiness checks, dependencies, and retention/release gates.",
+    "sections": [
+      {
+        "title": "Retention job",
+        "description": "Preview records older than your approved retention policy. Deletion is permanent and requires explicit confirmation. This does not verify infrastructure backups."
+      },
+      {
+        "title": "Release gates",
+        "description": "Checklist before deployment go/no-go."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/org",
+    "title": "Organization profile",
+    "description": "Organization Profile holds company name, address, and legal details. Update when your company info changes.",
+    "sections": [
+      {
+        "title": "Environment",
+        "description": "Sandbox for dummy data and practice. Go Live clears operational books; products and prices stay."
+      },
+      {
+        "title": "Organization Information",
+        "description": "Visible to users with organisation settings access. Compliance scans are PDF or image (JPEG, PNG, WEBP). Upload a company logo (image only) \u2014 it appears on PDFs for invoices, purchase orders, and other exported documents."
+      },
+      {
+        "title": "Industry Template",
+        "description": "The active template controls which modules, feature flags, and terminology are available for your organisation. Contact Odaflow to change your template."
+      },
+      {
+        "title": "Outbound email",
+        "description": "Name and reply-to used when purchase orders, invoices, delivery notes, dispatch notes, and statements are sent. The mailbox login stays the one already configured for OdaFlow."
+      }
+    ],
+    "fields": [
+      "Organization ID",
+      "Organization Name",
+      "Tax ID",
+      "Registration Number",
+      "From name",
+      "Reply-to"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/organization/entities",
+    "title": "Entities",
+    "description": "Multi-entity setup with reporting and base-currency control.",
+    "sections": [
+      {
+        "title": "Entities"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings",
+    "title": "Settings",
+    "description": "Organization, financial, inventory, and access configuration",
+    "sections": [
+      {
+        "title": "Help"
+      },
+      {
+        "title": "Tutorial"
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "settings-hub"
+    ]
+  },
+  {
+    "route": "/settings/payment-terms",
+    "title": "Payment terms",
+    "description": "Define payment conditions assigned to customers and suppliers (e.g. Net 30, COD, EOM+15).",
+    "sections": [],
+    "fields": [
+      "Code",
+      "Name",
+      "Method",
+      "Days",
+      "Grace days (optional)",
+      "Active"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/payroll",
+    "title": "Payroll settings",
+    "description": "Company-level payroll configuration \u2014 jurisdiction, currency, and pay frequency.",
+    "sections": [
+      {
+        "title": "Jurisdiction &amp; defaults",
+        "description": "These defaults are used when creating new employees. Individual employees can be overridden per-record."
+      },
+      {
+        "title": "Leave management",
+        "description": "Set up leave policies and entitlements for your organisation."
+      },
+      {
+        "title": "Statutory rates reference",
+        "description": "View current PAYE bands, NSSF tiers, SHIF, AHL for Kenya and Uganda."
+      }
+    ],
+    "fields": [
+      "Default tax country / jurisdiction",
+      "Default currency",
+      "Pay period"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/platform",
+    "title": "Platform control plane",
+    "description": "Operate every ERP customer from one internal console: provisioning, commercial state, entitlements, and audit.",
+    "sections": [
+      {
+        "title": "Latest staged platform checkout",
+        "description": "Confirm staged customers and orgs from platform billing when you are ready to activate them."
+      },
+      {
+        "title": "Commercial mix",
+        "description": "What platform owners should monitor commercially."
+      },
+      {
+        "title": "Risk state",
+        "description": "Trial and suspension exposure across customers."
+      },
+      {
+        "title": "Org topology",
+        "description": "Standard, franchisor, and franchisee distribution."
+      },
+      {
+        "title": "Recent tenants",
+        "description": "Newest customers added to the platform."
+      },
+      {
+        "title": "Recent platform activity",
+        "description": "Internal control-plane events across customers."
+      },
+      {
+        "title": "Organizations",
+        "description": "Review and override template, entitlements, and franchise structure per customer org."
+      },
+      {
+        "title": "Tenants",
+        "description": "Monitor plan, suspension risk, default edition, and rollout surface by customer account."
+      },
+      {
+        "title": "Platform audit trail",
+        "description": "Every internal control-plane action should be visible here for support and compliance."
+      }
+    ],
+    "fields": [
+      "Tenant name",
+      "Slug",
+      "Plan",
+      "Status",
+      "Edition",
+      "Default template ID",
+      "Enabled modules",
+      "Feature flags",
+      "Organization name",
+      "Org type",
+      "Org role",
+      "Template ID",
+      "Default nav",
+      "Franchise persona",
+      "Organization active",
+      "Tenant ID",
+      "Admin email",
+      "Role name",
+      "Admin first name",
+      "Admin last name",
+      "Branch name",
+      "Branch code"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/preferences",
+    "title": "Preferences",
+    "description": "Preferences stores user and org-level preferences: date format, currency display, notifications, and defaults.",
+    "sections": [
+      {
+        "title": "Organization Preferences"
+      }
+    ],
+    "fields": [
+      "Currency",
+      "Timezone",
+      "Date Format"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/products/packaging-defaults",
+    "title": "Packaging setup",
+    "description": "Maintain product packaging through the supported product catalogue workspace.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/products/pricing-rules",
+    "title": "Pricing rules",
+    "description": "Configure pricing rules that override or default tier selection.",
+    "sections": [
+      {
+        "title": "Rules",
+        "description": "Customer segment, channel, or account-specific overrides saved in the backend."
+      }
+    ],
+    "fields": [
+      "Rule name"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/purchasing/receiving",
+    "title": "Receiving policy",
+    "description": "Control supplier invoice timing and quality release for incoming materials.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/sales/document-flow",
+    "title": "Document flow",
+    "description": "Configure the sales document sequence used by this organisation.",
+    "sections": [
+      {
+        "title": "Sales order lines",
+        "description": "When this is on, a new sales order lists every finished good and the user enters quantities. Lines left blank are not saved."
+      },
+      {
+        "title": "FMCG sales",
+        "description": "The document flow below is used by FMCG manufacturer and bakery organisations."
+      },
+      {
+        "title": "Sales document flow",
+        "description": "The current flow stays in place until you choose Pick & pack first. Options below apply to that flow."
+      },
+      {
+        "title": "Flow options",
+        "description": "These rules run when Pick & pack first is the selected flow."
+      }
+    ],
+    "fields": [
+      "Show all finished goods on new sales orders"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/sequences",
+    "title": "Numbering Sequences",
+    "description": "Document number prefixes, next value, padding",
+    "sections": [
+      {
+        "title": "Sequences"
+      }
+    ],
+    "fields": [
+      "Document type",
+      "Prefix",
+      "Next number",
+      "Suffix (optional)",
+      "Padding"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/sidebar",
+    "title": "Sidebar navigation",
+    "description": "Organise the sidebar links without granting extra permissions.",
+    "sections": [
+      {
+        "title": "Modular sidebar",
+        "description": "Changes apply organization-wide after modules and permission checks. Until you customize Main / More, placement uses built\u2011in tiers (primary sections above the divider, secondary under &ldquo;More&rdquo;). Core stays first, and Processing stays immediately after Core when manufacturing is enabled. Saving requires the   permission."
+      },
+      {
+        "title": "Main (above divider)"
+      },
+      {
+        "title": "More (below divider)"
+      }
+    ],
+    "fields": [
+      "Section"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/supplier-categories",
+    "title": "Supplier categories",
+    "description": "Group vendors the same way Tally groups sundry creditors \u2014 packaging, raw material, logistics, and the rest.",
+    "sections": [],
+    "fields": [
+      "Code",
+      "Name",
+      "Description (optional)",
+      "Active"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/tax/kenya",
+    "title": "Kenya tax profile",
+    "description": "VAT registration, PIN. Configure VAT, WHT, mappings.",
+    "sections": [
+      {
+        "title": "VAT registration",
+        "description": "Kenya VAT profile. Toggle and VAT PIN (masked)."
+      }
+    ],
+    "fields": [
+      "VAT registered",
+      "VAT PIN (masked)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/tax/tax-mappings",
+    "title": "Tax mappings",
+    "description": "Link tax codes to COA accounts. VAT Output, VAT Input, WHT Payable.",
+    "sections": [
+      {
+        "title": "Mappings",
+        "description": "Validate that mapped accounts exist. VAT Output, VAT Input, WHT Payable."
+      }
+    ],
+    "fields": [
+      "Tax code",
+      "Mapping type",
+      "COA account"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/tax/vat",
+    "title": "VAT (Kenya)",
+    "description": "VAT rates backed by live settings.",
+    "sections": [
+      {
+        "title": "VAT rates",
+        "description": "Maintain VAT codes and rates used on documents."
+      },
+      {
+        "title": "Add VAT rate",
+        "description": "Create a new VAT code and rate."
+      }
+    ],
+    "fields": [
+      "Code",
+      "Name",
+      "Rate %"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/tax/vat-withholding",
+    "title": "VAT withholding",
+    "description": "KRA withholds VAT from appointed agents. The sales invoice stays at the gross amount.",
+    "sections": [
+      {
+        "title": "Rule",
+        "description": "% of the taxable value from . On a KES 100,000 taxable invoice the VAT is KES 16,000, the gross invoice is KES 116,000, and the customer is expected to pay KES 114,000. The KES 2,000 stays on the invoice until a KRA certificate is matched. A customer deduction alone is not a tax credit."
+      },
+      {
+        "title": "This import",
+        "description": "certificate rows were read ."
+      },
+      {
+        "title": "Appointed agents",
+        "description": "Only these customers get VAT withholding on new invoices. Turn it on from a customer, or import the KRA report."
+      },
+      {
+        "title": "Certificates",
+        "description": "A certificate is matched by the customer PIN and the invoice or CU number. The amount alone is not used."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/tax/withholding",
+    "title": "Withholding tax",
+    "description": "WHT codes. Apply on supplier bills (AP), payments (Treasury).",
+    "sections": [
+      {
+        "title": "Create WHT code",
+        "description": "Add withholding tax codes to the live tax configuration."
+      },
+      {
+        "title": "WHT codes",
+        "description": "Live withholding tax codes available for AP and treasury flows."
+      }
+    ],
+    "fields": [
+      "Code",
+      "Name",
+      "Rate %"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/uom",
+    "title": "UOM catalog",
+    "description": "Units of measure and global conversions. Used by product packaging and pricing.",
+    "sections": [
+      {
+        "title": "Validation",
+        "description": "Conversion loops, missing base UOM, invalid factors."
+      },
+      {
+        "title": "UOM definitions",
+        "description": "Base and derived units. Factor to base for conversions."
+      },
+      {
+        "title": "Global conversions",
+        "description": "Reference conversions (e.g. 1 TON = 1000 KG). Product packaging overrides per product."
+      }
+    ],
+    "fields": [
+      "Code",
+      "Name",
+      "Category",
+      "Decimal places",
+      "This is a base UOM (no conversion factor)",
+      "Base UOM",
+      "Factor to base (1 = factor \u00d7 )",
+      "From UOM",
+      "To UOM",
+      "Factor (1 = factor )"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/users-roles",
+    "title": "Users & Roles",
+    "description": "Manage users, roles, and permissions",
+    "sections": [
+      {
+        "title": "Password reset requests"
+      },
+      {
+        "title": "Users",
+        "description": "user(s). Assign roles to control access."
+      },
+      {
+        "title": "Roles",
+        "description": "role(s). Standard catalogue:   \u2014 use &quot;Add missing standard roles&quot; to create any missing definitions. Existing permissions and user assignments are preserved."
+      },
+      {
+        "title": "Franchise Outlets",
+        "description": "outlet(s). Each outlet has its own admin login account."
+      }
+    ],
+    "fields": [
+      "New password",
+      "Confirm password",
+      "Name",
+      "Description",
+      "Permissions"
+    ],
+    "hints": [
+      "users-roles-tabs",
+      "users-role-assignment",
+      "roles-permissions",
+      "roles-provision"
+    ]
+  },
+  {
+    "route": "/tasks",
+    "title": "Tasks / Work Queue",
+    "description": "Unified queue for manual tasks, approvals, and operational exceptions.",
+    "sections": [
+      {
+        "title": "My Tasks"
+      },
+      {
+        "title": "Global Queue Signals"
+      },
+      {
+        "title": "Create task"
+      }
+    ],
+    "fields": [
+      "Title",
+      "Category",
+      "Description",
+      "Severity",
+      "Due date"
+    ],
+    "hints": [
+      "my-tasks",
+      "queue-signals"
+    ]
+  },
+  {
+    "route": "/timesheets",
+    "title": "Timesheets",
+    "description": "Weekly grid of live project hours",
+    "sections": [
+      {
+        "title": "Entries",
+        "description": "Live weekly entries grouped by project and note."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/treasury/bank-accounts",
+    "title": "Bank accounts",
+    "description": "Manage bank accounts, GL mapping",
+    "sections": [
+      {
+        "title": "Accounts"
+      }
+    ],
+    "fields": [
+      "Account name",
+      "Account number",
+      "Bank",
+      "Branch",
+      "Currency",
+      "GL account",
+      "Active"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/treasury/cashflow",
+    "title": "Cashflow forecast",
+    "description": "Forecast view, date range, currency",
+    "sections": [
+      {
+        "title": "Forecast",
+        "description": "Base vs document currency with live treasury cashflow data."
+      }
+    ],
+    "fields": [
+      "Currency",
+      "From",
+      "To"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/treasury/collections",
+    "title": "Collections",
+    "description": "Overdue invoices \u2014 reminders, record receipt",
+    "sections": [
+      {
+        "title": "Overdue invoices"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/treasury/overview",
+    "title": "Treasury",
+    "description": "Payment runs, collections, bank accounts, cashflow",
+    "sections": [
+      {
+        "title": "Projected balance"
+      },
+      {
+        "title": "Payment runs"
+      },
+      {
+        "title": "Overdue receivables"
+      },
+      {
+        "title": "Bank accounts"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/treasury/payment-runs/[id]",
+    "title": "Payment run record",
+    "description": "Inspect a payment run's header, bills and settlement state.",
+    "sections": [
+      {
+        "title": "Header"
+      },
+      {
+        "title": "Run lines",
+        "description": "Suppliers and bills included in this payment run."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/treasury/payment-runs",
+    "title": "Payment runs",
+    "description": "AP payment runs \u2014 select bills, generate files",
+    "sections": [
+      {
+        "title": "Runs"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/tutorial/[chapterId]/[guideId]",
+    "title": "ERP task guide",
+    "description": "Read a task's prerequisites, instructions and related working screen.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/tutorial/[chapterId]",
+    "title": "ERP module guides",
+    "description": "Find the task guide for this ERP module.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/tutorial",
+    "title": "Search tutorials and ask Gaia",
+    "description": "Find instructions across the ERP and share links to the exact guide a colleague needs.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/bin-locations",
+    "title": "Bin locations",
+    "description": "Live bin master data plus location/bin stock visibility.",
+    "sections": [
+      {
+        "title": "Locations"
+      }
+    ],
+    "fields": [
+      "Code",
+      "Name",
+      "Type",
+      "Parent location (optional)",
+      "Status"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/cycle-counts/[id]",
+    "title": "Cycle count record",
+    "description": "Review and reconcile a warehouse count's expected and measured quantities.",
+    "sections": [
+      {
+        "title": "Count lines",
+        "description": "Update counted quantities; variance is recalculated from backend data."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/cycle-counts",
+    "title": "Cycle counts",
+    "description": "Backend-backed count sessions with line updates and posting.",
+    "sections": [
+      {
+        "title": "Sessions"
+      }
+    ],
+    "fields": [
+      "Warehouse",
+      "Location / bin (optional)"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/dispatch",
+    "title": "Dispatch",
+    "description": "Pick the vehicle, then the delivery notes going on it. Sending opens the invoices the driver takes.",
+    "sections": [
+      {
+        "title": "1. Vehicle",
+        "description": "One vehicle takes this load. Add one if the fleet list is empty."
+      },
+      {
+        "title": "2. Delivery notes"
+      },
+      {
+        "title": "Already out",
+        "description": "These loads are on the road. The phone delivers them."
+      }
+    ],
+    "fields": [
+      "Vehicle",
+      "Carrier or driver",
+      "Code",
+      "Name",
+      "Registration plate"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/dispatch-returns/[id]",
+    "title": "Dispatch return record",
+    "description": "Verify returned delivery quantities before receiving them back into stock.",
+    "sections": [
+      {
+        "title": "Receipt"
+      },
+      {
+        "title": "Lines"
+      },
+      {
+        "title": "Confirm quantity and post to stock"
+      }
+    ],
+    "fields": [
+      "Driver",
+      "Warehouse",
+      "Note",
+      "Returned ( )",
+      "Condition",
+      "\u2014 received"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/dispatch-returns",
+    "title": "Driver returns",
+    "description": "Goods the truck brings back from dispatched delivery notes. Good stock goes on hand. Damaged stock is recorded and stays unsellable.",
+    "sections": [
+      {
+        "title": "Out with the driver",
+        "description": "Record what came back. Leave a line at 0 when the customer kept it."
+      },
+      {
+        "title": "Waiting to post",
+        "description": "A drop was logged and still needs the warehouse to confirm the quantity and post stock."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/overview",
+    "title": "Warehouse Operations",
+    "description": "Transfers, pick/pack, putaway, cycle counts",
+    "sections": [
+      {
+        "title": "In transit"
+      },
+      {
+        "title": "Pending pick"
+      },
+      {
+        "title": "Awaiting putaway"
+      },
+      {
+        "title": "Open cycle counts"
+      },
+      {
+        "title": "Today\u2019s routes"
+      },
+      {
+        "title": "Anytime / geo routes"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/pick-pack/[id]",
+    "title": "Pick and pack task",
+    "description": "Fulfil the assigned order from the correct warehouse and preserve shortage evidence.",
+    "sections": [
+      {
+        "title": "Fulfilment warehouse",
+        "description": "Quantities shown are to pick (on hand minus reserved) for this warehouse \u2014 not the same as the branch switcher above. Updating it resets pick / pack progress until you confirm pick again."
+      },
+      {
+        "title": "Picklist"
+      },
+      {
+        "title": "Stock is in another site",
+        "description": "Fulfilment warehouse is short, but more quantity exists . Move what you can into this fulfilment warehouse in one step (internal transfer + receipt). Lines with no stock at the source are skipped; you can run again after other transfers."
+      },
+      {
+        "title": "Pack"
+      },
+      {
+        "title": "Dispatch",
+        "description": "Select a fleet vehicle or spot-hire carrier. Use the same batch name (e.g. Kitengela) when grouping multiple delivery notes on one run."
+      }
+    ],
+    "fields": [
+      "Warehouse",
+      "Scan pack",
+      "Packing note",
+      "Vehicle",
+      "Carrier name",
+      "Dispatch batch",
+      "Waybill / courier tracking",
+      "Product",
+      "Code *",
+      "Name / description",
+      "Registration plate",
+      "Monthly cost (optional)"
+    ],
+    "hints": [
+      "pick-pack-stock",
+      "pick-pack-pack"
+    ]
+  },
+  {
+    "route": "/warehouse/pick-pack",
+    "title": "Pick & Pack",
+    "description": "Pick & Pack is the fulfilment execution screen: tasks derived from sales orders or waves. Accuracy here drives customer satisfaction and reduces returns; speed matters but not at the cost of wrong SKU or quantity.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/putaway/[id]",
+    "title": "Putaway task",
+    "description": "Allocate received inventory to the correct warehouse bins.",
+    "sections": [
+      {
+        "title": "Allocate to bins",
+        "description": "Save bin assignments, then confirm putaway to move quantity into location stock."
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/putaway",
+    "title": "Putaway",
+    "description": "Live receipt putaway tasks with bin-level allocation.",
+    "sections": [
+      {
+        "title": "Putaway queue"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/route-pick-lists",
+    "title": "Route pick lists",
+    "description": "One list for many approved sales orders. Saving the picked quantity does not move stock.",
+    "sections": [
+      {
+        "title": "New pick list"
+      },
+      {
+        "title": "Saved lists"
+      },
+      {
+        "title": "Short"
+      },
+      {
+        "title": "Damaged return"
+      },
+      {
+        "title": "Load tally"
+      },
+      {
+        "title": "Email dispatch note"
+      },
+      {
+        "title": "Warehouse movement summary"
+      }
+    ],
+    "fields": [
+      "Date",
+      "Vehicle number",
+      "Route",
+      "Destination warehouse"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/route-settlement",
+    "title": "Route settlement",
+    "description": "Cash, M-Pesa, and returns for a driver. A variance needs a supervisor who is not that driver.",
+    "sections": [],
+    "fields": [
+      "Route date",
+      "Driver",
+      "Expected",
+      "Cash",
+      "M-Pesa",
+      "Returns"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/transfers/[id]",
+    "title": "Stock transfer record",
+    "description": "Review a stock move between its source and destination warehouses.",
+    "sections": [
+      {
+        "title": "Header"
+      },
+      {
+        "title": "Lines"
+      },
+      {
+        "title": "Activity"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/transfers",
+    "title": "Transfers",
+    "description": "Inter-warehouse transfers",
+    "sections": [
+      {
+        "title": "Transfers"
+      }
+    ],
+    "fields": [
+      "Date",
+      "From warehouse",
+      "To warehouse",
+      "Reference (optional)",
+      "Products",
+      "Quantity",
+      "Unit",
+      "Transport cost (KES)",
+      "Source GRN ID (optional)",
+      "Cost description"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/work/queue",
+    "title": "Work queue",
+    "description": "Payroll, tax, and pricing alerts. Act on items or drill down.",
+    "sections": [
+      {
+        "title": "Nothing waiting",
+        "description": "Payroll, tax, pricing, stock, and approval alerts land here when someone needs to act. Open View on a row to go to the source document."
+      }
+    ],
+    "fields": [],
+    "hints": [
+      "work-queue"
+    ]
+  }
+]

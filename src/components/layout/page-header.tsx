@@ -17,6 +17,8 @@ interface Breadcrumb {
 
 interface PageHeaderProps {
   title: string;
+  /** Optional page-specific help override. */
+  help?: React.ReactNode;
   description?: React.ReactNode;
   breadcrumbs?: Breadcrumb[];
   actions?: React.ReactNode;
@@ -34,6 +36,7 @@ interface PageHeaderProps {
 
 export function PageHeader({
   title,
+  help,
   description,
   breadcrumbs,
   actions,
@@ -53,7 +56,7 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "shrink-0 border-b bg-card px-4",
+        "shrink-0 border-b bg-card px-4 sm:px-5",
         dense ? "py-2" : "py-2.5",
         sticky && "sticky top-0 z-30 bg-card shadow-sm",
         className
@@ -75,19 +78,19 @@ export function PageHeader({
           ))}
         </nav>
       )}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1" data-tutorial-hint="page-title">
-          <h1 className={cn("text-lg font-semibold tracking-tight text-foreground sm:text-xl", titleClassName)}>
+          <h1 className={cn("text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl", titleClassName)}>
             {title}
           </h1>
           {description ? (
-            <div className="mt-0.5 hidden text-xs text-muted-foreground sm:block">
+            <div data-page-purpose className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground sm:text-sm">
               {description}
             </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:shrink-0" data-tutorial-hint="page-actions">
-          <PageHelp compact />
+        <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end lg:max-w-[55%] lg:shrink-0 [&>div]:max-w-full" data-tutorial-hint="page-actions">
+          {help === undefined ? <PageHelp compact /> : help}
           {showCommandHint ? <CommandPaletteHint /> : null}
           {showRightPanelToggle && (
             <Button

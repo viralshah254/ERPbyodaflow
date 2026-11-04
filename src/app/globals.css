@@ -152,3 +152,10 @@ html[data-caps-on-product="true"] .capsOnProduct {
 html[data-caps-on-product="true"] .capsOnProduct::placeholder {
   text-transform: none;
 }
+
+/* Keep the assistant available after a walkthrough, without covering its controls. */
+html[data-erp-guide-open="true"] [data-gaia-widget] {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
+}

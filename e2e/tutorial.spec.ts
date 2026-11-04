@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { fixtureApi } from "./fixtures/erp-guide-api";
 import { bootstrapLocalSession } from "./auth";
 
 test.describe("Tutorial", () => {
   test.beforeEach(async ({ page }) => {
+    await fixtureApi(page);
     await bootstrapLocalSession(page);
   });
 
@@ -20,23 +22,20 @@ test.describe("Tutorial", () => {
     await page.goto("/dashboard");
     await page.waitForURL(/\/dashboard/);
     // PageHelp: Tutorial button or Start tour
-    const hasTutorial = await page.getByRole("button", { name: /tutorial|start tour/i }).first().isVisible().catch(() => false);
-    expect(hasTutorial).toBeTruthy();
+    await expect(page.getByRole("button", { name: /tutorial|start tour/i }).first()).toBeVisible();
   });
 
-  test("Start tour on dashboard opens spotlight", async ({ page }) => {
+  test("Start tour on dashboard opens interactive guide", async ({ page }) => {
     await page.goto("/dashboard");
     await page.waitForURL(/\/dashboard/);
     // Click Start tour
     const startTourBtn = page.getByRole("button", { name: /start tour/i }).first();
     await startTourBtn.click();
-    // Driver.js: body gets driver-active, popover has driver-popover
-    await expect(page.locator("body.driver-active")).toBeVisible({ timeout: 5000 });
-    const popover = page.locator(".driver-popover");
+    const popover = page.getByRole("region", { name: "Interactive page guide", exact: true });
     await expect(popover).toBeVisible();
     // Close tour (escape)
     await page.keyboard.press("Escape");
-    await expect(page.locator("body.driver-active")).not.toBeVisible({ timeout: 3000 });
+    await expect(popover).not.toBeVisible({ timeout: 3000 });
   });
 
   test("guide sheet opens from Tutorial button", async ({ page }) => {
@@ -48,4 +47,14 @@ test.describe("Tutorial", () => {
     const sheet = page.locator("[role='dialog'], .sheet, [class*='Sheet']").filter({ hasText: /about|dashboard|guide/i }).first();
     await expect(sheet).toBeVisible({ timeout: 5000 });
   });
+});
+
+test("written guide can launch the walkthrough after its sheet closes", async ({ page }) => {
+  await fixtureApi(page);
+  await page.goto("/inventory/stock-levels", { waitUntil: "domcontentloaded" });
+  await page.getByRole("button", { name: "Tutorial — read this screen's guide", exact: true }).click();
+  const sheet = page.getByRole("dialog");
+  await sheet.getByRole("button", { name: "Start tour", exact: true }).click();
+  await expect(sheet).not.toBeVisible();
+  await expect(page.getByRole("region", { name: "Interactive page guide", exact: true })).toBeVisible();
 });
