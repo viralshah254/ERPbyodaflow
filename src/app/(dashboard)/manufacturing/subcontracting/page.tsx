@@ -1306,13 +1306,13 @@ export default function SubcontractingPage() {
                         ordersTableBusy && "pointer-events-none opacity-60"
                       )}
                     >
-                      <DataTable<SubcontractOrderRow>
+                      <DataTable<SubcontractOrderRow> dataScope="page"
                         data={orders}
                         columns={orderColumns}
                         scrollMode="natural"
                         className="border-0 shadow-none"
                         onRowClick={(r) => window.location.assign(`/manufacturing/subcontracting/orders/${r.id}`)}
-                        emptyMessage="No subcontract orders match your filters. Use Send to processor to create one."
+                        emptyMessage="No subcontract orders match your filters. Use Send to processor to create one." searchable={false}
                       />
                     </div>
                   </div>
@@ -1402,13 +1402,13 @@ export default function SubcontractingPage() {
                         wipTableBusy && "pointer-events-none opacity-60"
                       )}
                     >
-                      <DataTable<WIPBalanceRow>
+                      <DataTable<WIPBalanceRow> dataScope="page"
                         data={wip}
                         columns={wipColumns}
                         scrollMode="natural"
                         size="comfortable"
                         className="border-0 shadow-none"
-                        emptyMessage="No WIP balances match your filters."
+                        emptyMessage="No WIP balances match your filters." searchable={false}
                       />
                     </div>
                   </div>
@@ -1538,7 +1538,7 @@ export default function SubcontractingPage() {
                         wcTableBusy && "pointer-events-none opacity-60"
                       )}
                     >
-                      <DataTable<ExternalWorkCenterRow>
+                      <DataTable<ExternalWorkCenterRow> dataScope="page"
                         data={workCenterRows}
                         columns={workCenterColumns}
                         scrollMode="natural"
@@ -1548,7 +1548,7 @@ export default function SubcontractingPage() {
                         onRowClick={(row) => {
                           setWorkCenterFilter(row.id);
                           setTab("wip");
-                        }}
+                        }} searchable={false}
                       />
                     </div>
                   </div>

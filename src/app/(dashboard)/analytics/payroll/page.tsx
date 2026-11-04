@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -67,7 +69,7 @@ export default function AnalyticsPayrollPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Pay run</th>
@@ -79,7 +81,7 @@ export default function AnalyticsPayrollPage() {
                 {rows.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.number}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.totalNet ?? 0, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.totalNet ?? 0}>{formatMoney(r.totalNet ?? 0, "KES")}</td>
                     <td className="text-right tabular-nums px-3 py-2">
                       <Link className="text-primary underline-offset-4 hover:underline" href={r.drillPath ?? "/payroll/pay-runs"}>
                         Open
@@ -88,7 +90,7 @@ export default function AnalyticsPayrollPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
             {rows.length === 0 && <p className="p-3 text-sm text-muted-foreground">No payroll insights right now.</p>}
           </div>
         </InsightCard>

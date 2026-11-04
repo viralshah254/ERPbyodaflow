@@ -169,7 +169,7 @@ export default function ThreeWayMatchPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[320px] overflow-auto">
-                <Table>
+                <Table dataScope="page">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
@@ -212,7 +212,7 @@ export default function ThreeWayMatchPage() {
                             {isMatched && <Badge variant="secondary" className="ml-2 text-xs">Matched</Badge>}
                           </TableCell>
                           <TableCell>{row.date?.slice(0, 10)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatMoney(row.total ?? 0, row.currency ?? "KES")}</TableCell>
+                          <TableCell className="text-right tabular-nums" data-sort-value={row.total ?? 0}>{formatMoney(row.total ?? 0, row.currency ?? "KES")}</TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
                             {row.totalWeightKg != null ? `${row.totalWeightKg.toLocaleString()} kg` : "—"}
                           </TableCell>
@@ -233,7 +233,7 @@ export default function ThreeWayMatchPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[320px] overflow-auto">
-                <Table>
+                <Table dataScope="page">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
@@ -276,7 +276,7 @@ export default function ThreeWayMatchPage() {
                             {isMatched && <Badge variant="secondary" className="ml-2 text-xs">Matched</Badge>}
                           </TableCell>
                           <TableCell>{row.date?.slice(0, 10)}</TableCell>
-                          <TableCell className="text-right tabular-nums">
+                          <TableCell className="text-right tabular-nums" data-sort-value={(row.total != null) ? (row.total) : null}>
                             {row.total != null ? formatMoney(row.total, row.currency ?? "KES") : "—"}
                           </TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
@@ -299,7 +299,7 @@ export default function ThreeWayMatchPage() {
             </CardHeader>
             <CardContent className="p-0">
               <div className="max-h-[320px] overflow-auto">
-                <Table>
+                <Table dataScope="page">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-10" />
@@ -342,7 +342,7 @@ export default function ThreeWayMatchPage() {
                             {isMatched && <Badge variant="secondary" className="ml-2 text-xs">Matched</Badge>}
                           </TableCell>
                           <TableCell>{row.date?.slice(0, 10)}</TableCell>
-                          <TableCell className="text-right tabular-nums">{formatMoney(row.total ?? 0, row.currency ?? "KES")}</TableCell>
+                          <TableCell className="text-right tabular-nums" data-sort-value={row.total ?? 0}>{formatMoney(row.total ?? 0, row.currency ?? "KES")}</TableCell>
                           <TableCell className="text-right tabular-nums text-muted-foreground">
                             {row.totalWeightKg != null ? `${row.totalWeightKg.toLocaleString()} kg` : "—"}
                           </TableCell>

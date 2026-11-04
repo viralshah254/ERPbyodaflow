@@ -1281,7 +1281,7 @@ export default function MasterProductsPage() {
                 className={cn(
                   "transition-opacity duration-200",
                   loading && "opacity-60",
-                )}
+                )} searchable={false}
               />
             </div>
 

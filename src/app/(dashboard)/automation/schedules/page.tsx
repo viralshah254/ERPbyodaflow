@@ -193,7 +193,7 @@ export default function ScheduledJobsPage() {
               <DataTable<AutomationScheduleRow> data={filtered} columns={columns} emptyMessage="No schedules found."
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
             )}
         </div>

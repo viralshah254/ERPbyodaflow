@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
@@ -447,7 +449,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
                 refreshing ? "opacity-0" : "opacity-100"
               )}
             >
-              <table className="w-full text-sm">
+              <InteractiveTable className="w-full text-sm">
                 <thead className="bg-card">
                   <tr className="border-b">
                     <th className="bg-card text-left py-1.5 pr-4 font-medium text-muted-foreground">
@@ -506,7 +508,7 @@ export function OdaflowProductsSyncPanel({ canSave, productMappingsCount }: Prop
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </InteractiveTable>
             </div>
           )}
         </div>

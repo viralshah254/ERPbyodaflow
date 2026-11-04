@@ -284,10 +284,10 @@ export default function FranchiseInboundOrderDetailPage() {
                         <span className="text-muted-foreground text-xs ml-1">{line.unit}</span>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right tabular-nums" data-sort-value={line.unitPrice}>
                       {formatMoney(line.unitPrice, doc.currency, { decimals: 0 })}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums font-medium">
+                    <TableCell className="text-right tabular-nums font-medium" data-sort-value={line.amount}>
                       {formatMoney(line.amount, doc.currency, { decimals: 0 })}
                     </TableCell>
                   </TableRow>

@@ -181,13 +181,13 @@ export default function StockMovementsPage() {
             </div>
           ) : (
             <div className={LIST_TABLE_SCROLL_BODY_CLASS}>
-              <DataTable<MovementRow>
-                data={pagedRows}
+              <DataTable<MovementRow> dataScope="all"
+                allData={filtered} pageOffset={pageOffset} pageSize={pageSize} onPageOffsetChange={setPageOffset} data={pagedRows}
                 columns={columns}
                 emptyMessage="No movements found."
                 scrollMode="fill"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
+                className="min-h-0 flex-1 border-0" searchable={false}
               />
             </div>
           )}

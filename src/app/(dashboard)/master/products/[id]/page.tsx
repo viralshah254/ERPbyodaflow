@@ -1461,7 +1461,7 @@ export default function ProductDetailPage() {
                           {fmcgTagPrices.map((row) => (
                             <TableRow key={row.id}>
                               <TableCell className="font-medium">{row.name}</TableCell>
-                              <TableCell>
+                              <TableCell data-sort-value={row.price}>
                                 {formatMoney(row.price, row.currency)}
                               </TableCell>
                               <TableCell className="text-muted-foreground">
@@ -1582,7 +1582,7 @@ export default function ProductDetailPage() {
                             <TableCell className="font-medium">{l.name}</TableCell>
                             <TableCell>{l.currency}</TableCell>
                             <TableCell className="text-muted-foreground">{l.channel ?? "—"}</TableCell>
-                            <TableCell>{minEff != null ? formatMoney(minEff, l.currency) : "—"}</TableCell>
+                            <TableCell data-sort-value={(minEff != null) ? (minEff) : null}>{minEff != null ? formatMoney(minEff, l.currency) : "—"}</TableCell>
                             <TableCell>{trs.length}</TableCell>
                           </TableRow>
                         );
@@ -1624,8 +1624,8 @@ export default function ProductDetailPage() {
                               <TableCell>{tier.minQty}</TableCell>
                               <TableCell>{tier.maxQty ?? "∞"}</TableCell>
                               <TableCell>{tier.uom}</TableCell>
-                              <TableCell className="font-medium">{formatMoney(tier.price, currency)}</TableCell>
-                              <TableCell className="text-muted-foreground">
+                              <TableCell className="font-medium" data-sort-value={tier.price}>{formatMoney(tier.price, currency)}</TableCell>
+                              <TableCell className="text-muted-foreground" data-sort-value={(eff != null) ? (eff) : null}>
                                 {eff != null ? formatMoney(eff, currency) : "—"}
                               </TableCell>
                               <TableCell className="space-x-1">

@@ -203,7 +203,7 @@ export function OutletEquipmentTab({
         data={rows}
         columns={columns}
         onRowClick={(r) => router.push(`/assets/register/${r.id}`)}
-        emptyMessage={loading ? "Loading equipment…" : "No HQ assets currently assigned to this outlet."}
+        emptyMessage={loading ? "Loading equipment…" : "No HQ assets currently assigned to this outlet."} searchable={false}
       />
 
       <AddAssetSheet

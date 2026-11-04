@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -458,7 +460,7 @@ function StockTab({ outletOrgId, canWrite }: { outletOrgId: string; canWrite: bo
         />
         <span className="text-xs text-muted-foreground ml-auto">{rows.length} SKU{rows.length !== 1 ? "s" : ""}</span>
       </div>
-      <DataTable data={filtered} columns={columns} emptyMessage={loading ? "Loading stock…" : "No stock records for this outlet."} />
+      <DataTable data={filtered} columns={columns} emptyMessage={loading ? "Loading stock…" : "No stock records for this outlet."} searchable={false} />
 
       {adjusting ? (
         <Sheet open onOpenChange={(open) => !open && setAdjusting(null)}>
@@ -785,7 +787,7 @@ function ReceiptsTab({ outletOrgId }: { outletOrgId: string }) {
           data={visibleInvoices}
           columns={columns}
           onRowClick={openReceipt}
-          emptyMessage={loading ? "Loading receipts…" : "No receipts in this period."}
+          emptyMessage={loading ? "Loading receipts…" : "No receipts in this period."} searchable={false}
         />
       </div>
 
@@ -817,7 +819,7 @@ function ReceiptsTab({ outletOrgId }: { outletOrgId: string }) {
                   )}
                 </div>
                 <div className="rounded-md border overflow-x-auto">
-                  <table className="w-full caption-bottom text-sm">
+                  <InteractiveTable className="w-full caption-bottom text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40">
                         <th className="text-left px-3 py-2 font-medium whitespace-nowrap">SKU</th>
@@ -837,18 +839,18 @@ function ReceiptsTab({ outletOrgId }: { outletOrgId: string }) {
                             {l.productName ?? "—"}
                           </td>
                           <td className="text-right px-2 py-2 tabular-nums">{l.quantity}</td>
-                          <td className="text-right px-2 py-2 tabular-nums">
+                          <td className="text-right px-2 py-2 tabular-nums" data-sort-value={(l.referenceUnitPrice != null) ? (l.referenceUnitPrice) : null}>
                             {l.referenceUnitPrice != null ? formatMoney(l.referenceUnitPrice, detail.currency ?? "KES") : "—"}
                           </td>
-                          <td className="text-right px-2 py-2 tabular-nums font-medium">{formatMoney(l.unitPrice, detail.currency ?? "KES")}</td>
-                          <td className="text-right px-2 py-2 tabular-nums">{formatMoney(l.amount, detail.currency ?? "KES")}</td>
-                          <td className={`text-right px-3 py-2 tabular-nums font-medium ${l.delta > 0.01 ? "text-emerald-600" : l.delta < -0.01 ? "text-destructive" : "text-muted-foreground"}`}>
+                          <td className="text-right px-2 py-2 tabular-nums font-medium" data-sort-value={l.unitPrice}>{formatMoney(l.unitPrice, detail.currency ?? "KES")}</td>
+                          <td className="text-right px-2 py-2 tabular-nums" data-sort-value={l.amount}>{formatMoney(l.amount, detail.currency ?? "KES")}</td>
+                          <td className={`text-right px-3 py-2 tabular-nums font-medium ${l.delta > 0.01 ? "text-emerald-600" : l.delta < -0.01 ? "text-destructive" : "text-muted-foreground"}`} data-sort-value={l.delta}>
                             {formatMoney(l.delta, detail.currency ?? "KES")}
                           </td>
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </InteractiveTable>
                 </div>
                 <p className="text-xs text-muted-foreground">
                   Δ is (sold unit − reference unit) × quantity. Reference is HQ ladder default or POS snapshot at posting.
@@ -943,7 +945,7 @@ function OrdersToHqTab({ outletOrgId }: { outletOrgId: string }) {
             router.push(inboundPrDetailHref(r));
           }
         }}
-        emptyMessage={loading ? "Loading orders…" : "No purchase requests sent to HQ yet."}
+        emptyMessage={loading ? "Loading orders…" : "No purchase requests sent to HQ yet."} searchable={false}
       />
     </div>
   );
@@ -1067,7 +1069,7 @@ function CustomersTab({ outletOrgId }: { outletOrgId: string }) {
         <DataTable<FranchiseCustomerRow>
           data={customers}
           columns={columns}
-          emptyMessage="No customers found."
+          emptyMessage="No customers found." searchable={false}
         />
       )}
       <CustomerHistorySheet

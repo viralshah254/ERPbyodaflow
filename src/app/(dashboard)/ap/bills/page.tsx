@@ -603,7 +603,7 @@ export default function APBillsPage() {
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
-                <DataTable<APBillDisplayRow>
+                <DataTable<APBillDisplayRow> dataScope="page"
                   data={displayRows}
                   columns={columns}
                   scrollMode="natural"
@@ -630,7 +630,7 @@ export default function APBillsPage() {
                   selectedIds={selectedIds}
                   onSelectionChange={(ids) => {
                     setSelectedIds(ids.filter((id) => rows.some((r) => r.id === id && !r.isLandedCostBill)));
-                  }}
+                  }} searchable={false}
                 />
               </div>
             </div>

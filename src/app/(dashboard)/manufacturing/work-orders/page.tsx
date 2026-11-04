@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
@@ -410,14 +412,14 @@ export default function WorkOrdersPage() {
                 tableBusy && "pointer-events-none opacity-60"
               )}
             >
-              <DataTable
+              <DataTable dataScope="page"
                 data={rows}
                 columns={columns}
                 emptyMessage="No work orders match your filters."
                 scrollMode="fill"
                 size="comfortable"
                 className="min-h-0 flex-1 border-0"
-                onRowClick={(r) => router.push(`/manufacturing/work-orders/${encodeURIComponent(r.id)}`)}
+                onRowClick={(r) => router.push(`/manufacturing/work-orders/${encodeURIComponent(r.id)}`)} searchable={false}
               />
             </div>
           </div>
@@ -741,7 +743,7 @@ export default function WorkOrdersPage() {
                     <p className="text-[11px] text-muted-foreground">
                       Click a component for stock. Each line is checked in the input stores you ticked, or in the store named on that BOM component.
                     </p>
-                    <table className="w-full min-w-[32rem] text-xs">
+                    <InteractiveTable className="w-full min-w-[32rem] text-xs" dataScope="page">
                       <thead>
                         <tr className="text-muted-foreground border-b">
                           <th className="text-left py-1 font-medium">Component</th>
@@ -778,7 +780,7 @@ export default function WorkOrdersPage() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </InteractiveTable>
                   </>
                 )}
                 {availLines.length === 0 && !availLoading && (

@@ -521,7 +521,7 @@ export default function InventoryReceiptsPage() {
                 tableBusy && "pointer-events-none opacity-60",
               )}
             >
-              <DataTable<PurchasingDocRow>
+              <DataTable<PurchasingDocRow> dataScope="page"
                 data={rows}
                 columns={columns}
                 scrollMode="fill"
@@ -534,7 +534,7 @@ export default function InventoryReceiptsPage() {
                 }
                 selectable
                 selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
+                onSelectionChange={setSelectedIds} searchable={false}
               />
             </div>
           </div>

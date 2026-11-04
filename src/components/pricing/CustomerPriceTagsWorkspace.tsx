@@ -665,7 +665,7 @@ export function CustomerPriceTagsWorkspace({
                   className={cn(
                     "min-h-0 flex-1 border-0 transition-opacity duration-200",
                     customersSoftLoading && "opacity-60"
-                  )}
+                  )} searchable={false}
                 />
               </div>
             )}
@@ -709,7 +709,7 @@ export function CustomerPriceTagsWorkspace({
                   className={cn(
                     "min-h-0 flex-1 border-0 transition-opacity duration-200",
                     suppliersSoftLoading && "opacity-60"
-                  )}
+                  )} searchable={false}
                 />
               </div>
             )}

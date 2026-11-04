@@ -749,7 +749,7 @@ export default function DocTypeListPage() {
                 tableBusy && "pointer-events-none opacity-60",
               )}
             >
-              <DataTable<DocListRow>
+              <DataTable<DocListRow> dataScope="page"
                 data={rows}
                 columns={columns}
                 scrollMode="fill"
@@ -759,7 +759,7 @@ export default function DocTypeListPage() {
                 emptyMessage={`No ${label.toLowerCase()}s found.`}
                 selectable
                 selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
+                onSelectionChange={setSelectedIds} searchable={false}
               />
             </div>
           </div>

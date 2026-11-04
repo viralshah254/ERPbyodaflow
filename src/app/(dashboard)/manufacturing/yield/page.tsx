@@ -707,13 +707,13 @@ export default function ManufacturingYieldPage() {
               <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                 <TableLinearProgress active={recordsTableBusy} />
                 <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity duration-200", recordsTableBusy && "pointer-events-none opacity-60")}>
-                  <DataTable<YieldRecordRow>
+                  <DataTable<YieldRecordRow> dataScope="page"
                     data={records}
                     columns={yieldColumns}
                     scrollMode="natural"
                     size="comfortable"
                     onRowClick={(row) => router.push(`/manufacturing/yield/${row.id}`)}
-                    emptyMessage="No yield records match your filters. Record yield to add one."
+                    emptyMessage="No yield records match your filters. Record yield to add one." searchable={false}
                   />
                 </div>
               </div>
@@ -796,12 +796,12 @@ export default function ManufacturingYieldPage() {
               <div className="relative flex min-h-0 flex-1 flex-col rounded-xl border bg-card shadow-sm">
                 <TableLinearProgress active={mbTableBusy} />
                 <div className={cn("flex min-h-0 flex-1 flex-col transition-opacity duration-200", mbTableBusy && "pointer-events-none opacity-60")}>
-                  <DataTable<MassBalanceSummaryRow>
+                  <DataTable<MassBalanceSummaryRow> dataScope="page"
                     data={massBalance}
                     columns={massBalanceColumns}
                     scrollMode="natural"
                     size="comfortable"
-                    emptyMessage="No mass balance rows match your filters. Record yield batches to populate this report."
+                    emptyMessage="No mass balance rows match your filters. Record yield batches to populate this report." searchable={false}
                   />
                 </div>
               </div>

@@ -295,7 +295,7 @@ export function CustomerLedger({
                 <TableCell className="text-muted-foreground" colSpan={statement?.branches?.length ? 6 : 5}>
                   Opening balance
                 </TableCell>
-                <TableCell className="text-right font-medium tabular-nums">
+                <TableCell className="text-right font-medium tabular-nums" data-sort-value={(statement) ? (statement.openingBalance) : null}>
                   {statement ? formatMoney(statement.openingBalance, currency) : "—"}
                 </TableCell>
               </TableRow>
@@ -330,13 +330,13 @@ export function CustomerLedger({
                         <span className="mt-0.5 block text-sm">{line.description}</span>
                       ) : null}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right tabular-nums" data-sort-value={(line.debit) ? (line.debit) : null}>
                       {line.debit ? formatMoney(line.debit, line.currency || currency) : "—"}
                     </TableCell>
-                    <TableCell className="text-right tabular-nums">
+                    <TableCell className="text-right tabular-nums" data-sort-value={(line.credit) ? (line.credit) : null}>
                       {line.credit ? formatMoney(line.credit, line.currency || currency) : "—"}
                     </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
+                    <TableCell className="text-right font-medium tabular-nums" data-sort-value={line.balance}>
                       {formatMoney(line.balance, line.currency || currency)}
                     </TableCell>
                   </TableRow>
@@ -353,7 +353,7 @@ export function CustomerLedger({
                   <TableCell colSpan={statement?.branches?.length ? 6 : 5} className="font-medium">
                     Closing balance
                   </TableCell>
-                  <TableCell className="text-right font-semibold tabular-nums">
+                  <TableCell className="text-right font-semibold tabular-nums" data-sort-value={(statement) ? (statement.closingBalance) : null}>
                     {statement ? formatMoney(statement.closingBalance, currency) : "—"}
                   </TableCell>
                 </TableRow>

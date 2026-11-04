@@ -174,7 +174,7 @@ export default function BranchesPage() {
               <DataTable<BranchRow> data={filtered} columns={columns} emptyMessage="No branches found."
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
             )}
         </div>

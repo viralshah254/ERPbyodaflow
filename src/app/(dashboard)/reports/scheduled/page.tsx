@@ -97,7 +97,7 @@ export default function ScheduledReportsPage() {
                       <TableCell className="font-medium">{r.name}</TableCell>
                       <TableCell>{r.reportType}</TableCell>
                       <TableCell className="capitalize">{r.frequency}</TableCell>
-                      <TableCell>{new Date(r.nextRun).toLocaleString()}</TableCell>
+                      <TableCell data-sort-value={r.nextRun}>{new Date(r.nextRun).toLocaleString()}</TableCell>
                       <TableCell className="text-muted-foreground">{r.recipients}</TableCell>
                       <TableCell>
                         <Badge variant={r.enabled ? "default" : "secondary"}>

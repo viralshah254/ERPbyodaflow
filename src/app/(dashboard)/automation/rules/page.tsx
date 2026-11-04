@@ -207,7 +207,7 @@ export default function AutomationRulesPage() {
               emptyMessage={copilotEnabled ? "No rules. Create one or generate with Copilot." : "No rules. Create one."}
               scrollMode="fill"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
+              className="min-h-0 flex-1 border-0" searchable={false}
               />
           )}
         </div>

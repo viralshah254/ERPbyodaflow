@@ -558,7 +558,7 @@ export default function APSuppliersPage() {
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
-                <DataTable<APSupplierRow>
+                <DataTable<APSupplierRow> dataScope="page"
                   data={rows}
                   columns={columns}
                   scrollMode="fill"
@@ -566,7 +566,7 @@ export default function APSuppliersPage() {
                   onRowClick={(row) => {
                     router.push(`/ap/suppliers/${encodeURIComponent(row.id)}`);
                   }}
-                  emptyMessage="No suppliers match your filters."
+                  emptyMessage="No suppliers match your filters." searchable={false}
                 />
               </div>
             </div>

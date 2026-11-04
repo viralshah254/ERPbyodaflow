@@ -8,6 +8,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Input } from './input';
+import { compareTableValues, matchesTableSearch, tableText } from '@/lib/tables/values';
 import { cn } from "@/lib/utils";
 import { isProductNameColumn, CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
@@ -23,39 +25,22 @@ interface Column<T> {
    * `sortValue` is set. Set false for actions / non-data columns.
    */
   sortable?: boolean;
-  sortValue?: (row: T) => string | number | null | undefined;
+  sortValue?: (row: T) => string | number | Date | null | undefined;
+  searchValue?: (row: T) => string | number | null | undefined;
 }
 
 function columnCanSort<T>(col: Column<T>): boolean {
-  if (col.sortable === false) return false;
-  if (col.sortValue) return true;
-  if (typeof col.accessor === "string") return true;
-  return col.sortable === true;
+  return !!col.header.trim() && col.sortable !== false && !/^(actions?|select|selection|checkbox|menu)$/i.test(col.id) && !/^actions?$/i.test(col.header.trim());
 }
-
-function compareSortValues(
-  a: unknown,
-  b: unknown,
-  dir: "asc" | "desc",
-): number {
-  const mul = dir === "asc" ? 1 : -1;
-  if (a == null && b == null) return 0;
-  if (a == null) return 1 * mul;
-  if (b == null) return -1 * mul;
-  if (
-    typeof a === "number" &&
-    typeof b === "number" &&
-    Number.isFinite(a) &&
-    Number.isFinite(b)
-  ) {
-    return (a - b) * mul;
-  }
-  return (
-    String(a).localeCompare(String(b), undefined, {
-      sensitivity: "base",
-      numeric: true,
-    }) * mul
-  );
+function columnValue<T>(col: Column<T>, row: T): React.ReactNode {
+  return typeof col.accessor === 'function' ? col.accessor(row) : row[col.accessor] as React.ReactNode;
+}
+function sortValue<T>(col: Column<T>, row: T): unknown {
+  if (col.sortValue) return col.sortValue(row);
+  if (typeof col.accessor === 'string') return row[col.accessor];
+  const raw = (row as Record<string, unknown>)[col.id];
+  if (raw == null || typeof raw === 'string' || typeof raw === 'number' || raw instanceof Date) { if (raw != null) return raw; }
+  return tableText(columnValue(col, row));
 }
 
 export type DataTableScrollMode = "fixed" | "fill" | "auto" | "natural";
@@ -64,6 +49,17 @@ export type DataTableSortState = { columnId: string; dir: "asc" | "desc" } | nul
 
 interface DataTableProps<T> {
   data: T[];
+  /** Supply the full filtered list when the parent paginates in memory. */
+  allData?: T[];
+  pageOffset?: number;
+  pageSize?: number;
+  onPageOffsetChange?: (offset: number) => void;
+  dataScope?: 'all' | 'page';
+  /** Disable the built-in input when a page already supplies its search toolbar. */
+  searchable?: boolean;
+  search?: string;
+  onSearchChange?: (query: string) => void;
+  searchPlaceholder?: string;
   columns: Column<T>[];
   onRowClick?: (row: T) => void;
   className?: string;
@@ -98,6 +94,15 @@ interface DataTableProps<T> {
 
 export function DataTable<T extends object>({
   data,
+  allData,
+  pageOffset = 0,
+  pageSize,
+  onPageOffsetChange,
+  dataScope = "all",
+  searchable = true,
+  search: searchProp,
+  onSearchChange,
+  searchPlaceholder = "Search table…",
   columns,
   onRowClick,
   className,
@@ -112,24 +117,21 @@ export function DataTable<T extends object>({
   maxVisibleRows = 25,
   size = "default",
 }: DataTableProps<T>) {
+  const [internalSearch, setInternalSearch] = React.useState('');
+  const search = searchProp ?? internalSearch;
   const [internalSort, setInternalSort] = React.useState<DataTableSortState>(null);
   const isSortControlled = onSortChange != null;
   const sort = isSortControlled ? (sortProp ?? null) : internalSort;
 
   const displayData = React.useMemo(() => {
-    if (disableClientSort || !sort) return data;
-    const col = columns.find((c) => c.id === sort.columnId);
-    if (!col || !columnCanSort(col)) return data;
-    const getter: ((row: T) => unknown) | null =
-      col.sortValue ??
-      (typeof col.accessor === "string"
-        ? (row: T) => row[col.accessor as keyof T] as unknown
-        : null);
-    if (!getter) return data;
-    const arr = [...data];
-    arr.sort((a, b) => compareSortValues(getter(a), getter(b), sort.dir));
-    return arr;
-  }, [data, sort, columns, disableClientSort]);
+    const source = allData ?? data;
+    const filtered = search.trim() ? source.filter(row => matchesTableSearch(columns.filter(columnCanSort).map(col => col.searchValue ? col.searchValue(row) : `${tableText(columnValue(col, row))} ${sortValue(col, row) ?? ''}`).join(' '), search)) : source;
+    const page = (rows: T[]) => allData && pageSize ? rows.slice(pageOffset, pageOffset + pageSize) : rows;
+    if (disableClientSort || !sort) return page(filtered);
+    const col = columns.find(c => c.id === sort.columnId);
+    if (!col || !columnCanSort(col)) return page(filtered);
+    return page([...filtered].sort((a, b) => compareTableValues(sortValue(col, a), sortValue(col, b), sort.dir)));
+  }, [data, allData, pageOffset, pageSize, search, sort, columns, disableClientSort]);
 
   const nextSortState = (
     prev: DataTableSortState,
@@ -141,16 +143,9 @@ export function DataTable<T extends object>({
   };
 
   const toggleSort = (columnId: string) => {
+    onPageOffsetChange?.(0);
     const col = columns.find((c) => c.id === columnId);
     if (!col || !columnCanSort(col)) return;
-    if (!isSortControlled) {
-      const getter =
-        col.sortValue ??
-        (typeof col.accessor === "string"
-          ? (row: T) => row[col.accessor as keyof T] as unknown
-          : null);
-      if (!getter) return;
-    }
     if (isSortControlled) {
       onSortChange(nextSortState(sort, columnId));
       return;
@@ -180,8 +175,8 @@ export function DataTable<T extends object>({
 
   const toggleAll = () => {
     if (!onSelectionChange) return;
-    if (allSelected) onSelectionChange([]);
-    else onSelectionChange([...allIds]);
+    if (allSelected) onSelectionChange(selectedIds.filter(id => !allIds.includes(id)));
+    else onSelectionChange([...new Set([...selectedIds, ...allIds])]);
   };
 
   const colSpan = columns.length + (selectable ? 1 : 0);
@@ -236,6 +231,8 @@ export function DataTable<T extends object>({
         className,
       )}
     >
+      {searchable && <div className="flex shrink-0 items-center gap-3 border-b p-3 print:hidden"><Input type="search" aria-label="Search table" placeholder={dataScope === "page" ? "Search this page…" : searchPlaceholder} value={search} onChange={event => { setInternalSearch(event.target.value); onPageOffsetChange?.(0); onSearchChange?.(event.target.value); }} className="max-w-sm" /><span className="text-xs text-muted-foreground" role="status">{displayData.length} of {data.length} rows</span></div>}
+      {dataScope === "page" && <p className="shrink-0 px-3 py-2 text-xs text-muted-foreground print:hidden">Column sorting applies to the loaded page.</p>}
       <div
         className={scrollClassName}
         style={autoMaxHeight ? { maxHeight: autoMaxHeight } : undefined}

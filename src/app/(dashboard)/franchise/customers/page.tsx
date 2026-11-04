@@ -355,7 +355,7 @@ export default function FranchiseCustomersPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <Table>
+              <Table searchable={false}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Customer</TableHead>
@@ -405,13 +405,13 @@ export default function FranchiseCustomersPage() {
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right font-medium tabular-nums">
+                      <TableCell className="text-right font-medium tabular-nums" data-sort-value={row.totalSpend}>
                         {formatMoney(row.totalSpend, "KES")}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {row.orderCount}
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
+                      <TableCell className="text-muted-foreground text-sm" data-sort-value={row.lastPurchase}>
                         {formatDate(row.lastPurchase)}
                       </TableCell>
                       <TableCell>

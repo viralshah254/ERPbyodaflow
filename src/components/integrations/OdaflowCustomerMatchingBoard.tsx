@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -480,7 +482,7 @@ export function OdaflowCustomerMatchingBoard({
               tableBusy ? "opacity-0" : "opacity-100"
             )}
           >
-          <table className="w-full text-sm">
+          <InteractiveTable className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
                 <th className="text-left py-2.5 px-3 font-medium text-muted-foreground">Type</th>
@@ -637,7 +639,7 @@ export function OdaflowCustomerMatchingBoard({
                 );
               })}
             </tbody>
-          </table>
+          </InteractiveTable>
           </div>
         )}
       </div>

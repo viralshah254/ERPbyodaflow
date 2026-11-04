@@ -369,12 +369,12 @@ export default function ARPaymentsPage() {
         ) : (
           <>
             <TableLinearProgress active={fetching} />
-            <DataTable<PaymentRow>
+            <DataTable<PaymentRow> dataScope="page"
               data={payments}
               columns={columns}
               emptyMessage="No payments yet."
               scrollMode="natural"
-              size="comfortable"
+              size="comfortable" searchable={false}
             />
             <TablePagination
               pageOffset={pageOffset}

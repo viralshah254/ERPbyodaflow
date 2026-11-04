@@ -87,7 +87,7 @@ export default function WhtSummaryReportPage() {
                 <TableRow>
                   <TableCell className="font-medium">{summary?.dateFrom?.slice(0, 10) ?? "All time"}</TableCell>
                   <TableCell>{summary?.dateTo?.slice(0, 10) ?? "Current"}</TableCell>
-                  <TableCell className="text-right">{summary ? formatMoney(summary.totalWht, "KES") : "—"}</TableCell>
+                  <TableCell className="text-right" data-sort-value={(summary) ? (summary.totalWht) : null}>{summary ? formatMoney(summary.totalWht, "KES") : "—"}</TableCell>
                   <TableCell className="text-right">{summary?.billCount ?? "—"}</TableCell>
                   <TableCell>KES</TableCell>
                 </TableRow>

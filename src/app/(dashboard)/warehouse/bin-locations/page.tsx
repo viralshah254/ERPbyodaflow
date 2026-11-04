@@ -156,7 +156,7 @@ export default function BinLocationsPage() {
               emptyMessage={!warehouseId ? "Select a warehouse." : "No locations found."}
               scrollMode="fill"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
+              className="min-h-0 flex-1 border-0" searchable={false}
               />
         </div>
       </div>

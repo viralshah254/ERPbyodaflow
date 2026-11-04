@@ -422,13 +422,13 @@ function FranchisorNetworkDashboard() {
             ) : (
               <div className="border-t">
                 <div className={cn("transition-opacity duration-200", tableBusy && "pointer-events-none opacity-60")}>
-                  <DataTable<NetworkOutletRow>
+                  <DataTable<NetworkOutletRow> dataScope="page"
                     data={outlets}
                     columns={columns}
                     emptyMessage={debouncedSearch ? "No outlets match your search." : "No outlets found."}
                     scrollMode="natural"
                     size="comfortable"
-                    className="border-0"
+                    className="border-0" searchable={false}
                   />
                 </div>
                 <TablePagination
@@ -607,10 +607,10 @@ function FranchiseeOutletOverview() {
           {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">Loading branches…</div>
             ) : (
-              <DataTable<BranchRow> data={branches} columns={branchColumns} emptyMessage="No branches found."
+              <DataTable<BranchRow> dataScope="page" data={branches} columns={branchColumns} emptyMessage="No branches found."
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
             )}
         </div>

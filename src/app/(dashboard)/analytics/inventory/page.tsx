@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -124,7 +126,7 @@ export default function AnalyticsInventoryPage() {
             />
             <div className="relative rounded-md border overflow-hidden">
               <TableLinearProgress active={lowStockLoading} />
-              <table className="w-full text-sm">
+              <InteractiveTable className="w-full text-sm" dataScope="page">
                 <thead>
                   <tr className="bg-muted/50">
                     <th className="text-left font-medium px-3 py-2">Product</th>
@@ -161,7 +163,7 @@ export default function AnalyticsInventoryPage() {
                     );
                   })}
                 </tbody>
-              </table>
+              </InteractiveTable>
               {!lowStockLoading && lowStock.length === 0 && (
                 <p className="p-3 text-sm text-muted-foreground">
                   {search ? "No products match that name or barcode." : "No inventory alerts right now."}
@@ -198,7 +200,7 @@ export default function AnalyticsInventoryPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm" dataScope="page">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Warehouse</th>
@@ -211,11 +213,11 @@ export default function AnalyticsInventoryPage() {
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.warehouse}</td>
                     <td className="text-right tabular-nums px-3 py-2">{r.skuCount}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.totalValue, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.totalValue}>{formatMoney(r.totalValue, "KES")}</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
             {(valuation?.summary?.length ?? 0) === 0 && <p className="p-3 text-sm text-muted-foreground">No valuation rows yet.</p>}
           </div>
         </InsightCard>
@@ -230,7 +232,7 @@ export default function AnalyticsInventoryPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm" dataScope="page">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Title</th>
@@ -251,7 +253,7 @@ export default function AnalyticsInventoryPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
             {(insights?.data ?? []).filter((item) => item.type !== "low_stock").length === 0 && (
               <p className="p-3 text-sm text-muted-foreground">No recommendation items right now.</p>
             )}

@@ -120,7 +120,7 @@ export default function FinanceMpesaReconPage() {
                 No unmatched M-Pesa payments in the queue.
               </div>
             ) : (
-              <Table>
+              <Table searchable={false}>
                 <TableHeader>
                   <TableRow>
                     <TableHead>When</TableHead>
@@ -134,12 +134,12 @@ export default function FinanceMpesaReconPage() {
                 <TableBody>
                   {items.map((row) => (
                     <TableRow key={row.id}>
-                      <TableCell className="whitespace-nowrap text-sm">
+                      <TableCell className="whitespace-nowrap text-sm" data-sort-value={row.transactedAt}>
                         {new Date(row.transactedAt).toLocaleString("en-KE")}
                       </TableCell>
                       <TableCell className="font-mono text-xs">{row.transactionId}</TableCell>
                       <TableCell>{row.phone ?? "—"}</TableCell>
-                      <TableCell className="text-right font-medium">
+                      <TableCell className="text-right font-medium" data-sort-value={row.amount}>
                         {formatMoney(row.amount, row.currency ?? "KES")}
                       </TableCell>
                       <TableCell>

@@ -360,7 +360,7 @@ export default function PurchaseReturnsPage() {
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
-                <DataTable<PurchaseReturnRow>
+                <DataTable<PurchaseReturnRow> dataScope="page"
                   data={rows}
                   columns={columns}
                   scrollMode="fill"
@@ -372,7 +372,7 @@ export default function PurchaseReturnsPage() {
                   emptyMessage="No purchase returns match your filters."
                   selectable
                   selectedIds={selectedIds}
-                  onSelectionChange={setSelectedIds}
+                  onSelectionChange={setSelectedIds} searchable={false}
                 />
               </div>
             </div>

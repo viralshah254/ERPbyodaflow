@@ -466,6 +466,7 @@ export async function fetchManufacturingWorkOrder(id: string): Promise<Manufactu
 }
 
 export async function createManufacturingWorkOrder(payload: {
+  requestId?: string;
   productId?: string;
   bomId?: string;
   routingId?: string;

@@ -328,14 +328,14 @@ export default function RoutingPage() {
                 tableBusy && "pointer-events-none opacity-60"
               )}
             >
-              <DataTable<RouteRow>
+              <DataTable<RouteRow> dataScope="page"
                 data={rows}
                 columns={columns}
                 emptyMessage="No routes match your search. Create one to define operation sequences."
                 onRowClick={(r) => void openEditRoute(r.id)}
                 scrollMode="fill"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
+                className="min-h-0 flex-1 border-0" searchable={false}
                 />
             </div>
           </div>

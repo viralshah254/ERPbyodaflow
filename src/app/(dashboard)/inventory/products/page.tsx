@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -598,13 +600,13 @@ export default function ProductsPage() {
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
-                <DataTable<Product>
+                <DataTable<Product> dataScope="page"
                   data={rows}
                   columns={columns}
                   scrollMode="fill"
                   className="border-0 shadow-none"
                   onRowClick={(row) => handleView(row.id)}
-                  emptyMessage="No products match your filters. Create your first product to get started."
+                  emptyMessage="No products match your filters. Create your first product to get started." searchable={false}
                 />
               </div>
             </div>
@@ -672,7 +674,7 @@ export default function ProductsPage() {
                   <p className="text-sm text-muted-foreground">No receipt layers found for remaining stock.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-md border">
-                    <table className="w-full text-sm">
+                    <InteractiveTable className="w-full text-sm" dataScope="page">
                       <thead className="bg-muted/50">
                         <tr className="text-left">
                           <th className="px-3 py-2 font-medium">Warehouse</th>
@@ -692,8 +694,8 @@ export default function ProductsPage() {
                               </div>
                             </td>
                             <td className="px-3 py-2 tabular-nums">{b.quantity.toLocaleString()}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(b.unitCost, b.currency)}</td>
-                            <td className="px-3 py-2 text-right tabular-nums">{formatMoney(b.lineValue, b.currency)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums" data-sort-value={b.unitCost}>{formatMoney(b.unitCost, b.currency)}</td>
+                            <td className="px-3 py-2 text-right tabular-nums" data-sort-value={b.lineValue}>{formatMoney(b.lineValue, b.currency)}</td>
                             <td className="px-3 py-2 align-top">
                               <div className="text-xs text-muted-foreground">{new Date(b.date).toLocaleString()}</div>
                               {b.reference ? <div>{b.reference}</div> : null}
@@ -709,7 +711,7 @@ export default function ProductsPage() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </InteractiveTable>
                   </div>
                 )}
               </>

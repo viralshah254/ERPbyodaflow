@@ -130,7 +130,7 @@ export default function RouteSettlementPage() {
                   }}>Approve</Button>
                 ) : null,
               },
-            ]}
+            ]} searchable={false}
           />
         </div>
       </div>

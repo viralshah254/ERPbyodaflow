@@ -71,7 +71,7 @@ export default function CRMAccountsPage() {
                 { id: "name", header: "Account", accessor: "name" },
                 { id: "reasons", header: "Why it is here", accessor: (row) => row.reasons.join(" ") },
                 { id: "overdue", header: "Overdue", accessor: (row) => row.overdueAmount ? row.overdueAmount.toLocaleString() : "—" },
-              ]}
+              ]} searchable={false}
             />
           </div>
         ) : null}
@@ -102,7 +102,7 @@ export default function CRMAccountsPage() {
                 { id: "phone", header: "Phone", accessor: (row) => row.phone || "—" },
                 { id: "email", header: "Email", accessor: (row) => row.email || "—" },
                 { id: "status", header: "Status", accessor: (row) => row.onHold ? "On hold" : (row.status || "—") },
-              ]}
+              ]} searchable={false}
             />
           </div>
         )}

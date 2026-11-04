@@ -147,7 +147,7 @@ export default function DispatchReturnsPage() {
                 className="sm:w-44"
               />
             </div>
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead>Delivery</TableHead>

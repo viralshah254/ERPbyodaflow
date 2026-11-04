@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -102,7 +104,7 @@ export default function AnalyticsProductsPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Stage</th>
@@ -117,13 +119,13 @@ export default function AnalyticsProductsPage() {
                     <td className="text-right tabular-nums px-3 py-2">
                       {r.amount !== 0 ? (r.amount >= 0 ? "" : "-") + formatMoney(Math.abs(r.amount), "KES") : "—"}
                     </td>
-                    <td className="text-right tabular-nums font-medium px-3 py-2">
+                    <td className="text-right tabular-nums font-medium px-3 py-2" data-sort-value={r.cumulative}>
                       {formatMoney(r.cumulative, "KES")}
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
           </div>
         </InsightCard>
 
@@ -137,7 +139,7 @@ export default function AnalyticsProductsPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">SKU</th>
@@ -156,7 +158,7 @@ export default function AnalyticsProductsPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
           </div>
         </InsightCard>
 
@@ -170,7 +172,7 @@ export default function AnalyticsProductsPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Channel</th>
@@ -183,13 +185,13 @@ export default function AnalyticsProductsPage() {
                 {channelMargin.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.channel}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.revenue, "KES")}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.cogs, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.revenue}>{formatMoney(r.revenue, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.cogs}>{formatMoney(r.cogs, "KES")}</td>
                     <td className="text-right tabular-nums px-3 py-2">{r.marginPct}%</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
           </div>
         </InsightCard>
       </div>

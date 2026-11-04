@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -205,7 +207,7 @@ function RouteActivityList({ routes, empty }: { routes: DistributionRouteRow[]; 
   }
   return (
     <div className="overflow-hidden rounded-lg border">
-      <table className="w-full text-sm">
+      <InteractiveTable className="w-full text-sm">
         <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
           <tr>
             <th className="px-3 py-2 font-medium">Route</th>
@@ -248,7 +250,7 @@ function RouteActivityList({ routes, empty }: { routes: DistributionRouteRow[]; 
             );
           })}
         </tbody>
-      </table>
+      </InteractiveTable>
     </div>
   );
 }

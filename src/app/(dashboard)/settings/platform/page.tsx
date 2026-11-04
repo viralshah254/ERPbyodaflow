@@ -654,7 +654,7 @@ export default function PlatformSettingsPage() {
                 />
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
+                <Table searchable={false}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Organization</TableHead>
@@ -710,7 +710,7 @@ export default function PlatformSettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
+                <Table searchable={false}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tenant</TableHead>
@@ -761,7 +761,7 @@ export default function PlatformSettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
+                <Table searchable={false}>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Action</TableHead>
@@ -779,7 +779,7 @@ export default function PlatformSettingsPage() {
                           <p className="text-xs text-muted-foreground">{row.entityId}</p>
                         </TableCell>
                         <TableCell>{row.who}</TableCell>
-                        <TableCell>{new Date(row.when).toLocaleString()}</TableCell>
+                        <TableCell data-sort-value={row.when}>{new Date(row.when).toLocaleString()}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

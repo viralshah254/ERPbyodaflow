@@ -170,7 +170,7 @@ export default function GoodsReceiptPage() {
                 <DataTable<PurchasingDocRow> data={filtered} columns={columns} onRowClick={(row) => router.push(`/inventory/receipts/${row.id}`)} emptyMessage="No GRNs found."
               scrollMode="fill"
               size="comfortable"
-              className="border-0"
+              className="border-0" searchable={false}
               />
               </div>
             )}

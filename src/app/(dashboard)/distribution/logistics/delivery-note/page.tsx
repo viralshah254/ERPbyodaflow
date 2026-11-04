@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
@@ -136,7 +138,7 @@ export default function LogisticsDeliveryNoteOutboundPage() {
               <CardTitle>Allocation rows</CardTitle>
             </CardHeader>
             <CardContent className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
+              <InteractiveTable className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 pr-3">Trip</th>
@@ -155,19 +157,19 @@ export default function LogisticsDeliveryNoteOutboundPage() {
                       <td className="py-2 pr-3">{named(lineNames, row.lineId, "Line")}</td>
                       <td className="py-2 pr-3">{named(vehicleNames, row.vehicleId, "Vehicle")}</td>
                       <td className="py-2 pr-3">{row.periodKey}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
+                      <td className="py-2 pr-3 text-right tabular-nums" data-sort-value={row.provisionalKes ?? 0}>
                         {formatMoney(row.provisionalKes ?? 0, "KES")}
                       </td>
-                      <td className="py-2 pr-3 text-right tabular-nums">
+                      <td className="py-2 pr-3 text-right tabular-nums" data-sort-value={row.adjustmentKes ?? 0}>
                         {formatMoney(row.adjustmentKes ?? 0, "KES")}
                       </td>
-                      <td className="py-2 text-right tabular-nums">
+                      <td className="py-2 text-right tabular-nums" data-sort-value={row.finalKes ?? row.provisionalKes ?? 0}>
                         {formatMoney(row.finalKes ?? row.provisionalKes ?? 0, "KES")}
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </InteractiveTable>
             </CardContent>
           </Card>
         )}

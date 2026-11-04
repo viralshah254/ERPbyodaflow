@@ -349,15 +349,15 @@ export function OutletPricingTab({
                   <TableRow key={row.productId}>
                     <TableCell className="font-mono text-xs">{row.sku ?? "—"}</TableCell>
                     <TableCell>{row.productName}</TableCell>
-                    <TableCell>
+                    <TableCell data-sort-value={(row.zoneBasePrice != null && row.zoneBasePrice > 0) ? (row.zoneBasePrice) : null}>
                       {row.zoneBasePrice != null && row.zoneBasePrice > 0
                         ? formatMoney(row.zoneBasePrice, row.currency)
                         : "—"}
                     </TableCell>
-                    <TableCell>
+                    <TableCell data-sort-value={(row.commissionPerUnit > 0) ? (row.commissionPerUnit) : null}>
                       {row.commissionPerUnit > 0 ? formatMoney(row.commissionPerUnit, row.currency) : "—"}
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium" data-sort-value={(row.retailPrice != null && row.retailPrice > 0) ? (row.retailPrice) : null}>
                       {row.retailPrice != null && row.retailPrice > 0
                         ? formatMoney(row.retailPrice, row.currency)
                         : "—"}

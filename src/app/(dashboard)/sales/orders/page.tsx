@@ -351,13 +351,13 @@ function FranchiseOrdersTab({ canWrite }: { canWrite: boolean }) {
           columnWidths={["w-28", "w-20", "w-24", "w-40", "w-24", "w-20", "w-24"]}
         />
       ) : (
-        <DataTable<InboundOrderRow>
+        <DataTable<InboundOrderRow> dataScope="page"
           data={rows}
           columns={columns}
           emptyMessage="No inbound orders from franchise outlets."
           onRowClick={(r) => router.push(franchiseInboundDetailHref(r))}
           scrollMode="natural"
-          size="comfortable"
+          size="comfortable" searchable={false}
           />
       )}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

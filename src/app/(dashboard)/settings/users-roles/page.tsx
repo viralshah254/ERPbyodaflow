@@ -546,7 +546,7 @@ export default function UsersRolesPage() {
                                   {req.mobilePersonaLabel}
                                 </div>
                               </TableCell>
-                              <TableCell className="text-sm text-muted-foreground">
+                              <TableCell className="text-sm text-muted-foreground" data-sort-value={req.requestedAt}>
                                 {new Date(req.requestedAt).toLocaleString()}
                               </TableCell>
                               <TableCell className="text-right">

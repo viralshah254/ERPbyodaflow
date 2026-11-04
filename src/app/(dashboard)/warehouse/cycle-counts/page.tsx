@@ -122,7 +122,7 @@ export default function CycleCountsPage() {
               emptyMessage={loading ? "Loading cycle counts..." : "No cycle count sessions."}
               scrollMode="fill"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
+              className="min-h-0 flex-1 border-0" searchable={false}
               />
         </div>
       </div>

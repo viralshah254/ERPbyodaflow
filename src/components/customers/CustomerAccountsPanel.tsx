@@ -585,7 +585,7 @@ export function CustomerAccountsPanel({
               }}
               emptyMessage="No customers found."
               scrollMode="natural"
-              size="comfortable"
+              size="comfortable" searchable={false}
             />
             <TablePagination
               className={LIST_TABLE_PAGINATION_CLASS}

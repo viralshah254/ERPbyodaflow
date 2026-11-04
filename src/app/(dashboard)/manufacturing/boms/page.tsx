@@ -313,14 +313,14 @@ export default function BomsPage() {
                 tableBusy && "pointer-events-none opacity-60"
               )}
             >
-              <DataTable<BomRow>
+              <DataTable<BomRow> dataScope="page"
                 data={rows}
                 columns={columns}
                 emptyMessage="No BOMs match your filters. Create one to get started."
                 onRowClick={(r) => router.push(`/manufacturing/boms/${encodeURIComponent(r.id)}`)}
                 scrollMode="fill"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
+                className="min-h-0 flex-1 border-0" searchable={false}
                 />
             </div>
           </div>

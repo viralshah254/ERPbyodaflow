@@ -266,7 +266,7 @@ export default function ProjectDetailPage() {
                     <TableCell className="text-right">
                       {entry.unit === "HOURS" ? `${(entry.quantity ?? 0).toFixed(1)}h` : "—"}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" data-sort-value={(entry.unit === "HOURS") ? (entry.rate ?? 0) : null}>
                       {entry.unit === "HOURS" ? formatMoney(entry.rate ?? 0, entry.currency) : "—"}
                     </TableCell>
                     <TableCell>
@@ -278,7 +278,7 @@ export default function ProjectDetailPage() {
                             : "Project default"
                         : "—"}
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right" data-sort-value={(entry.unit === "HOURS") ? (entry.amount) : (entry.amount)}>
                       {entry.unit === "HOURS" ? formatMoney(entry.amount, entry.currency) : formatMoney(entry.amount, entry.currency)}
                     </TableCell>
                     <TableCell>{entry.status}</TableCell>

@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -157,7 +159,7 @@ export default function ArAgingPage() {
             </div>
           ) : (
             <div className="min-h-0 flex-1 overflow-auto">
-              <table className="w-full text-sm">
+              <InteractiveTable className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-card">
                   <tr className="border-b bg-muted/40">
                     <th className="px-4 py-2 text-left font-medium">Customer</th>
@@ -205,7 +207,7 @@ export default function ArAgingPage() {
                     <td className="px-4 py-2 text-right">{fmt(data.totals.total)}</td>
                   </tr>
                 </tfoot>
-              </table>
+              </InteractiveTable>
             </div>
           )}
         </div>

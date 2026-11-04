@@ -1,7 +1,12 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
 
 import * as React from "react";
+import { useAuthStore } from "@/stores/auth-store";
+import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { ProductionOutputEntry } from "@/components/manufacturing/ProductionOutputEntry";
 import Link from "next/link";
 import { LIST_TABLE_WORKLIST_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -128,6 +133,11 @@ function plannedNameList(rowsById: Record<string, ProductionPlanRow>, qtyById: R
 }
 
 export default function ProductionPlanPage() {
+  const orgId = useAuthStore((s) => s.org?.orgId);
+  return orgId === JOY_SUPERBAKERS_ORG_ID ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
+}
+
+function PlannedProductionPage() {
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const canWrite = useCanWriteManufacturing();
@@ -640,7 +650,7 @@ export default function ProductionPlanPage() {
           <div className={LIST_TABLE_WORKLIST_CLASS}>
             <TableLinearProgress active={tableBusy} />
             <div className={cn("flex min-h-0 flex-1 flex-col", tableBusy && "pointer-events-none opacity-60")}>
-            <DataTable
+            <DataTable dataScope="page"
               data={pagedDefaults}
               columns={packColumns}
               emptyMessage={
@@ -654,7 +664,7 @@ export default function ProductionPlanPage() {
               }
               scrollMode="fill"
               className="min-h-0 flex-1 border-0 shadow-none"
-              size="comfortable"
+              size="comfortable" searchable={false}
             />
             </div>
             {tableTotal > 0 ? (
@@ -684,9 +694,9 @@ export default function ProductionPlanPage() {
               <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Total formula & material requirements</h2><p className="mt-1 text-sm text-muted-foreground">Full formula quantities are separate from the materials still needed after using existing semi-finished stock.</p>{calculatedAt && <p className="mt-2 text-xs text-muted-foreground">Calculated {new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", dateStyle: "medium", timeStyle: "short" }).format(calculatedAt)} EAT</p>}</div><Button variant="outline" onClick={() => { if (!calculatedAt) return; try { printProductionPlan(plan, calculatedAt); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not print plan"); } }}><Icons.Printer className="mr-2 h-4 w-4" />Print / save plan PDF</Button></div>
               <div className="relative max-w-lg"><Icons.Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input aria-label="Search formula ingredients" placeholder="Search ingredient or material SKU…" className="pl-9" value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} /></div>
               <h3 className="text-sm font-semibold">Full formula · before using intermediate stock</h3>
-              <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Ingredient</th><th className="p-3 text-right">Total formula quantity</th><th className="p-3 text-left">Unit</th></tr></thead><tbody>{visibleFormula.map((row) => <tr key={JSON.stringify([row.productId, row.uom])} className="border-t"><td className="p-3">{row.productName}</td><td className="p-3 text-right font-medium tabular-nums">{row.quantity.toLocaleString("en-KE", { maximumFractionDigits: 3 })}</td><td className="p-3">{row.uom}</td></tr>)}{!visibleFormula.length && <tr><td colSpan={3} className="p-4 text-muted-foreground">{materialSearch ? "No matching ingredients." : "No purchased ingredients in this recipe."}</td></tr>}</tbody></table></div>
+              <div className="overflow-x-auto rounded-lg border"><InteractiveTable className="w-full text-sm" dataScope="page"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Ingredient</th><th className="p-3 text-right">Total formula quantity</th><th className="p-3 text-left">Unit</th></tr></thead><tbody>{visibleFormula.map((row) => <tr key={JSON.stringify([row.productId, row.uom])} className="border-t"><td className="p-3">{row.productName}</td><td className="p-3 text-right font-medium tabular-nums">{row.quantity.toLocaleString("en-KE", { maximumFractionDigits: 3 })}</td><td className="p-3">{row.uom}</td></tr>)}{!visibleFormula.length && <tr><td colSpan={3} className="p-4 text-muted-foreground">{materialSearch ? "No matching ingredients." : "No purchased ingredients in this recipe."}</td></tr>}</tbody></InteractiveTable></div>
               <h3 className="text-sm font-semibold">Purchased materials for new batches · includes materials already on hand</h3>
-              <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/50"><tr>{["Material", "Required", "On hand", "Short to buy", "Unit"].map((label) => <th key={label} className="p-3 text-left">{label}</th>)}</tr></thead><tbody>{materialRows.map((row) => <tr key={row.productId} className="border-t"><td className="p-3"><ProductStockLink row={row} /></td><td className="p-3 tabular-nums">{row.requiredQty}</td><td className="p-3 tabular-nums">{row.onHandQty}</td><td className={cn("p-3 tabular-nums", warehouseShortfall(row) > 0 && "font-semibold text-amber-600 dark:text-amber-400")}>{warehouseShortfall(row)}</td><td className="p-3">{row.uom}</td></tr>)}{!materialRows.length && <tr><td colSpan={5} className="p-4 text-muted-foreground">No matching purchased material requirements.</td></tr>}</tbody></table></div>
+              <div className="overflow-x-auto rounded-lg border"><InteractiveTable className="w-full text-sm" dataScope="page"><thead className="bg-muted/50"><tr>{["Material", "Required", "On hand", "Short to buy", "Unit"].map((label) => <th key={label} className="p-3 text-left">{label}</th>)}</tr></thead><tbody>{materialRows.map((row) => <tr key={row.productId} className="border-t"><td className="p-3"><ProductStockLink row={row} /></td><td className="p-3 tabular-nums">{row.requiredQty}</td><td className="p-3 tabular-nums">{row.onHandQty}</td><td className={cn("p-3 tabular-nums", warehouseShortfall(row) > 0 && "font-semibold text-amber-600 dark:text-amber-400")}>{warehouseShortfall(row)}</td><td className="p-3">{row.uom}</td></tr>)}{!materialRows.length && <tr><td colSpan={5} className="p-4 text-muted-foreground">No matching purchased material requirements.</td></tr>}</tbody></InteractiveTable></div>
               <p className="text-xs text-muted-foreground">Quantities stay separate by ingredient and unit. This PDF is a planning preview. After preparing the batches, print the saved production packet for the floor. In the print dialog, choose Save as PDF.</p>
             </section>
             <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
@@ -771,12 +781,12 @@ export default function ProductionPlanPage() {
                   stock levels.
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                  <DataTable
+                  <DataTable dataScope="page"
                     data={componentRows}
                     columns={makeColumns}
                     emptyMessage="Nothing to make for this pack qty."
                     scrollMode="natural"
-                    size="comfortable"
+                    size="comfortable" searchable={false}
                   />
                 </div>
               </div>
@@ -791,7 +801,7 @@ export default function ProductionPlanPage() {
                     : "Only purchased items that are short on the shelf (inputs, packaging). Made items never belong here."}
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                  <DataTable
+                  <DataTable dataScope="page"
                     data={buyShortRows}
                     columns={buyColumns}
                     emptyMessage={
@@ -800,7 +810,7 @@ export default function ProductionPlanPage() {
                         : "Nothing to buy. Purchased inputs and packaging for this plan are already on the shelf. If a made item is short, raise it under Make in production."
                     }
                     scrollMode="natural"
-                    size="comfortable"
+                    size="comfortable" searchable={false}
                   />
                 </div>
               </div>
@@ -813,12 +823,12 @@ export default function ProductionPlanPage() {
                   The entered quantity is new output to produce. Existing finished stock does not reduce it. Prefill from sales instead suggests only the uncovered sales demand.
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                  <DataTable
+                  <DataTable dataScope="page"
                     data={packResultRows}
                     columns={packResultColumns}
                     emptyMessage="No pack lines."
                     scrollMode="natural"
-                    size="comfortable"
+                    size="comfortable" searchable={false}
                   />
                 </div>
               </div>

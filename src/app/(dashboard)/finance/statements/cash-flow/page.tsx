@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 import { useAuthStore } from "@/stores/auth-store";
 import { FinancialStatementExport } from "@/components/reports/FinancialStatementExport";
 
@@ -178,7 +180,7 @@ export default function CashFlowPage() {
 
           {statement && (
             <div className="overflow-hidden rounded-md border">
-              <table className="w-full text-sm">
+              <InteractiveTable searchable={false} sortable={false} className="w-full text-sm">
                 <tbody>
                   {statement.sections.map((section, idx) => {
                     const isNet = section.key === "net";
@@ -240,7 +242,7 @@ export default function CashFlowPage() {
                     );
                   })}
                 </tbody>
-              </table>
+              </InteractiveTable>
             </div>
           )}
 
@@ -264,7 +266,7 @@ export default function CashFlowPage() {
                 <p className="px-4 py-3 text-sm text-muted-foreground">No posted transactions for this selection.</p>
               )}
               {!drilldownLoading && drilldownItems.length > 0 && (
-                <table className="w-full text-xs">
+                <InteractiveTable className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/50 text-muted-foreground">
                       <th className="px-4 py-2 text-left font-medium">Date</th>
@@ -277,23 +279,23 @@ export default function CashFlowPage() {
                   <tbody>
                     {drilldownItems.map((item) => (
                       <tr key={item.rowId ?? item.postingLineId} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-1.5 tabular-nums">
+                        <td className="px-4 py-1.5 tabular-nums" data-sort-value={item.postingDate}>
                           {new Date(item.postingDate).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-1.5">{item.documentNumber ?? item.sourceNumber}</td>
                         <td className="px-4 py-1.5 text-muted-foreground">
                           {item.accountCode ? `${item.accountCode} · ` : ""}{item.accountName ?? "—"}{item.reference && <p className="mt-1 text-xs">{item.reference}</p>}
                         </td>
-                        <td className="px-4 py-1.5 text-right tabular-nums">
+                        <td className="px-4 py-1.5 text-right tabular-nums" data-sort-value={(item.debit > 0) ? (item.debit) : null}>
                           {item.debit > 0 ? formatMoney(item.debit, baseCurrency) : ""}
                         </td>
-                        <td className="px-4 py-1.5 text-right tabular-nums">
+                        <td className="px-4 py-1.5 text-right tabular-nums" data-sort-value={(item.credit > 0) ? (item.credit) : null}>
                           {item.credit > 0 ? formatMoney(item.credit, baseCurrency) : ""}
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </InteractiveTable>
               )}
             </div>
           )}

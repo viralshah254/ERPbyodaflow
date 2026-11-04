@@ -85,7 +85,7 @@ export default function FranchiseChaseListPage() {
                       </TableCell>
                       <TableCell>{row.assignedOutletName ?? row.assignedOutletOrgId ?? "—"}</TableCell>
                       <TableCell>{row.bdRepName ?? "—"}</TableCell>
-                      <TableCell className="text-sm whitespace-nowrap">
+                      <TableCell className="text-sm whitespace-nowrap" data-sort-value={(row.capturedAt) ? (row.capturedAt) : (row.createdAt)}>
                         {row.capturedAt
                           ? new Date(row.capturedAt).toLocaleString("en-KE")
                           : new Date(row.createdAt).toLocaleString("en-KE")}

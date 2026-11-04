@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
@@ -253,7 +255,7 @@ export default function LogisticsFuelAuditPage() {
             {rows.length === 0 ? (
               <p className="text-sm text-muted-foreground">No rows yet. Log fuel above or from dispatch mobile.</p>
             ) : (
-              <table className="w-full text-sm border-collapse">
+              <InteractiveTable className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b text-left text-muted-foreground">
                     <th className="py-2 pr-3">Recorded</th>
@@ -268,7 +270,7 @@ export default function LogisticsFuelAuditPage() {
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id} className="border-b border-muted/60">
-                      <td className="py-2 pr-3 whitespace-nowrap">
+                      <td className="py-2 pr-3 whitespace-nowrap" data-sort-value={r.recordedAt}>
                         {new Date(r.recordedAt).toLocaleString(undefined, {
                           dateStyle: "medium",
                           timeStyle: "short",
@@ -278,12 +280,12 @@ export default function LogisticsFuelAuditPage() {
                       <td className="py-2 pr-3">{tripLabel(r)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{r.odometerKm ?? "—"}</td>
                       <td className="py-2 pr-3 text-right tabular-nums">{r.litres ?? "—"}</td>
-                      <td className="py-2 pr-3 text-right">{formatMoney(r.amount ?? 0, r.currency ?? "KES")}</td>
+                      <td className="py-2 pr-3 text-right" data-sort-value={r.amount ?? 0}>{formatMoney(r.amount ?? 0, r.currency ?? "KES")}</td>
                       <td className="py-2 text-muted-foreground max-w-xs truncate">{r.note ?? ""}</td>
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </InteractiveTable>
             )}
           </CardContent>
         </Card>

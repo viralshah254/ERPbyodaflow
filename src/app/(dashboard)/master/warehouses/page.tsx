@@ -246,7 +246,7 @@ export default function MasterWarehousesPage() {
             emptyMessage={`No ${warehouseLabel.toLowerCase()}s.`}
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
         )}
       </div>

@@ -114,13 +114,13 @@ export default function CashflowPage() {
                   <TableRow key={r.id}>
                     <TableCell className="font-medium">{r.date}</TableCell>
                     <TableCell>{r.description}</TableCell>
-                    <TableCell className="text-green-600 dark:text-green-400">
+                    <TableCell className="text-green-600 dark:text-green-400" data-sort-value={(r.inflow > 0) ? (r.inflow) : null}>
                       {r.inflow > 0 ? formatMoney(r.inflow, r.currency) : "—"}
                     </TableCell>
-                    <TableCell className="text-destructive">
+                    <TableCell className="text-destructive" data-sort-value={(r.outflow > 0) ? (r.outflow) : null}>
                       {r.outflow > 0 ? formatMoney(r.outflow, r.currency) : "—"}
                     </TableCell>
-                    <TableCell>{formatMoney(r.balance, r.currency)}</TableCell>
+                    <TableCell data-sort-value={r.balance}>{formatMoney(r.balance, r.currency)}</TableCell>
                     <TableCell>
                       {r.sourceDoc ? (
                         <Button

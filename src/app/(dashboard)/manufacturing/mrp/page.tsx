@@ -383,7 +383,7 @@ export default function MrpPage() {
                 tableBusy && "pointer-events-none opacity-60"
               )}
             >
-              <DataTable
+              <DataTable dataScope="page"
                 data={rows}
                 columns={columns}
                 emptyMessage={
@@ -392,7 +392,7 @@ export default function MrpPage() {
                     : "No shortages match your filters."
                 }
                 scrollMode="natural"
-                size="comfortable"
+                size="comfortable" searchable={false}
                 />
             </div>
           </div>

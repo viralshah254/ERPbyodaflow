@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
@@ -27,7 +29,7 @@ export default function AnalyticsSettingsPage() {
           </CardHeader>
           <CardContent>
             <div className="rounded-md border overflow-hidden">
-              <table className="w-full text-sm">
+              <InteractiveTable className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50">
                     <th className="text-left font-medium px-3 py-2">Key</th>
@@ -51,7 +53,7 @@ export default function AnalyticsSettingsPage() {
                     );
                   })}
                 </tbody>
-              </table>
+              </InteractiveTable>
             </div>
           </CardContent>
         </Card>

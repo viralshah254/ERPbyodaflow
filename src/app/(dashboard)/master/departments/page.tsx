@@ -330,7 +330,7 @@ export default function MasterDepartmentsPage() {
               className={cn(
                 "min-h-0 flex-1 border-0 transition-opacity duration-200",
                 showSoftProgress && "opacity-60",
-              )}
+              )} searchable={false}
             />
           </div>
         )}

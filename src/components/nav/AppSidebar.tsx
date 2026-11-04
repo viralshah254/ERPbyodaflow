@@ -103,6 +103,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
   const navParams = React.useMemo(
     () => ({
       ctxOrgType,
+      orgId: org?.orgId,
       orgOrgType: org?.orgType,
       enabledModules,
       featureFlags: featureFlags ?? {},
@@ -115,6 +116,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     }),
     [
       ctxOrgType,
+      org?.orgId,
       org?.orgType,
       enabledModules,
       featureFlags,

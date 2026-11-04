@@ -272,9 +272,9 @@ export default function PayRunDetailPage() {
                 {lines.map((l) => (
                   <TableRow key={l.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openLine(l)}>
                     <TableCell className="font-medium">{l.employeeName}{l.piecework && <p className="text-xs font-normal text-muted-foreground">Output {l.piecework.quantity} × {formatMoney(l.piecework.rate, l.currency)} per unit</p>}</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.gross, l.currency)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.statutoryTotal, l.currency)}</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.net, l.currency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.gross}>{formatMoney(l.gross, l.currency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.statutoryTotal}>{formatMoney(l.statutoryTotal, l.currency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.net}>{formatMoney(l.net, l.currency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

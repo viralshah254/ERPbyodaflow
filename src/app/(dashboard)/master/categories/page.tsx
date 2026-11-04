@@ -345,7 +345,7 @@ export default function MasterCategoriesPage() {
               className={cn(
                 "transition-opacity duration-200",
                 showSoftProgress && "opacity-60",
-              )}
+              )} searchable={false}
             />
           </div>
         )}

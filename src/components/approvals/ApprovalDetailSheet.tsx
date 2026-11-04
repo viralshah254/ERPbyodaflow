@@ -128,7 +128,7 @@ export function ApprovalDetailSheet({
                         <TableCell className="text-right text-sm py-2">
                           {line.qty != null ? `${line.qty} ${line.unit ?? ""}` : "—"}
                         </TableCell>
-                        <TableCell className="text-right text-sm tabular-nums py-2">
+                        <TableCell className="text-right text-sm tabular-nums py-2" data-sort-value={(line.amount != null) ? (line.amount) : null}>
                           {line.amount != null ? formatMoney(line.amount, currency) : "—"}
                         </TableCell>
                       </TableRow>

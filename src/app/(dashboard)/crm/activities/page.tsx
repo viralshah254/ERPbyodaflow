@@ -149,7 +149,7 @@ export default function CRMActivitiesPage() {
               <DataTable<CrmActivityRow> data={filtered} columns={columns} emptyMessage="No activities found."
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
             )}
         </div>

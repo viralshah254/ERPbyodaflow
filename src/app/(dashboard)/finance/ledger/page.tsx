@@ -226,12 +226,12 @@ export default function LedgerPage() {
             {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           </CardHeader>
           <CardContent className="p-0">
-            <DataTable<LedgerEntry>
+            <DataTable<LedgerEntry> dataScope="page"
               data={entries}
               columns={columns}
               emptyMessage={loading ? "Loading entries…" : "No ledger entries found."}
               scrollMode="natural"
-              size="comfortable"
+              size="comfortable" searchable={false}
             />
           </CardContent>
         </Card>

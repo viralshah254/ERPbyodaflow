@@ -790,14 +790,14 @@ export default function StockLevelsPage() {
                 (fetching || searchInput.trim() !== searchQuery) ? "pointer-events-none opacity-60" : ""
               }`}
             >
-              <DataTable
-                data={pagedItems}
+              <DataTable dataScope="all"
+                allData={filteredItems} pageOffset={pageOffset} pageSize={pageSize} onPageOffsetChange={setPageOffset} data={pagedItems}
                 columns={columns}
                 onRowClick={(row) => openStockDetail(row)}
                 emptyMessage="No stock items found. Made SKUs only appear after a work order is completed (or Stock In for opening)."
                 scrollMode="fill"
                 size="comfortable"
-                className="min-h-0 flex-1 border-0"
+                className="min-h-0 flex-1 border-0" searchable={false}
               />
             </div>
           )}

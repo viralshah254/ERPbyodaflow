@@ -287,7 +287,7 @@ export default function SalesDeliveriesPage() {
         {loading ? (
           <SkeletonDataTable rows={PAGE_SIZE} columnWidths={["w-20", "w-24", "w-36", "w-28", "w-24"]} />
         ) : (
-          <DataTable<SalesDocRow>
+          <DataTable<SalesDocRow> dataScope="page"
             data={rows}
             columns={columns}
             onRowClick={(row) => router.push(`/docs/delivery-note/${row.id}`)}
@@ -297,7 +297,7 @@ export default function SalesDeliveriesPage() {
             onSelectionChange={setSelectedIds}
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
         )}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

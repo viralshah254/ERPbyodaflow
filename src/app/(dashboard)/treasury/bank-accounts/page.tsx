@@ -173,7 +173,7 @@ export default function BankAccountsPage() {
             emptyMessage={loading ? "Loading bank accounts..." : "No bank accounts."}
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
           />
         </div>
       </div>

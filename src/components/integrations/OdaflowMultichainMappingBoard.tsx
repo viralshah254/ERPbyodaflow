@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import * as Icons from "lucide-react";
@@ -118,7 +120,7 @@ export function OdaflowMultichainMappingBoard({
         </div>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <InteractiveTable className="w-full text-sm">
             <thead>
               <tr className="border-b">
                 <th className="text-left py-2 pr-4 font-medium text-muted-foreground">SFA supermarket</th>
@@ -219,7 +221,7 @@ export function OdaflowMultichainMappingBoard({
                 );
               })}
             </tbody>
-          </table>
+          </InteractiveTable>
         </div>
       )}
     </div>

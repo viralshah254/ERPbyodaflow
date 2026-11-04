@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -68,7 +70,7 @@ export default function AnalyticsFinancePage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">Invoice</th>
@@ -88,12 +90,12 @@ export default function AnalyticsFinancePage() {
                     </td>
                     <td className="px-3 py-2">{r.customerCategory ?? "—"}</td>
                     <td className="px-3 py-2">{r.channel ?? "—"}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.amount ?? 0, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.amount ?? 0}>{formatMoney(r.amount ?? 0, "KES")}</td>
                     <td className="text-right tabular-nums px-3 py-2">{r.dueDate ? String(r.dueDate).slice(0, 10) : "—"}</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
             {rows.length === 0 && <p className="p-3 text-sm text-muted-foreground">No overdue finance insights right now.</p>}
           </div>
         </InsightCard>

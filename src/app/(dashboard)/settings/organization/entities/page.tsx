@@ -122,7 +122,7 @@ export default function EntitiesPage() {
               emptyMessage={loading ? "Loading entities..." : "No entities."}
               scrollMode="fill"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
+              className="min-h-0 flex-1 border-0" searchable={false}
               />
         </div>
       </div>

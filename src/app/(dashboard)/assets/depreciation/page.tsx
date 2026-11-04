@@ -125,8 +125,8 @@ export default function DepreciationPage() {
                   <TableRow key={line.id}>
                     <TableCell className="font-medium">{line.accountCode} — {line.accountName}</TableCell>
                     <TableCell>{line.description}</TableCell>
-                    <TableCell className="text-right">{line.debit > 0 ? formatMoney(line.debit, "KES") : "—"}</TableCell>
-                    <TableCell className="text-right">{line.credit > 0 ? formatMoney(line.credit, "KES") : "—"}</TableCell>
+                    <TableCell className="text-right" data-sort-value={(line.debit > 0) ? (line.debit) : null}>{line.debit > 0 ? formatMoney(line.debit, "KES") : "—"}</TableCell>
+                    <TableCell className="text-right" data-sort-value={(line.credit > 0) ? (line.credit) : null}>{line.credit > 0 ? formatMoney(line.credit, "KES") : "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

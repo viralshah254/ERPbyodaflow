@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 import * as React from "react";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
@@ -43,7 +45,7 @@ export default function NotesWorkspace() {
       <p className="text-sm text-muted-foreground">{TYPES.find((entry) => entry.key === type)?.effect} Open the original invoice or bill to create a linked correction with its remaining quantities and tax references.</p>
       <Input aria-label="Search notes" placeholder="Search note number or party" value={search} onChange={(e) => { setSearch(e.target.value); setCursor(null); setHistory([]); }} />
       {error && <p role="alert" className="text-destructive">{error}</p>}
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-3">Number</th><th>Date</th><th>Party</th><th>Amount</th><th>Status</th><th>Tax reference</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b"><td className="p-3"><Link href={`/docs/${type}/${encodeURIComponent(row.id)}`} className="underline">{row.number}</Link></td><td>{row.date}</td><td>{row.party}</td><td>{formatMoney(row.total ?? 0, row.currency ?? "KES")}</td><td>{row.status}</td><td>{row.cuInvoiceNumber || row.supplierCuInvoiceNumber || "Pending"}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm" dataScope="page"><thead><tr className="border-b text-left"><th className="p-3">Number</th><th>Date</th><th>Party</th><th>Amount</th><th>Status</th><th>Tax reference</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id} className="border-b"><td className="p-3"><Link href={`/docs/${type}/${encodeURIComponent(row.id)}`} className="underline">{row.number}</Link></td><td>{row.date}</td><td>{row.party}</td><td data-sort-value={row.total ?? 0}>{formatMoney(row.total ?? 0, row.currency ?? "KES")}</td><td>{row.status}</td><td>{row.cuInvoiceNumber || row.supplierCuInvoiceNumber || "Pending"}</td></tr>)}</tbody></InteractiveTable></div>
       <p role="status" className="text-sm text-muted-foreground">{loading ? "Loading notes…" : !error && rows.length === 0 ? "No notes match this view." : ""}</p>
       <div className="flex gap-2"><Button variant="outline" disabled={loading || history.length === 0} onClick={() => { setCursor(history[history.length - 1] ?? null); setHistory((items) => items.slice(0, -1)); }}>Previous</Button><Button variant="outline" disabled={loading || !next} onClick={() => { setHistory((items) => [...items, cursor]); setCursor(next); }}>Next</Button></div>
     </div></PageShell>;

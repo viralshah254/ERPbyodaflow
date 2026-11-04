@@ -159,7 +159,7 @@ export default function CollectionsPage() {
             emptyMessage={loading ? "Loading overdue invoices..." : "No overdue invoices."}
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
           />
         </div>
       </div>

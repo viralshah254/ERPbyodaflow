@@ -1,3 +1,4 @@
+import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
 import { buildVisibleNav, NAV_SECTIONS_CONFIG } from "@/config/navigation";
 import type { ResolvedNavSection } from "@/config/navigation";
 import type {
@@ -49,6 +50,7 @@ function toTemplateOrgType(orgType: string | undefined): TemplateOrgType | null 
 }
 
 export type ComputeDashboardSidebarSectionsParams = {
+  orgId?: string;
   ctxOrgType: TemplateOrgType | null;
   orgOrgType: string | undefined;
   enabledModules: ModuleKey[];
@@ -100,6 +102,11 @@ export function computeDashboardSidebarSections(params: ComputeDashboardSidebarS
     templateId: templateId ?? template?.id ?? null,
   });
 
+  if (params.orgId === JOY_SUPERBAKERS_ORG_ID) {
+    for (const section of sections) {
+      section.items = section.items.map((item) => item.key === "manufacturing-production-plan" ? { ...item, label: "Record production" } : item);
+    }
+  }
   if (!isFranchiseePersona) return sections;
 
   const PURCHASING_ALLOWED = new Set(["purchasing-requests", "purchasing-orders"]);

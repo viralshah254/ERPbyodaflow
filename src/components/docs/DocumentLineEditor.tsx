@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -1466,7 +1468,7 @@ export function DocumentLineEditor({
       ) : (
         <div className="min-w-0 space-y-2">
           <div className="min-w-0 overflow-hidden rounded-md border">
-            <table className="w-full table-fixed border-collapse text-sm">
+            <InteractiveTable className="w-full table-fixed border-collapse text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="w-24 px-2 py-2 font-medium">Item</th>
@@ -1598,7 +1600,7 @@ export function DocumentLineEditor({
                       <span className="block truncate text-sm tabular-nums">{formatMoney(l.price, currency)}</span>
                     )}
                   </td>
-                  <td className="px-2 py-2">
+                  <td className="px-2 py-2" data-sort-value={l.amount}>
                     <span className="block truncate text-sm font-medium tabular-nums">
                       {formatMoney(l.amount, currency)}
                     </span>
@@ -1698,7 +1700,7 @@ export function DocumentLineEditor({
             );
           })}
               </tbody>
-            </table>
+            </InteractiveTable>
           </div>
           <div className="mt-4 flex justify-end">
             <dl className="w-full max-w-xs space-y-1.5 text-sm">

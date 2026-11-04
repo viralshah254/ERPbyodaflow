@@ -111,7 +111,7 @@ export default function ExportsPage() {
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.name}</TableCell>
                       <TableCell className="uppercase">{r.format}</TableCell>
-                      <TableCell>{new Date(r.createdAt).toLocaleString()}</TableCell>
+                      <TableCell data-sort-value={r.createdAt}>{new Date(r.createdAt).toLocaleString()}</TableCell>
                       <TableCell>
                         <Badge variant={r.status === "completed" ? "default" : r.status === "failed" ? "destructive" : "secondary"}>
                           {r.status}

@@ -38,3 +38,6 @@ next-env.d.ts
 
 # Internal documentation at the repo root. Do not ignore app routes or src/lib/docs.
 /docs/
+
+# Numbered Finder/iCloud duplicate snapshots; canonical files are authoritative.
+* [2-9].*

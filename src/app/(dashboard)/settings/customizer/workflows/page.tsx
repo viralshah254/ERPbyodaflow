@@ -206,7 +206,7 @@ export default function CustomizerWorkflowsPage() {
               <DataTable<CustomizerWorkflowRow> data={filtered} columns={columns} emptyMessage="No workflows found."
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
             )}
         </div>

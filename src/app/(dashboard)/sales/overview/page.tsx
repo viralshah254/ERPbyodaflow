@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
@@ -215,7 +217,7 @@ export default function SalesOverviewPage() {
               ) : !kpis?.recentOrders.length ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">No orders yet</div>
               ) : (
-                <table className="w-full text-sm">
+                <InteractiveTable className="w-full text-sm">
                   <tbody>
                     {kpis.recentOrders.map((order) => (
                       <tr key={order.id} className="border-b last:border-b-0 hover:bg-muted/20">
@@ -240,7 +242,7 @@ export default function SalesOverviewPage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </InteractiveTable>
               )}
             </CardContent>
           </Card>

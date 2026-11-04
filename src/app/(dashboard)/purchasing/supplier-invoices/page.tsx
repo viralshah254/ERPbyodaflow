@@ -133,7 +133,7 @@ export default function SupplierInvoicesPage() {
                 <DataTable<APBillRow> data={filtered} columns={columns} onRowClick={(row) => router.push(`/docs/bill/${row.id}`)} emptyMessage="No supplier invoices found."
               scrollMode="fill"
               size="comfortable"
-              className="border-0"
+              className="border-0" searchable={false}
               />
               </div>
             )}

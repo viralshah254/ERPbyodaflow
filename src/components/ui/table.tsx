@@ -1,19 +1,29 @@
+"use client";
+
 import * as React from "react";
+import { Input } from './input';
+import { buildReactTableView, type TableViewSort } from '@/lib/tables/react-table';
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<
-  HTMLTableElement,
-  React.HTMLAttributes<HTMLTableElement>
->(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto">
-    <table
-      ref={ref}
-      className={cn("w-full caption-bottom text-sm", className)}
-      {...props}
-    />
-  </div>
-));
-Table.displayName = "Table";
+export interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  searchable?: boolean;
+  sortable?: boolean;
+  searchPlaceholder?: string;
+  dataScope?: 'all' | 'page';
+}
+const Table = React.forwardRef<HTMLTableElement, TableProps>(({ className, children, searchable = true, sortable = true, searchPlaceholder = 'Search table…', dataScope = 'all', ...props }, ref) => {
+  const [query, setQuery] = React.useState('');
+  const [sort, setSort] = React.useState<TableViewSort>(null);
+  const toggle = React.useCallback((column: number) => setSort(previous => previous?.column !== column ? { column, direction: 'asc' } : previous.direction === 'asc' ? { column, direction: 'desc' } : null), []);
+  const view = React.useMemo(() => buildReactTableView(children, searchable ? query : '', sort, toggle, sortable), [children, query, searchable, sort, sortable, toggle]);
+  return <div className="min-w-0 w-full">
+    {searchable && view.supported && <div className="flex flex-wrap items-center gap-3 pb-3 print:hidden"><Input type="search" aria-label="Search table" placeholder={dataScope === 'page' ? 'Search loaded rows…' : searchPlaceholder} value={query} onChange={event => setQuery(event.target.value)} className="max-w-sm" /><span className="text-xs text-muted-foreground" role="status">{view.visibleCount} of {view.rowCount} rows</span></div>}
+    {dataScope === 'page' && view.supported && <p className="pb-2 text-xs text-muted-foreground print:hidden">Column sorting applies to the loaded page.</p>}
+    <div className="relative w-full overflow-auto"><table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props}>{view.children}</table></div>
+    {query && view.supported && view.visibleCount === 0 && <p className="py-4 text-sm text-muted-foreground" role="status">No rows match your search.</p>}
+  </div>;
+});
+Table.displayName = 'Table';
 
 const TableHeader = React.forwardRef<
   HTMLTableSectionElement,

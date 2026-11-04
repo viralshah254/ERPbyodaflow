@@ -362,7 +362,7 @@ export default function SalesInvoicesPage() {
             <>
               <TableLinearProgress active={fetching} />
               <div className={LIST_TABLE_SCROLL_BODY_CLASS}>
-                <DataTable<SalesDocRow>
+                <DataTable<SalesDocRow> dataScope="page"
                   data={rows}
                   columns={columns}
                   onRowClick={(row) => router.push(`/docs/invoice/${row.id}`)}
@@ -372,7 +372,7 @@ export default function SalesInvoicesPage() {
                   onSelectionChange={setSelectedIds}
                   scrollMode="fill"
                   size="comfortable"
-                  className="min-h-0 flex-1 border-0 shadow-none"
+                  className="min-h-0 flex-1 border-0 shadow-none" searchable={false}
                 />
               </div>
             </>

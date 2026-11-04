@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { Package, PackageCheck, PackageX, AlertTriangle } from "lucide-react";
@@ -309,7 +311,7 @@ export function DocumentFulfilmentLinesTable({
       {/* Table — table-fixed keeps header and body columns aligned */}
       <div className="rounded-xl border overflow-hidden shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1120px] table-fixed border-collapse">
+          <InteractiveTable className="w-full min-w-[1120px] table-fixed border-collapse">
             {FULFIL_COLGROUP}
             <thead className="border-b bg-muted/40">
               <tr>
@@ -415,7 +417,7 @@ export function DocumentFulfilmentLinesTable({
                 );
               })}
             </tbody>
-          </table>
+          </InteractiveTable>
         </div>
       </div>
 

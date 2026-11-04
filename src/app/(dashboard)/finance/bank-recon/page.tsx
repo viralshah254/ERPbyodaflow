@@ -662,13 +662,13 @@ export default function BankReconPage() {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-green-600 dark:text-green-400">
+                        <TableCell className="text-right font-mono text-sm text-green-600 dark:text-green-400" data-sort-value={(line.payIn > 0) ? (line.payIn) : null}>
                           {line.payIn > 0 ? formatMoney(line.payIn, currency) : "—"}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-destructive">
+                        <TableCell className="text-right font-mono text-sm text-destructive" data-sort-value={(line.payOut > 0) ? (line.payOut) : null}>
                           {line.payOut > 0 ? formatMoney(line.payOut, currency) : "—"}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm text-muted-foreground">
+                        <TableCell className="text-right font-mono text-sm text-muted-foreground" data-sort-value={(line.balance != null) ? (line.balance) : null}>
                           {line.balance != null ? formatMoney(line.balance, currency) : "—"}
                         </TableCell>
                         <TableCell>

@@ -395,7 +395,7 @@ export default function PurchaseOrdersPage() {
                 tableBusy && "pointer-events-none opacity-60",
               )}
             >
-              <DataTable<PurchasingDocRow>
+              <DataTable<PurchasingDocRow> dataScope="page"
                 data={rows}
                 columns={columns}
                 scrollMode="fill"
@@ -404,7 +404,7 @@ export default function PurchaseOrdersPage() {
                 emptyMessage="No purchase orders match your filters."
                 selectable
                 selectedIds={selectedIds}
-                onSelectionChange={setSelectedIds}
+                onSelectionChange={setSelectedIds} searchable={false}
               />
             </div>
             <TablePagination

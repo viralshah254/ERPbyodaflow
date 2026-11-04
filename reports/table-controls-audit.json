@@ -1,0 +1,3494 @@
+{
+  "summary": {
+    "dashboardPages": 192,
+    "sharedComponents": 42,
+    "tableInstances": 330
+  },
+  "behavior": {
+    "editableLineItems": "Search remains available; automatic row reordering is disabled for inline input forms.",
+    "financialStatements": "Account lines filter/sort within sections. Section totals and original posting balances stay attached to their source records.",
+    "pagination": "Existing server search remains intact. Loaded-page sorting is labelled; client pagination can provide allData for sorting before slicing."
+  },
+  "files": [
+    {
+      "file": "app/(dashboard)/analytics/finance/page.tsx",
+      "tables": [
+        {
+          "line": 73,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/analytics/inventory/page.tsx",
+      "tables": [
+        {
+          "line": 129,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 203,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 235,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/analytics/payroll/page.tsx",
+      "tables": [
+        {
+          "line": 72,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/analytics/pricing/page.tsx",
+      "tables": [
+        {
+          "line": 115,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 149,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/analytics/products/page.tsx",
+      "tables": [
+        {
+          "line": 107,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 142,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 175,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/analytics/settings/page.tsx",
+      "tables": [
+        {
+          "line": 32,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/ap/bills/page.tsx",
+      "tables": [
+        {
+          "line": 606,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/ap/payments/page.tsx",
+      "tables": [
+        {
+          "line": 230,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/ap/suppliers/page.tsx",
+      "tables": [
+        {
+          "line": 561,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/ap/three-way-match/page.tsx",
+      "tables": [
+        {
+          "line": 172,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 236,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 302,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/ar/aging/page.tsx",
+      "tables": [
+        {
+          "line": 162,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/ar/payments/page.tsx",
+      "tables": [
+        {
+          "line": 372,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/assets/depreciation/page.tsx",
+      "tables": [
+        {
+          "line": 114,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/assets/disposals/page.tsx",
+      "tables": [
+        {
+          "line": 181,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/assets/register/page.tsx",
+      "tables": [
+        {
+          "line": 179,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/automation/rules/page.tsx",
+      "tables": [
+        {
+          "line": 204,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/automation/schedules/page.tsx",
+      "tables": [
+        {
+          "line": 193,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/control-tower/page.tsx",
+      "tables": [
+        {
+          "line": 713,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 783,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 829,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 1001,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/crm/accounts/page.tsx",
+      "tables": [
+        {
+          "line": 68,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 96,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/crm/activities/page.tsx",
+      "tables": [
+        {
+          "line": 149,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/crm/deals/page.tsx",
+      "tables": [
+        {
+          "line": 183,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/crm/tickets/page.tsx",
+      "tables": [
+        {
+          "line": 167,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/dev/action-audit/page.tsx",
+      "tables": [
+        {
+          "line": 133,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/dev/data-health/page.tsx",
+      "tables": [
+        {
+          "line": 161,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/dev/link-check/page.tsx",
+      "tables": [
+        {
+          "line": 120,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/dev/route-check/page.tsx",
+      "tables": [
+        {
+          "line": 95,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/collections/page.tsx",
+      "tables": [
+        {
+          "line": 87,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/deliveries/page.tsx",
+      "tables": [
+        {
+          "line": 54,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/logistics/delivery-note/page.tsx",
+      "tables": [
+        {
+          "line": 141,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/logistics/fuel/page.tsx",
+      "tables": [
+        {
+          "line": 258,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/routes/page.tsx",
+      "tables": [
+        {
+          "line": 97,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/transfer-planning/page.tsx",
+      "tables": [
+        {
+          "line": 46,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/trips/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 208,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 242,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/distribution/trips/page.tsx",
+      "tables": [
+        {
+          "line": 155,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/docs/[type]/page.tsx",
+      "tables": [
+        {
+          "line": 752,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/ap/page.tsx",
+      "tables": [
+        {
+          "line": 93,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/ar/page.tsx",
+      "tables": [
+        {
+          "line": 135,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/bank-recon/page.tsx",
+      "tables": [
+        {
+          "line": 637,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/budgets/page.tsx",
+      "tables": [
+        {
+          "line": 220,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/chart-of-accounts/page.tsx",
+      "tables": [
+        {
+          "line": 266,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/commission-topup/page.tsx",
+      "tables": [
+        {
+          "line": 97,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/coolcatch-bs-inventory/page.tsx",
+      "tables": [
+        {
+          "line": 78,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 115,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/coolcatch-month-end/page.tsx",
+      "tables": [
+        {
+          "line": 149,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/fx-revaluations/page.tsx",
+      "tables": [
+        {
+          "line": 22,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/gl/page.tsx",
+      "tables": [
+        {
+          "line": 98,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/journal-events/page.tsx",
+      "tables": [
+        {
+          "line": 52,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/journals/page.tsx",
+      "tables": [
+        {
+          "line": 312,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/kra-signing/page.tsx",
+      "tables": [
+        {
+          "line": 254,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/ledger/page.tsx",
+      "tables": [
+        {
+          "line": 229,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/legacy-fx/page.tsx",
+      "tables": [
+        {
+          "line": 19,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/mpesa-recon/page.tsx",
+      "tables": [
+        {
+          "line": 123,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/notes/page.tsx",
+      "tables": [
+        {
+          "line": 48,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/payments/page.tsx",
+      "tables": [
+        {
+          "line": 56,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 83,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/reporting-policy/page.tsx",
+      "tables": [
+        {
+          "line": 37,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/statements/balance-sheet/page.tsx",
+      "tables": [
+        {
+          "line": 197,
+          "component": "InteractiveTable",
+          "search": "page-toolbar",
+          "sorting": "statement-controls-or-fixed-summary",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 243,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/statements/cash-flow/page.tsx",
+      "tables": [
+        {
+          "line": 183,
+          "component": "InteractiveTable",
+          "search": "page-toolbar",
+          "sorting": "statement-controls-or-fixed-summary",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 269,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/statements/pnl/page.tsx",
+      "tables": [
+        {
+          "line": 188,
+          "component": "InteractiveTable",
+          "search": "page-toolbar",
+          "sorting": "statement-controls-or-fixed-summary",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 232,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/tax/page.tsx",
+      "tables": [
+        {
+          "line": 57,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/finance/trial-balance/page.tsx",
+      "tables": [
+        {
+          "line": 212,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/chase-list/page.tsx",
+      "tables": [
+        {
+          "line": 67,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/commission/page.tsx",
+      "tables": [
+        {
+          "line": 336,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 346,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 353,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 411,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/commission/runs/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 232,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/comparison/page.tsx",
+      "tables": [
+        {
+          "line": 492,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 563,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 593,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 625,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 668,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/customers/page.tsx",
+      "tables": [
+        {
+          "line": 358,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/network/outlets/page.tsx",
+      "tables": [
+        {
+          "line": 417,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/network/overview/page.tsx",
+      "tables": [
+        {
+          "line": 425,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 610,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/outlets/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 463,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 786,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 822,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 938,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 1069,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/royalties/page.tsx",
+      "tables": [
+        {
+          "line": 349,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 420,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 434,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/franchise/vmi/page.tsx",
+      "tables": [
+        {
+          "line": 293,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 334,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 365,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/intercompany/transactions/page.tsx",
+      "tables": [
+        {
+          "line": 199,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/costing/page.tsx",
+      "tables": [
+        {
+          "line": 856,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1035,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1106,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1844,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1922,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/movements/page.tsx",
+      "tables": [
+        {
+          "line": 184,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "full-loaded-list-before-pagination"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/products/page.tsx",
+      "tables": [
+        {
+          "line": 603,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 677,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/receipts/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 1127,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/receipts/page.tsx",
+      "tables": [
+        {
+          "line": 524,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/receiving/page.tsx",
+      "tables": [
+        {
+          "line": 168,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/stock-explorer/page.tsx",
+      "tables": [
+        {
+          "line": 453,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/stock-levels/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 172,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/stock-levels/page.tsx",
+      "tables": [
+        {
+          "line": 793,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "full-loaded-list-before-pagination"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/inventory/valuation/page.tsx",
+      "tables": [
+        {
+          "line": 298,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 380,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/boms/page.tsx",
+      "tables": [
+        {
+          "line": 316,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/byproducts/page.tsx",
+      "tables": [
+        {
+          "line": 126,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/mrp/page.tsx",
+      "tables": [
+        {
+          "line": 386,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/production-plan/page.tsx",
+      "tables": [
+        {
+          "line": 653,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 697,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 699,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 784,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 804,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 826,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/quality/page.tsx",
+      "tables": [
+        {
+          "line": 41,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/routing/page.tsx",
+      "tables": [
+        {
+          "line": 331,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/subcontracting/orders/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 648,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/subcontracting/orders/page.tsx",
+      "tables": [
+        {
+          "line": 220,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/subcontracting/page.tsx",
+      "tables": [
+        {
+          "line": 1309,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1405,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1541,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/work-orders/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 307,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 407,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/work-orders/page.tsx",
+      "tables": [
+        {
+          "line": 415,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 746,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/yield/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 138,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/manufacturing/yield/page.tsx",
+      "tables": [
+        {
+          "line": 710,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 799,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/categories/page.tsx",
+      "tables": [
+        {
+          "line": 334,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/departments/page.tsx",
+      "tables": [
+        {
+          "line": 319,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/parties/page.tsx",
+      "tables": [
+        {
+          "line": 814,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 871,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 916,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/products/[id]/attributes/page.tsx",
+      "tables": [
+        {
+          "line": 224,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 277,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/products/[id]/packaging/page.tsx",
+      "tables": [
+        {
+          "line": 253,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/products/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 1451,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 1563,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 1608,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 1749,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 1917,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/products/[id]/pricing/page.tsx",
+      "tables": [
+        {
+          "line": 299,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 342,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/products/[id]/variants/page.tsx",
+      "tables": [
+        {
+          "line": 220,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/products/page.tsx",
+      "tables": [
+        {
+          "line": 1270,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "controlled",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/master/warehouses/page.tsx",
+      "tables": [
+        {
+          "line": 242,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/operations/dispatch-alerts/page.tsx",
+      "tables": [
+        {
+          "line": 93,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/employees/page.tsx",
+      "tables": [
+        {
+          "line": 256,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/leave/balances/page.tsx",
+      "tables": [
+        {
+          "line": 135,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/leave/page.tsx",
+      "tables": [
+        {
+          "line": 375,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/leave/requests/page.tsx",
+      "tables": [
+        {
+          "line": 271,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/p9/page.tsx",
+      "tables": [
+        {
+          "line": 98,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 358,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/pay-runs/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 262,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/pay-runs/page.tsx",
+      "tables": [
+        {
+          "line": 301,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/payroll/payslips/page.tsx",
+      "tables": [
+        {
+          "line": 167,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/price-lists/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 193,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 665,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/rules/page.tsx",
+      "tables": [
+        {
+          "line": 326,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 375,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 457,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/workspace/approvals/page.tsx",
+      "tables": [
+        {
+          "line": 104,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/workspace/lists/page.tsx",
+      "tables": [
+        {
+          "line": 359,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 744,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/workspace/overview/page.tsx",
+      "tables": [
+        {
+          "line": 370,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 523,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 675,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 713,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/workspace/tax-tags/page.tsx",
+      "tables": [
+        {
+          "line": 226,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/pricing/workspace/zones/page.tsx",
+      "tables": [
+        {
+          "line": 332,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/projects/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 245,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/projects/financials/page.tsx",
+      "tables": [
+        {
+          "line": 36,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 36,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/projects/list/page.tsx",
+      "tables": [
+        {
+          "line": 185,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/cash-weight-audit/page.tsx",
+      "tables": [
+        {
+          "line": 1511,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 1624,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 2215,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "full-loaded-list-before-pagination"
+        },
+        {
+          "line": 2404,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 2431,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/coolcatch-sourcing-batches/page.tsx",
+      "tables": [
+        {
+          "line": 76,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/goods-receipt/page.tsx",
+      "tables": [
+        {
+          "line": 170,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/match-policy/page.tsx",
+      "tables": [
+        {
+          "line": 52,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/orders/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 669,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/orders/page.tsx",
+      "tables": [
+        {
+          "line": 398,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/purchase-returns/page.tsx",
+      "tables": [
+        {
+          "line": 363,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/requests/page.tsx",
+      "tables": [
+        {
+          "line": 317,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/purchasing/supplier-invoices/page.tsx",
+      "tables": [
+        {
+          "line": 133,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/batch-costing/page.tsx",
+      "tables": [
+        {
+          "line": 347,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 614,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/commission-reconciliation/page.tsx",
+      "tables": [
+        {
+          "line": 79,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/exports/page.tsx",
+      "tables": [
+        {
+          "line": 98,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/kra-cu/page.tsx",
+      "tables": [
+        {
+          "line": 183,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 301,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 407,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/manufacturing/[reportId]/page.tsx",
+      "tables": [
+        {
+          "line": 61,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/operations/[reportId]/page.tsx",
+      "tables": [
+        {
+          "line": 66,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/saved/page.tsx",
+      "tables": [
+        {
+          "line": 81,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/scheduled/page.tsx",
+      "tables": [
+        {
+          "line": 82,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/vat-summary/page.tsx",
+      "tables": [
+        {
+          "line": 76,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 99,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/reports/wht-summary/page.tsx",
+      "tables": [
+        {
+          "line": 76,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/retail/replenishment/page.tsx",
+      "tables": [
+        {
+          "line": 49,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/deliveries/page.tsx",
+      "tables": [
+        {
+          "line": 290,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/invoices/page.tsx",
+      "tables": [
+        {
+          "line": 365,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/orders/franchise-inbound/[outletOrgId]/[prId]/page.tsx",
+      "tables": [
+        {
+          "line": 261,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/orders/page.tsx",
+      "tables": [
+        {
+          "line": 354,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/overview/page.tsx",
+      "tables": [
+        {
+          "line": 220,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/quotes/page.tsx",
+      "tables": [
+        {
+          "line": 245,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/sales/returns/page.tsx",
+      "tables": [
+        {
+          "line": 20,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/audit-log/page.tsx",
+      "tables": [
+        {
+          "line": 124,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/billing/page.tsx",
+      "tables": [
+        {
+          "line": 277,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 344,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/branches/page.tsx",
+      "tables": [
+        {
+          "line": 174,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/customer-categories/page.tsx",
+      "tables": [
+        {
+          "line": 113,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/customizer/dashboards/page.tsx",
+      "tables": [
+        {
+          "line": 187,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/customizer/workflows/page.tsx",
+      "tables": [
+        {
+          "line": 206,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/financial/exchange-rates/page.tsx",
+      "tables": [
+        {
+          "line": 243,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/financial/fiscal-years/page.tsx",
+      "tables": [
+        {
+          "line": 287,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/financial/taxes/page.tsx",
+      "tables": [
+        {
+          "line": 172,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/inventory/costing/page.tsx",
+      "tables": [
+        {
+          "line": 269,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/migrations/page.tsx",
+      "tables": [
+        {
+          "line": 590,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 830,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/organization/entities/page.tsx",
+      "tables": [
+        {
+          "line": 119,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/payment-terms/page.tsx",
+      "tables": [
+        {
+          "line": 137,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/platform/page.tsx",
+      "tables": [
+        {
+          "line": 657,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 713,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 764,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/sequences/page.tsx",
+      "tables": [
+        {
+          "line": 116,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/supplier-categories/page.tsx",
+      "tables": [
+        {
+          "line": 113,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/tax/tax-mappings/page.tsx",
+      "tables": [
+        {
+          "line": 160,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/tax/vat/page.tsx",
+      "tables": [
+        {
+          "line": 102,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/tax/vat-withholding/page.tsx",
+      "tables": [
+        {
+          "line": 146,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 183,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 227,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/tax/withholding/page.tsx",
+      "tables": [
+        {
+          "line": 139,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/uom/page.tsx",
+      "tables": [
+        {
+          "line": 219,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 280,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/settings/users-roles/page.tsx",
+      "tables": [
+        {
+          "line": 509,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 623,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 767,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 872,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/tasks/page.tsx",
+      "tables": [
+        {
+          "line": 140,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/timesheets/page.tsx",
+      "tables": [
+        {
+          "line": 204,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/treasury/bank-accounts/page.tsx",
+      "tables": [
+        {
+          "line": 169,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/treasury/cashflow/page.tsx",
+      "tables": [
+        {
+          "line": 101,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/treasury/collections/page.tsx",
+      "tables": [
+        {
+          "line": 156,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/treasury/payment-runs/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 133,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/treasury/payment-runs/page.tsx",
+      "tables": [
+        {
+          "line": 214,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/bin-locations/page.tsx",
+      "tables": [
+        {
+          "line": 142,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/cycle-counts/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 85,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/cycle-counts/page.tsx",
+      "tables": [
+        {
+          "line": 118,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/dispatch/page.tsx",
+      "tables": [
+        {
+          "line": 476,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        },
+        {
+          "line": 618,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/dispatch-returns/page.tsx",
+      "tables": [
+        {
+          "line": 150,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/overview/page.tsx",
+      "tables": [
+        {
+          "line": 210,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/pick-pack/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 1314,
+          "component": "Table",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/pick-pack/page.tsx",
+      "tables": [
+        {
+          "line": 273,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-page-labelled"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/putaway/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 98,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/putaway/page.tsx",
+      "tables": [
+        {
+          "line": 106,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/route-pick-lists/page.tsx",
+      "tables": [
+        {
+          "line": 228,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 352,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 416,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/route-settlement/page.tsx",
+      "tables": [
+        {
+          "line": 109,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/transfers/[id]/page.tsx",
+      "tables": [
+        {
+          "line": 158,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "app/(dashboard)/warehouse/transfers/page.tsx",
+      "tables": [
+        {
+          "line": 580,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/analytics/ExplorerTable.tsx",
+      "tables": [
+        {
+          "line": 54,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/approvals/ApprovalDetailSheet.tsx",
+      "tables": [
+        {
+          "line": 116,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/copilot/CopilotBlocks.tsx",
+      "tables": [
+        {
+          "line": 40,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/customers/CustomerAccountsPanel.tsx",
+      "tables": [
+        {
+          "line": 578,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/customers/CustomerDirectoryPanel.tsx",
+      "tables": [
+        {
+          "line": 291,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/customers/CustomerHistoryPanels.tsx",
+      "tables": [
+        {
+          "line": 178,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 263,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 402,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/customers/CustomerLedger.tsx",
+      "tables": [
+        {
+          "line": 281,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/customers/SfaCustomerApprovalPanel.tsx",
+      "tables": [
+        {
+          "line": 214,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/customers/SupermarketBranchesSheet.tsx",
+      "tables": [
+        {
+          "line": 287,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/docs/DocumentFulfilmentLinesTable.tsx",
+      "tables": [
+        {
+          "line": 314,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/docs/DocumentLineEditor.tsx",
+      "tables": [
+        {
+          "line": 1471,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/docs/DocumentTaxesPanel.tsx",
+      "tables": [
+        {
+          "line": 102,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 315,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 353,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 398,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/BankSettlementReview.tsx",
+      "tables": [
+        {
+          "line": 12,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/InventoryVatPreview.tsx",
+      "tables": [
+        {
+          "line": 7,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/PartyDocumentsPanel.tsx",
+      "tables": [
+        {
+          "line": 102,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/PartyStatementPanel.tsx",
+      "tables": [
+        {
+          "line": 287,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/PostingBatchSheet.tsx",
+      "tables": [
+        {
+          "line": 86,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/ReceiptCollectionGrid.tsx",
+      "tables": [
+        {
+          "line": 566,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/finance/WithholdingIncomeTaxPanel.tsx",
+      "tables": [
+        {
+          "line": 79,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/franchise/franchise-product-economics-section.tsx",
+      "tables": [
+        {
+          "line": 499,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/franchise/outlet-economics-vmi-tab.tsx",
+      "tables": [
+        {
+          "line": 164,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 175,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 187,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/franchise/outlet-equipment-tab.tsx",
+      "tables": [
+        {
+          "line": 202,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/franchise/outlet-pricing-tab.tsx",
+      "tables": [
+        {
+          "line": 336,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/integrations/OdaflowCustomerMatchingBoard.tsx",
+      "tables": [
+        {
+          "line": 485,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/integrations/OdaflowMultichainMappingBoard.tsx",
+      "tables": [
+        {
+          "line": 123,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/integrations/OdaflowProductsSyncPanel.tsx",
+      "tables": [
+        {
+          "line": 452,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/manufacturing/MrpPlanningGrid.tsx",
+      "tables": [
+        {
+          "line": 39,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/manufacturing/ProductionOutputEntry.tsx",
+      "tables": [
+        {
+          "line": 130,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/manufacturing/bom-component-editor.tsx",
+      "tables": [
+        {
+          "line": 473,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/manufacturing/work-order-floor.tsx",
+      "tables": [
+        {
+          "line": 33,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/manufacturing/work-order-preparation.tsx",
+      "tables": [
+        {
+          "line": 34,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/operational/ThreeWayMatchComparisonTable.tsx",
+      "tables": [
+        {
+          "line": 52,
+          "component": "DataTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/pricing/CustomerPriceTagsWorkspace.tsx",
+      "tables": [
+        {
+          "line": 658,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 702,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/pricing/FmcgPriceTagItemsEditor.tsx",
+      "tables": [
+        {
+          "line": 874,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/pricing/commission-defaults-editor.tsx",
+      "tables": [
+        {
+          "line": 322,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/pricing/franchise-outlets-panel.tsx",
+      "tables": [
+        {
+          "line": 74,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/pricing/zone-price-cascade-dialog.tsx",
+      "tables": [
+        {
+          "line": 105,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/products/FmcgProductPacksEditor.tsx",
+      "tables": [
+        {
+          "line": 423,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/products/ProductHistoryTab.tsx",
+      "tables": [
+        {
+          "line": 69,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        },
+        {
+          "line": 118,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/reports/FmcgReportCoverage.tsx",
+      "tables": [
+        {
+          "line": 74,
+          "component": "InteractiveTable",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/sales/SalesOrdersListPanel.tsx",
+      "tables": [
+        {
+          "line": 465,
+          "component": "DataTable",
+          "search": "page-toolbar",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    },
+    {
+      "file": "components/settings/financial/CurrencyTable.tsx",
+      "tables": [
+        {
+          "line": 38,
+          "component": "Table",
+          "search": "built-in",
+          "sorting": "shared-column-headers",
+          "scope": "loaded-list"
+        }
+      ]
+    }
+  ]
+}

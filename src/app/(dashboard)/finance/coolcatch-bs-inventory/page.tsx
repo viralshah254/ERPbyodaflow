@@ -125,7 +125,7 @@ export default function CoolcatchBsInventoryPage() {
                 <TableBody>
                   {movements.map((m) => (
                     <TableRow key={m.id}>
-                      <TableCell className="text-sm whitespace-nowrap">
+                      <TableCell className="text-sm whitespace-nowrap" data-sort-value={m.createdAt}>
                         {new Date(m.createdAt).toLocaleString("en-KE")}
                       </TableCell>
                       <TableCell className="text-xs">{m.trigger}</TableCell>

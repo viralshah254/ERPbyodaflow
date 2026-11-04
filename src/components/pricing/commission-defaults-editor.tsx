@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
@@ -317,7 +319,7 @@ export function CommissionDefaultsEditor(props: {
         <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
       ) : (
         <div className="max-h-[480px] overflow-auto rounded-md border">
-          <table className="w-full text-sm">
+          <InteractiveTable className="w-full text-sm">
             <thead className="sticky top-0 z-10 border-b bg-card">
               <tr className="text-left text-muted-foreground">
                 <th className="p-3 font-medium">SKU</th>
@@ -382,7 +384,7 @@ export function CommissionDefaultsEditor(props: {
                 ))
               )}
             </tbody>
-          </table>
+          </InteractiveTable>
         </div>
       )}
 

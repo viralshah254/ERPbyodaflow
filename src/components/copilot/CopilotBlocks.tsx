@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import Link from "next/link";
 import type { CopilotBlock } from "@/types/copilot";
@@ -35,7 +37,7 @@ export function CopilotBlocks({ blocks, onConfirmAction }: CopilotBlocksProps) {
             <div key={idx} className="rounded border bg-background p-3">
               {block.title ? <div className="mb-2 text-xs text-muted-foreground">{block.title}</div> : null}
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
+                <InteractiveTable className="w-full text-left text-xs">
                   <thead>
                     <tr>
                       {block.columns.map((col) => (
@@ -52,7 +54,7 @@ export function CopilotBlocks({ blocks, onConfirmAction }: CopilotBlocksProps) {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </InteractiveTable>
               </div>
             </div>
           );

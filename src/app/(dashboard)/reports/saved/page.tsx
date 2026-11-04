@@ -93,7 +93,7 @@ export default function SavedViewsPage() {
                     <TableRow key={r.id}>
                       <TableCell className="font-medium">{r.name}</TableCell>
                       <TableCell>{r.reportType}</TableCell>
-                      <TableCell>{new Date(r.lastRun).toLocaleString()}</TableCell>
+                      <TableCell data-sort-value={r.lastRun}>{new Date(r.lastRun).toLocaleString()}</TableCell>
                       <TableCell className="text-muted-foreground">{r.filters ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-2">

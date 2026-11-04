@@ -79,7 +79,7 @@ export function ExplorerTable({
                 {formatVal(r.value, def.format, currency)}
               </TableCell>
               {def.format !== "currency" ? null : (
-                <TableCell className="text-right tabular-nums text-muted-foreground">
+                <TableCell className="text-right tabular-nums text-muted-foreground" data-sort-value={(r.prior != null) ? (r.prior) : null}>
                   {r.prior != null ? formatMoney(r.prior, currency) : "—"}
                 </TableCell>
               )}

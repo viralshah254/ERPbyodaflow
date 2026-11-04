@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -851,7 +853,7 @@ function StepSummary({
 
       {/* Breakdown table */}
       <div className="rounded-lg border overflow-hidden">
-        <table className="w-full text-sm">
+        <InteractiveTable className="w-full text-sm" dataScope="page">
           <thead className="bg-muted/50">
             <tr>
               <th className="text-left px-4 py-2.5 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
@@ -878,10 +880,10 @@ function StepSummary({
                   </div>
                 </div>
               </td>
-              <td className="px-4 py-3 text-right font-mono">
+              <td className="px-4 py-3 text-right font-mono" data-sort-value={docTotal}>
                 {formatMoney(docTotal, currency)}
               </td>
-              <td className="px-4 py-3 text-right font-mono font-medium">
+              <td className="px-4 py-3 text-right font-mono font-medium" data-sort-value={docInKes}>
                 {formatMoney(docInKes, "KES")}
               </td>
               <td className="px-3 py-3" />
@@ -915,7 +917,7 @@ function StepSummary({
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
-              <td className="px-4 py-3 text-right font-mono font-medium">
+              <td className="px-4 py-3 text-right font-mono font-medium" data-sort-value={additionalTotal}>
                 {formatMoney(additionalTotal, "KES")}
               </td>
               <td className="px-3 py-3">
@@ -951,7 +953,7 @@ function StepSummary({
                       <span key={i} className="block">{formatMoney(parseCostLineAmount(l.amount), l.currency)}</span>
                     ))}
                 </td>
-                <td className="px-4 py-3 text-right font-mono font-medium">
+                <td className="px-4 py-3 text-right font-mono font-medium" data-sort-value={logisticsTotal}>
                   {formatMoney(logisticsTotal, "KES")}
                 </td>
                 <td className="px-3 py-3">
@@ -986,7 +988,7 @@ function StepSummary({
                   <span className="text-muted-foreground">—</span>
                 )}
               </td>
-              <td className="px-4 py-3 text-right font-mono font-medium">
+              <td className="px-4 py-3 text-right font-mono font-medium" data-sort-value={processingCostTotal}>
                 {formatMoney(processingCostTotal, "KES")}
               </td>
               <td className="px-3 py-3">
@@ -1000,7 +1002,7 @@ function StepSummary({
             <tr>
               <td className="px-4 py-3 font-bold">Total cost</td>
               <td className="px-4 py-3" />
-              <td className="px-4 py-3 text-right font-bold text-primary text-base">
+              <td className="px-4 py-3 text-right font-bold text-primary text-base" data-sort-value={totalLanded}>
                 {formatMoney(totalLanded, "KES")}
               </td>
               <td className="px-3 py-3" />
@@ -1018,7 +1020,7 @@ function StepSummary({
               </tr>
             )}
           </tfoot>
-        </table>
+        </InteractiveTable>
       </div>
 
       {/* Per-kg cost breakdown — only shown when weight data is available */}
@@ -1030,11 +1032,11 @@ function StepSummary({
               New cost per kg — {totalWeightKg.toLocaleString("en-KE")} kg total
             </span>
           </div>
-          <table className="w-full text-sm">
+          <InteractiveTable className="w-full text-sm" dataScope="page">
             <tbody className="divide-y">
               <tr>
                 <td className="px-4 py-2.5 text-muted-foreground">Goods value</td>
-                <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground" data-sort-value={docInKes}>
                   {formatMoney(docInKes, "KES")}
                 </td>
                 <td className="px-4 py-2.5 text-right tabular-nums font-mono">
@@ -1044,7 +1046,7 @@ function StepSummary({
               {additionalTotal > 0 && (
                 <tr>
                   <td className="px-4 py-2.5 text-muted-foreground">Additional costs</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground" data-sort-value={additionalTotal}>
                     {formatMoney(additionalTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
@@ -1055,7 +1057,7 @@ function StepSummary({
               {logisticsTotal > 0 && (
                 <tr>
                   <td className="px-4 py-2.5 text-muted-foreground">Logistics</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground" data-sort-value={logisticsTotal}>
                     {formatMoney(logisticsTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
@@ -1066,7 +1068,7 @@ function StepSummary({
               {processingCostTotal > 0 && (
                 <tr>
                   <td className="px-4 py-2.5 text-muted-foreground">Processing &amp; packing</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground">
+                  <td className="px-4 py-2.5 text-right tabular-nums font-mono text-muted-foreground" data-sort-value={processingCostTotal}>
                     {formatMoney(processingCostTotal, "KES")}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums font-mono">
@@ -1080,7 +1082,7 @@ function StepSummary({
                 <td className="px-4 py-3 font-bold text-emerald-700 dark:text-emerald-400">
                   Cost per kg (incl. additional costs)
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-mono text-muted-foreground">
+                <td className="px-4 py-3 text-right tabular-nums font-mono text-muted-foreground" data-sort-value={totalLanded}>
                   {formatMoney(totalLanded, "KES")}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-bold text-emerald-700 dark:text-emerald-400 text-base">
@@ -1088,7 +1090,7 @@ function StepSummary({
                 </td>
               </tr>
             </tfoot>
-          </table>
+          </InteractiveTable>
         </div>
       )}
 
@@ -1101,7 +1103,7 @@ function StepSummary({
               Per-product other cost allocation
             </span>
           </div>
-          <table className="w-full text-sm">
+          <InteractiveTable className="w-full text-sm" dataScope="page">
             <thead>
               <tr className="border-b text-xs text-muted-foreground">
                 <th className="text-left px-4 py-2 font-medium">Product</th>
@@ -1123,14 +1125,14 @@ function StepSummary({
                   <tr key={idx}>
                     <td className="px-4 py-2 text-muted-foreground">{line.productId ?? `Line ${idx + 1}`}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{lineWeight > 0 ? lineWeight.toLocaleString("en-KE", { maximumFractionDigits: 2 }) : "—"}</td>
-                    <td className="px-4 py-2 text-right tabular-nums font-mono">{formatMoney(lineGoods, currency)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums font-mono" data-sort-value={lineGoods}>{formatMoney(lineGoods, currency)}</td>
                     <td className="px-4 py-2 text-right tabular-nums font-mono text-amber-700">{landedShare > 0 ? `+${formatMoney(landedShare, "KES")}` : "—"}</td>
                     <td className="px-4 py-2 text-right tabular-nums font-semibold">{linePerKg !== null ? `KES ${linePerKg.toLocaleString("en-KE", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</td>
                   </tr>
                 );
               })}
             </tbody>
-          </table>
+          </InteractiveTable>
         </div>
       )}
 
@@ -1839,7 +1841,7 @@ export default function InventoryCostingPage() {
                 <SkeletonDataTable rows={3} columnWidths={["w-32", "w-16", "w-20", "w-28"]} />
               </div>
             ) : (
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead>Warehouse</TableHead>
@@ -1854,7 +1856,7 @@ export default function InventoryCostingPage() {
                     <TableCell className="font-medium">{r.warehouse}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.skuCount.toLocaleString()}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.totalQty.toLocaleString()}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatMoney(r.totalValue, "KES")}</TableCell>
+                    <TableCell className="text-right tabular-nums" data-sort-value={r.totalValue}>{formatMoney(r.totalValue, "KES")}</TableCell>
                   </TableRow>
                 ))}
                 {summary.length === 0 && (
@@ -1917,7 +1919,7 @@ export default function InventoryCostingPage() {
                   />
                 </div>
               ) : (
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead>Receipt (GRN)</TableHead>
@@ -1935,7 +1937,7 @@ export default function InventoryCostingPage() {
                 {sources.map((s) => (
                   <TableRow key={s.id} className={s.isAllocated ? "opacity-80" : undefined}>
                     <TableCell className="font-medium">{s.number}</TableCell>
-                    <TableCell className="text-muted-foreground">
+                    <TableCell className="text-muted-foreground" data-sort-value={(s.date) ? (String(s.date)) : null}>
                       {s.date ? new Date(String(s.date)).toLocaleDateString() : "—"}
                     </TableCell>
                     <TableCell>{s.supplier ?? "—"}</TableCell>

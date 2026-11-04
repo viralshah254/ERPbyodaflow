@@ -811,13 +811,13 @@ export default function MasterPartiesPage() {
               />
             ) : (
               <div className={LIST_TABLE_STATIC_CLASS}>
-                <DataTable<PartyRow>
+                <DataTable<PartyRow> dataScope="page"
                   data={filteredCustomers}
                   columns={columns}
                   onRowClick={openEditDrawer}
                   emptyMessage={`No ${customerOnlyLabel.toLowerCase()}s.`}
                   scrollMode="natural"
-                  size="comfortable"
+                  size="comfortable" searchable={false}
                 />
                 {pagination}
               </div>
@@ -868,13 +868,13 @@ export default function MasterPartiesPage() {
               />
             ) : (
               <div className={LIST_TABLE_STATIC_CLASS}>
-                <DataTable<PartyRow>
+                <DataTable<PartyRow> dataScope="page"
                   data={filteredSuppliers}
                   columns={columns}
                   onRowClick={openEditDrawer}
                   emptyMessage={`No ${supplierLabel.toLowerCase()}s.`}
                   scrollMode="natural"
-                  size="comfortable"
+                  size="comfortable" searchable={false}
                 />
                 {pagination}
               </div>
@@ -913,13 +913,13 @@ export default function MasterPartiesPage() {
                 />
               ) : (
                 <div className={LIST_TABLE_STATIC_CLASS}>
-                  <DataTable<PartyRow>
+                  <DataTable<PartyRow> dataScope="page"
                     data={filteredFranchisees}
                     columns={columns}
                     onRowClick={openEditDrawer}
                     emptyMessage={`No ${franchiseeLabel.toLowerCase()}s.`}
                     scrollMode="natural"
-                    size="comfortable"
+                    size="comfortable" searchable={false}
                   />
                   {pagination}
                 </div>

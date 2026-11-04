@@ -187,7 +187,7 @@ export default function CustomizerDashboardsPage() {
               <DataTable<CustomizerDashboardRow> data={filtered} columns={columns} emptyMessage="No dashboards found."
             scrollMode="fill"
             size="comfortable"
-            className="min-h-0 flex-1 border-0"
+            className="min-h-0 flex-1 border-0" searchable={false}
             />
             )}
         </div>

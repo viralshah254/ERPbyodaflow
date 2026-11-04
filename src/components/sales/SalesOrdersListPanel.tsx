@@ -472,7 +472,7 @@ export function SalesOrdersListPanel({
             onSelectionChange={setSelectedIds}
             scrollMode="natural"
             size="compact"
-            className="border-0 shadow-none"
+            className="border-0 shadow-none" searchable={false}
           />
         )}
       </div>

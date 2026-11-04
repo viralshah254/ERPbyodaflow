@@ -251,7 +251,7 @@ export default function KraSigningMonitorPage() {
           }
         />
         <div className={LIST_TABLE_SURFACE_CLASS}>
-          <DataTable<IncotexMonitorRow>
+          <DataTable<IncotexMonitorRow> dataScope="page"
             data={rows}
             columns={columns}
             scrollMode="fill"

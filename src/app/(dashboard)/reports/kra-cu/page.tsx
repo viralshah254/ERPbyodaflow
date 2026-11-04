@@ -213,7 +213,7 @@ export default function KraCuReportPage() {
                       <TableCell><CuCell value={row.supplierCuInvoiceNumber} /></TableCell>
                       <TableCell>{row.date ?? "—"}</TableCell>
                       <TableCell>{row.party ?? "—"}</TableCell>
-                      <TableCell className="text-right">{row.total != null ? formatMoney(row.total, "KES") : "—"}</TableCell>
+                      <TableCell className="text-right" data-sort-value={(row.total != null) ? (row.total) : null}>{row.total != null ? formatMoney(row.total, "KES") : "—"}</TableCell>
                       <TableCell>{row.status ?? "—"}</TableCell>
                     </TableRow>
                   ))
@@ -329,7 +329,7 @@ function RegisterTable({
               <TableCell><CuCell value={secondValue(row)} /></TableCell>
               <TableCell>{row.date ?? "—"}</TableCell>
               <TableCell>{row.party ?? "—"}</TableCell>
-              <TableCell className="text-right">{row.total != null ? formatMoney(row.total, "KES") : "—"}</TableCell>
+              <TableCell className="text-right" data-sort-value={(row.total != null) ? (row.total) : null}>{row.total != null ? formatMoney(row.total, "KES") : "—"}</TableCell>
               <TableCell>{row.status ?? "—"}</TableCell>
             </TableRow>
           ))

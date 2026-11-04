@@ -252,7 +252,7 @@ export default function SalesQuotesPage() {
           onSelectionChange={setSelectedIds}
           scrollMode="fill"
           size="comfortable"
-          className="min-h-0 flex-1 border-0"
+          className="min-h-0 flex-1 border-0" searchable={false}
           />
       </div>
     </PageShell>

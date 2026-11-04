@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -110,7 +112,7 @@ export default function AnalyticsPricingPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">SKU</th>
@@ -123,13 +125,13 @@ export default function AnalyticsPricingPage() {
                 {leakageRows.map((r, i) => (
                   <tr key={i} className="border-t">
                     <td className="px-3 py-2">{r.sku}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.listPrice, "KES")}</td>
-                    <td className="text-right tabular-nums px-3 py-2">{formatMoney(r.realizedPrice, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.listPrice}>{formatMoney(r.listPrice, "KES")}</td>
+                    <td className="text-right tabular-nums px-3 py-2" data-sort-value={r.realizedPrice}>{formatMoney(r.realizedPrice, "KES")}</td>
                     <td className="text-right tabular-nums px-3 py-2 text-amber-600">{r.leakagePct}%</td>
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
             {leakageRows.length === 0 && <p className="p-3 text-sm text-muted-foreground">No leakage signals available yet.</p>}
           </div>
         </InsightCard>
@@ -144,7 +146,7 @@ export default function AnalyticsPricingPage() {
           }
         >
           <div className="rounded-md border overflow-hidden">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead>
                 <tr className="bg-muted/50">
                   <th className="text-left font-medium px-3 py-2">SKU</th>
@@ -165,7 +167,7 @@ export default function AnalyticsPricingPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </InteractiveTable>
             {integrityRows.length === 0 && <p className="p-3 text-sm text-muted-foreground">No pricing policies found.</p>}
           </div>
         </InsightCard>

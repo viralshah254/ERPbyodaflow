@@ -1,4 +1,7 @@
 "use client";
+import { StatementTableSearch, StatementTableHeader, useStatementTable } from "@/components/finance/statement-table-controls";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 import { useAuthStore } from "@/stores/auth-store";
 import { FinancialStatementExport } from "@/components/reports/FinancialStatementExport";
 
@@ -40,6 +43,7 @@ export default function BalanceSheetPage() {
   const [periodsError, setPeriodsError] = React.useState<string | null>(null);
   const [periodId, setPeriodId] = React.useState("");
   const [statement, setStatement] = React.useState<Awaited<ReturnType<typeof fetchFinancialStatementApi>> | null>(null);
+  const statementTable = useStatementTable(statement?.sections ?? []);
   const baseCurrency = statement?.currency ?? configuredCurrency;
   const [statementLoading, setStatementLoading] = React.useState(false);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set(["assets", "liabilities", "equity"]));
@@ -189,14 +193,16 @@ export default function BalanceSheetPage() {
 
           {statement && (
             <div className="overflow-hidden rounded-md border">
-              <table className="w-full text-sm">
+              <StatementTableSearch table={statementTable} />
+              <InteractiveTable searchable={false} sortable={false} className="w-full text-sm">
+                <StatementTableHeader table={statementTable} />
                 <tbody>
-                  {statement.sections.map((section, idx) => (
+                  {statementTable.sections.map((section, idx) => (
                     <SectionRows
                       key={section.key}
                       section={section}
                       currency={baseCurrency}
-                      isExpanded={expanded.has(section.key)}
+                      isExpanded={!!statementTable.query || expanded.has(section.key)}
                       onToggleExpand={() => toggleExpanded(section.key)}
                       onDrillSection={() => openDrilldown(section.key, section.label)}
                       onDrillAccount={(accountId, name) => openDrilldown(section.key, name, accountId)}
@@ -205,7 +211,7 @@ export default function BalanceSheetPage() {
                     />
                   ))}
                 </tbody>
-              </table>
+              </InteractiveTable>
             </div>
           )}
 
@@ -234,7 +240,7 @@ export default function BalanceSheetPage() {
                 <p className="px-4 py-3 text-sm text-muted-foreground">No posted transactions for this selection.</p>
               )}
               {!drilldownLoading && drilldownItems.length > 0 && (
-                <table className="w-full text-xs">
+                <InteractiveTable className="w-full text-xs">
                   <thead>
                     <tr className="border-b bg-muted/50 text-muted-foreground">
                       <th className="px-4 py-2 text-left font-medium">Date</th>
@@ -247,23 +253,23 @@ export default function BalanceSheetPage() {
                   <tbody>
                     {drilldownItems.map((item) => (
                       <tr key={item.postingLineId} className="border-b last:border-0 hover:bg-muted/20">
-                        <td className="px-4 py-1.5 tabular-nums">
+                        <td className="px-4 py-1.5 tabular-nums" data-sort-value={item.postingDate}>
                           {new Date(item.postingDate).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-1.5">{item.documentNumber ?? item.sourceNumber}</td>
                         <td className="px-4 py-1.5 text-muted-foreground">
                           {item.accountCode ? `${item.accountCode} · ` : ""}{item.accountName ?? "—"}
                         </td>
-                        <td className="px-4 py-1.5 text-right tabular-nums">
+                        <td className="px-4 py-1.5 text-right tabular-nums" data-sort-value={(item.debit > 0) ? (item.debit) : null}>
                           {item.debit > 0 ? formatMoney(item.debit, baseCurrency) : ""}
                         </td>
-                        <td className="px-4 py-1.5 text-right tabular-nums">
+                        <td className="px-4 py-1.5 text-right tabular-nums" data-sort-value={(item.credit > 0) ? (item.credit) : null}>
                           {item.credit > 0 ? formatMoney(item.credit, baseCurrency) : ""}
                         </td>
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </InteractiveTable>
               )}
             </div>
           )}
@@ -339,7 +345,7 @@ function SectionRows({
             )}
           </div>
         </td>
-        <td className="px-4 py-3 text-right">
+        <td className="px-4 py-3 text-right" data-sort-value={section.amount}>
           <button
             type="button"
             onClick={onDrillSection}

@@ -300,7 +300,7 @@ export function PartyStatementPanel(props: {
                     <TableCell colSpan={statement.branches?.length ? 5 : 4} className="text-muted-foreground">
                       Opening balance
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="text-right font-medium" data-sort-value={statement.openingBalance}>
                       {formatMoney(statement.openingBalance, statement.currency)}
                     </TableCell>
                   </TableRow>
@@ -324,13 +324,13 @@ export function PartyStatementPanel(props: {
                             line.description
                           )}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" data-sort-value={(line.debit) ? (line.debit) : null}>
                           {line.debit ? formatMoney(line.debit, line.currency) : "—"}
                         </TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="text-right" data-sort-value={(line.credit) ? (line.credit) : null}>
                           {line.credit ? formatMoney(line.credit, line.currency) : "—"}
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium" data-sort-value={line.balance}>
                           {formatMoney(line.balance, line.currency)}
                         </TableCell>
                       </TableRow>

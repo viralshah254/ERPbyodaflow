@@ -309,12 +309,12 @@ export default function JournalEntriesPage() {
                 tableBusy && "pointer-events-none opacity-60",
               )}
             >
-              <DataTable<JournalEntry>
+              <DataTable<JournalEntry> dataScope="page"
                 data={rows}
                 columns={columns}
                 scrollMode="fill"
                 onRowClick={(row) => router.push(`/docs/journal/${row.id}`)}
-                emptyMessage="No journal entries. Create one to get started."
+                emptyMessage="No journal entries. Create one to get started." searchable={false}
               />
             </div>
           </div>

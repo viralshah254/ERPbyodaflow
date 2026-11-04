@@ -295,7 +295,7 @@ export default function InventoryValuationPage() {
             </CardContent>
           ) : null}
           <CardContent className="p-0">
-            <DataTable data={valuationRows} columns={columns} emptyMessage={emptyMessage}
+            <DataTable dataScope="page" data={valuationRows} columns={columns} emptyMessage={emptyMessage}
               scrollMode="natural"
               size="comfortable"
             />
@@ -377,7 +377,7 @@ export default function InventoryValuationPage() {
                     No franchise stock found. Outlets must have posted GRNs to show stock here.
                   </div>
                 ) : (
-                  <DataTable
+                  <DataTable dataScope="page"
                     data={franchiseRows}
                     columns={franchiseColumns}
                     emptyMessage="No franchise stock data."

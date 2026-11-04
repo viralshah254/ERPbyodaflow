@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -370,7 +372,7 @@ export default function PayrollLeavePage() {
                 <CardTitle>Balances</CardTitle>
               </CardHeader>
               <CardContent className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <InteractiveTable className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-muted-foreground">
                       <th className="py-2 pr-4">Employee</th>
@@ -393,7 +395,7 @@ export default function PayrollLeavePage() {
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </InteractiveTable>
                 {!loading && balances.length === 0 && (
                   <p className="text-sm text-muted-foreground pt-2">No balances for {year}. Initialize per employee.</p>
                 )}

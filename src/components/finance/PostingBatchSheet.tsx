@@ -97,15 +97,15 @@ export function PostingBatchSheet(props: {
                     <TableRow key={line.id}>
                       <TableCell>{line.accountCode} · {line.accountName}</TableCell>
                       <TableCell>{line.description ?? "—"}</TableCell>
-                      <TableCell className="text-right">{line.debit ? formatMoney(line.debit, batch.currency) : "—"}</TableCell>
-                      <TableCell className="text-right">{line.credit ? formatMoney(line.credit, batch.currency) : "—"}</TableCell>
+                      <TableCell className="text-right" data-sort-value={(line.debit) ? (line.debit) : null}>{line.debit ? formatMoney(line.debit, batch.currency) : "—"}</TableCell>
+                      <TableCell className="text-right" data-sort-value={(line.credit) ? (line.credit) : null}>{line.credit ? formatMoney(line.credit, batch.currency) : "—"}</TableCell>
                     </TableRow>
                   ))}
                   <TableRow>
                     <TableCell className="font-medium">Totals</TableCell>
                     <TableCell />
-                    <TableCell className="text-right font-medium">{formatMoney(batch.totals.debit, batch.currency)}</TableCell>
-                    <TableCell className="text-right font-medium">{formatMoney(batch.totals.credit, batch.currency)}</TableCell>
+                    <TableCell className="text-right font-medium" data-sort-value={batch.totals.debit}>{formatMoney(batch.totals.debit, batch.currency)}</TableCell>
+                    <TableCell className="text-right font-medium" data-sort-value={batch.totals.credit}>{formatMoney(batch.totals.credit, batch.currency)}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

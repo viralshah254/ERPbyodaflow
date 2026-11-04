@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 import * as React from "react";
 import Link from "next/link";
 import { apiRequest } from "@/lib/api/client";
@@ -36,7 +38,7 @@ export default function ProductionQualityPage() {
   }
   return <PageShell><PageHeader title="Production quality release" description="Review finished batches before they become available for allocation." actions={<Button asChild variant="outline"><Link href="/manufacturing/work-orders">Production batches</Link></Button>} />
     <div className="space-y-4 p-6">{error && <p role="alert" className="text-destructive">{error}</p>}
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-3">Lot</th><th>Product</th><th>Warehouse</th><th>Quantity</th><th /></tr></thead><tbody>{rows.map((lot) => <tr key={lot._id} className="border-b"><td className="p-3">{lot.lotNumber}</td><td>{lot.productName}</td><td>{lot.warehouseName}</td><td>{lot.remainingQuantity}</td><td>{canDecide && <Button size="sm" variant="outline" onClick={() => { setSelected(lot); setReason(""); setExpiry(lot.expiryDate?.slice(0, 10) ?? ""); }}>Review QC</Button>}</td></tr>)}</tbody></table></div>
+      <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-3">Lot</th><th>Product</th><th>Warehouse</th><th>Quantity</th><th /></tr></thead><tbody>{rows.map((lot) => <tr key={lot._id} className="border-b"><td className="p-3">{lot.lotNumber}</td><td>{lot.productName}</td><td>{lot.warehouseName}</td><td>{lot.remainingQuantity}</td><td>{canDecide && <Button size="sm" variant="outline" onClick={() => { setSelected(lot); setReason(""); setExpiry(lot.expiryDate?.slice(0, 10) ?? ""); }}>Review QC</Button>}</td></tr>)}</tbody></InteractiveTable></div>
       {!error && rows.length === 0 && <p className="text-muted-foreground">No production lots are awaiting QC.</p>}
       {selected && <form onSubmit={save} className="grid gap-4 rounded-lg border p-4 md:grid-cols-2"><p className="md:col-span-2 font-medium">{selected.productName} · {selected.lotNumber}</p>
         <div><Label htmlFor="lot-outcome">Decision</Label><select id="lot-outcome" value={outcome} onChange={(e) => setOutcome(e.target.value)} className="h-10 w-full rounded-md border bg-background px-3"><option value="ACCEPTED">Accept and release</option><option value="REJECTED">Reject and hold</option></select></div>

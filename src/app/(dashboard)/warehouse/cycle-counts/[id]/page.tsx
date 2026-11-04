@@ -117,7 +117,7 @@ export default function CycleCountDetailPage() {
                       />
                     </TableCell>
                     <TableCell>{line.variance >= 0 ? `+${line.variance}` : line.variance}</TableCell>
-                    <TableCell>{line.varianceValue == null ? "On submission" : formatMoney(line.varianceValue, "KES")}</TableCell>
+                    <TableCell data-sort-value={(line.varianceValue == null) ? null : (line.varianceValue)}>{line.varianceValue == null ? "On submission" : formatMoney(line.varianceValue, "KES")}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

@@ -318,7 +318,7 @@ export default function ProductPricingPage() {
                       <TableRow key={l.id}>
                         <TableCell className="font-medium">{l.name}</TableCell>
                         <TableCell>{l.currency}</TableCell>
-                        <TableCell>{minEff != null ? formatMoney(minEff, l.currency) : "—"}</TableCell>
+                        <TableCell data-sort-value={(minEff != null) ? (minEff) : null}>{minEff != null ? formatMoney(minEff, l.currency) : "—"}</TableCell>
                         <TableCell>{trs.length}</TableCell>
                       </TableRow>
                     );
@@ -358,8 +358,8 @@ export default function ProductPricingPage() {
                           <TableCell>{t.minQty}</TableCell>
                           <TableCell>{t.maxQty ?? "∞"}</TableCell>
                           <TableCell>{t.uom}</TableCell>
-                          <TableCell>{formatMoney(t.price, currency)}</TableCell>
-                          <TableCell className="text-muted-foreground">{eff != null ? formatMoney(eff, currency) : "—"}</TableCell>
+                          <TableCell data-sort-value={t.price}>{formatMoney(t.price, currency)}</TableCell>
+                          <TableCell className="text-muted-foreground" data-sort-value={(eff != null) ? (eff) : null}>{eff != null ? formatMoney(eff, currency) : "—"}</TableCell>
                           <TableCell>
                             <Button variant="ghost" size="sm" onClick={() => { setEditingTierIndex(i); setTierSheetOpen(true); }}>Edit</Button>
                             <Button variant="ghost" size="sm" onClick={() => setDraftTiers((prev) => prev.filter((_, j) => j !== i))}>Remove</Button>

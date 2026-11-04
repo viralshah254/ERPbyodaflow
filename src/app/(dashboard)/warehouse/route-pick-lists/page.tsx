@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
@@ -223,7 +225,7 @@ export default function RoutePickListsPage() {
             <p className="text-sm">Date {new Date(active.date).toLocaleDateString("en-KE")} · Route {active.routeName} · Vehicle {active.vehicleNumber}</p>
             <p className="text-sm">From {warehouseName(active.fromWarehouseId)} to {warehouseName(active.toWarehouseId)}</p>
           </div>
-          <table className="w-full border-collapse text-sm">
+          <InteractiveTable className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b text-left">
                 <th className="py-2">Product</th>
@@ -248,7 +250,7 @@ export default function RoutePickListsPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </InteractiveTable>
           <div className="flex flex-wrap gap-2 no-print">
             <Button variant="outline" onClick={() => window.print()}>Print sheet</Button>
             <Button
@@ -347,7 +349,7 @@ export default function RoutePickListsPage() {
               <Card className="md:col-span-2">
                 <CardHeader><CardTitle>Load tally</CardTitle></CardHeader>
                 <CardContent>
-                  <table className="w-full text-sm">
+                  <InteractiveTable className="w-full text-sm">
                     <thead>
                       <tr className="text-left"><th>Product</th><th>Picked</th><th>Invoice</th><th>Delivery note</th><th>Short</th><th>Gap</th></tr>
                     </thead>
@@ -363,7 +365,7 @@ export default function RoutePickListsPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </InteractiveTable>
                   {tally.some((line) => line.gap !== 0) ? (
                     <p className="mt-2 text-sm text-muted-foreground">A gap has to be recorded as a short or a damaged return.</p>
                   ) : null}
@@ -411,7 +413,7 @@ export default function RoutePickListsPage() {
           {summary ? (
             <div className="space-y-2 text-sm">
               <p>On hand {summary.onHand}. In {summary.inbound.length} movements, out {summary.outbound.length}.</p>
-              <table className="w-full">
+              <InteractiveTable className="w-full">
                 <thead><tr className="text-left"><th>Direction</th><th>Type</th><th>Product</th><th>Qty</th><th>Other side</th></tr></thead>
                 <tbody>
                   {[...summary.inbound.map((row) => ({ ...row, direction: "In" })), ...summary.outbound.map((row) => ({ ...row, direction: "Out" }))].map((row, index) => (
@@ -424,7 +426,7 @@ export default function RoutePickListsPage() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </InteractiveTable>
               {summary.onHand > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   <Input className="max-w-md" placeholder="Warehouse manager reason for remaining stock" value={summaryReason} onChange={(event) => setSummaryReason(event.target.value)} />

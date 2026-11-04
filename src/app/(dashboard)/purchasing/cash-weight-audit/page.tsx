@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -1506,7 +1508,7 @@ export default function CashWeightAuditPage() {
                             Goods received and line values below. System caps amount vs this receipt (+10%).
                           </p>
                         </div>
-                        <table className="w-full text-xs">
+                        <InteractiveTable className="w-full text-xs" dataScope="page">
                           <thead>
                             <tr className="border-b text-muted-foreground">
                               <th className="px-3 py-1.5 text-left font-medium">Product</th>
@@ -1529,10 +1531,10 @@ export default function CashWeightAuditPage() {
                                   <td className="px-2 py-1.5 text-right tabular-nums">
                                     {kg > 0 ? kg.toLocaleString("en-KE", { maximumFractionDigits: 2 }) : "—"}
                                   </td>
-                                  <td className="px-3 py-1.5 text-right tabular-nums">
+                                  <td className="px-3 py-1.5 text-right tabular-nums" data-sort-value={val}>
                                     {formatMoney(val, poDetail?.currency ?? disbCurrency)}
                                   </td>
-                                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground">
+                                  <td className="px-3 py-1.5 text-right tabular-nums text-muted-foreground" data-sort-value={(perKg != null) ? (perKg) : null}>
                                     {perKg != null
                                       ? formatMoney(perKg, poDetail?.currency ?? disbCurrency)
                                       : "—"}
@@ -1541,7 +1543,7 @@ export default function CashWeightAuditPage() {
                               );
                             })}
                           </tbody>
-                        </table>
+                        </InteractiveTable>
                         <div className="px-3 py-2 text-xs border-t border-primary/15 bg-primary/5 flex flex-wrap gap-x-4 gap-y-1 justify-end">
                           <span>
                             Total weight:{" "}
@@ -1619,7 +1621,7 @@ export default function CashWeightAuditPage() {
                               <p className="px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                                 Ordered on PO (reference)
                               </p>
-                              <table className="w-full text-xs">
+                              <InteractiveTable className="w-full text-xs" dataScope="page">
                                 <thead>
                                   <tr className="border-b text-muted-foreground">
                                     <th className="px-3 py-1.5 text-left font-medium">Product</th>
@@ -1638,16 +1640,16 @@ export default function CashWeightAuditPage() {
                                       </td>
                                       <td className="px-2 py-1.5 text-right tabular-nums">{l.qty}</td>
                                       <td className="px-2 py-1.5 text-muted-foreground">{l.uom}</td>
-                                      <td className="px-2 py-1.5 text-right tabular-nums">
+                                      <td className="px-2 py-1.5 text-right tabular-nums" data-sort-value={l.rate}>
                                         {formatMoney(l.rate, poDetail.currency)}
                                       </td>
-                                      <td className="px-3 py-1.5 text-right tabular-nums">
+                                      <td className="px-3 py-1.5 text-right tabular-nums" data-sort-value={l.total}>
                                         {formatMoney(l.total, poDetail.currency)}
                                       </td>
                                     </tr>
                                   ))}
                                 </tbody>
-                              </table>
+                              </InteractiveTable>
                             </div>
                           )}
                           {poReceivedTotals && poReceivedTotals.weightKg > 0 && (
@@ -2210,12 +2212,12 @@ export default function CashWeightAuditPage() {
                   tableBusy && "pointer-events-none opacity-60",
                 )}
               >
-                <DataTable
-                  data={paginatedPoRows}
+                <DataTable dataScope="all"
+                  allData={filteredPoRows} pageOffset={pageOffset} pageSize={pageSize} onPageOffsetChange={setPageOffset} data={paginatedPoRows}
                   columns={poColumns}
                   scrollMode="natural"
                   className="border-0 shadow-none"
-                  emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing."
+                  emptyMessage="No procurements found. Record a disbursement and create a GRN to start auditing." searchable={false}
                 />
               </div>
             </div>
@@ -2399,13 +2401,13 @@ export default function CashWeightAuditPage() {
                     Product lines — weight audit
                   </h3>
                   <div className="rounded-md border overflow-hidden">
-                    <DataTable
+                    <DataTable dataScope="page"
                       data={selectedPoRow.lines}
                       columns={detailLineColumns}
                       emptyMessage="No audit lines yet. Link a GRN to this PO to generate them."
                       scrollMode="natural"
                       size="comfortable"
-                      className="border-0"
+                      className="border-0" searchable={false}
                       />
                   </div>
                   <p className="mt-1.5 text-xs text-muted-foreground">
@@ -2426,13 +2428,13 @@ export default function CashWeightAuditPage() {
                       </span>
                     </h3>
                     <div className="rounded-md border overflow-hidden">
-                      <DataTable
+                      <DataTable dataScope="page"
                         data={selectedPoRow.exceptions}
                         columns={detailExceptionColumns}
                         emptyMessage="No exceptions."
                         scrollMode="natural"
                         size="comfortable"
-                        className="border-0"
+                        className="border-0" searchable={false}
                         />
                     </div>
                   </div>

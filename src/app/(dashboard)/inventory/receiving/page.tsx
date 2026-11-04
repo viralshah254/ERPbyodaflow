@@ -165,7 +165,7 @@ export default function InventoryReceivingQueuePage() {
           {initialLoading ? (
             <div className="py-8 text-center text-sm text-muted-foreground">Loading receiving queue\u2026</div>
           ) : (
-            <DataTable
+            <DataTable dataScope="page"
               data={rows}
               columns={columns}
               onRowClick={(row) =>

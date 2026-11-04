@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
@@ -585,7 +587,7 @@ export default function MigrationConsolePage() {
                     <div className="p-6 text-sm text-muted-foreground">No batches for this run.</div>
                   ) : (
                     <ScrollArea className="max-h-[420px]">
-                      <table className="w-full text-sm">
+                      <InteractiveTable className="w-full text-sm">
                         <thead className="sticky top-0 bg-card">
                           <tr className="border-b text-left">
                             <th className="px-4 py-3">Order</th>
@@ -608,7 +610,7 @@ export default function MigrationConsolePage() {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </InteractiveTable>
                     </ScrollArea>
                   )}
                 </CardContent>
@@ -825,7 +827,7 @@ export default function MigrationConsolePage() {
                     <div className="p-6 text-sm text-muted-foreground">No completed migration runs yet.</div>
                   ) : (
                     <ScrollArea className="max-h-[420px]">
-                      <table className="w-full text-sm">
+                      <InteractiveTable className="w-full text-sm">
                         <thead className="sticky top-0 bg-card">
                           <tr className="border-b text-left">
                             <th className="px-4 py-3">Provider</th>
@@ -848,7 +850,7 @@ export default function MigrationConsolePage() {
                             </tr>
                           ))}
                         </tbody>
-                      </table>
+                      </InteractiveTable>
                     </ScrollArea>
                   )}
                 </CardContent>

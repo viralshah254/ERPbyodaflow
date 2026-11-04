@@ -473,7 +473,7 @@ export default function WarehouseDispatchPage() {
                 aria-label="Search packed delivery notes"
               />
             </div>
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10">
@@ -615,7 +615,7 @@ export default function WarehouseDispatchPage() {
                 className="sm:w-44"
               />
             </div>
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead>Left</TableHead>

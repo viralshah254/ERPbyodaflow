@@ -450,11 +450,11 @@ export default function InventoryStockExplorerPage() {
                     tableBusy && "pointer-events-none opacity-60",
                   )}
                 >
-                  <DataTable
+                  <DataTable dataScope="page"
                     data={rows}
                     columns={columns}
                     scrollMode="natural"
-                    emptyMessage="No stock rows match your filters."
+                    emptyMessage="No stock rows match your filters." searchable={false}
                   />
                 </div>
               </div>

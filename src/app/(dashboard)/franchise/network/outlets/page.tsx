@@ -414,7 +414,7 @@ export default function FranchiseOutletsPage() {
                     tableBusy && "pointer-events-none opacity-60",
                   )}
                 >
-                  <Table>
+                  <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>

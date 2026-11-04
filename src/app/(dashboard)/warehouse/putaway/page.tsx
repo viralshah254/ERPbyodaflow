@@ -110,7 +110,7 @@ export default function PutawayPage() {
               emptyMessage={loading ? "Loading putaway tasks..." : "No putaway tasks."}
               scrollMode="fill"
               size="comfortable"
-              className="min-h-0 flex-1 border-0"
+              className="min-h-0 flex-1 border-0" searchable={false}
               />
         </div>
       </div>

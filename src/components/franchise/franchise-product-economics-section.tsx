@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -494,7 +496,7 @@ export function FranchiseProductEconomicsSection(props: {
           <div className="py-8 text-center text-sm text-muted-foreground">Loading…</div>
         ) : (
           <div className="max-h-[420px] overflow-auto rounded-md border">
-            <table className="w-full text-sm">
+            <InteractiveTable className="w-full text-sm">
               <thead className="sticky top-0 z-10 border-b bg-card">
                 <tr className="text-left text-muted-foreground">
                   <th className="p-3 font-medium">SKU</th>
@@ -559,7 +561,7 @@ export function FranchiseProductEconomicsSection(props: {
                             aria-label={`Commission override for ${r.sku}`}
                           />
                         </td>
-                        <td className="p-3 text-muted-foreground">{guide > 0 ? formatMoney(guide, "KES") : "—"}</td>
+                        <td className="p-3 text-muted-foreground" data-sort-value={(guide > 0) ? (guide) : null}>{guide > 0 ? formatMoney(guide, "KES") : "—"}</td>
                         <td className="p-2">
                           <Button
                             type="button"
@@ -579,7 +581,7 @@ export function FranchiseProductEconomicsSection(props: {
                   })
                 )}
               </tbody>
-            </table>
+            </InteractiveTable>
           </div>
         )}
 

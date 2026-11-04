@@ -68,7 +68,7 @@ export default function PaymentsPage() {
                     <TableCell>{item.number}</TableCell>
                     <TableCell>{item.customerName}</TableCell>
                     <TableCell>{item.date}</TableCell>
-                    <TableCell className="text-right">{formatMoney(item.amount, baseCurrency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={item.amount}>{formatMoney(item.amount, baseCurrency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -95,7 +95,7 @@ export default function PaymentsPage() {
                     <TableCell>{item.number}</TableCell>
                     <TableCell>{item.party}</TableCell>
                     <TableCell>{item.date}</TableCell>
-                    <TableCell className="text-right">{formatMoney(item.amount, baseCurrency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={item.amount}>{formatMoney(item.amount, baseCurrency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

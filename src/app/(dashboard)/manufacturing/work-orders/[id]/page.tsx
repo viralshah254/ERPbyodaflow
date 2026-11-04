@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -302,7 +304,7 @@ export default function WorkOrderDetailPage() {
                         </p>
                         {order.materialLines.length > 0 && (
                           <div className="overflow-x-auto sm:col-span-3">
-                            <table className="w-full min-w-[34rem] text-xs">
+                            <InteractiveTable className="w-full min-w-[34rem] text-xs">
                               <thead><tr className="border-b text-muted-foreground"><th className="py-2 text-left">Material / store</th><th>Issue</th><th>Consume</th><th>Return</th></tr></thead>
                               <tbody>
                                 {order.materialLines.map((line) => (
@@ -334,7 +336,7 @@ export default function WorkOrderDetailPage() {
                                   </tr>
                                 ))}
                               </tbody>
-                            </table>
+                            </InteractiveTable>
                           </div>
                         )}
                       </div>

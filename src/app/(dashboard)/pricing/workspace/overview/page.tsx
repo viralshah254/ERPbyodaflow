@@ -367,7 +367,7 @@ export default function PricingOverviewPage() {
                 <>
                   <TableLinearProgress active={tagTableBusy} />
                   <div className={cn(tagTableBusy && "pointer-events-none opacity-60")}>
-                    <Table>
+                    <Table searchable={false} dataScope="page">
                       <TableHeader>
                         <TableRow>
                           <TableHead>Name</TableHead>
@@ -520,7 +520,7 @@ export default function PricingOverviewPage() {
               </div>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto">
-              <Table>
+              <Table searchable={false} dataScope="page">
                 <TableHeader>
                   <TableRow>
                     <TableHead>Batch (GRN)</TableHead>
@@ -543,7 +543,7 @@ export default function PricingOverviewPage() {
                           {row.grnNumber ?? row.grnId.slice(0, 8)}
                         </Link>
                       </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
+                      <TableCell className="text-sm text-muted-foreground" data-sort-value={(row.date) ? (row.date) : null}>
                         {row.date
                           ? new Date(row.date).toLocaleDateString("en-KE", {
                               day: "2-digit",
@@ -672,7 +672,7 @@ export default function PricingOverviewPage() {
             <CardDescription>Currency, channel, franchise zone linkage.</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
@@ -710,7 +710,7 @@ export default function PricingOverviewPage() {
           </CardHeader>
           <CardContent className="p-0">
             <div className="overflow-auto max-h-[40vh]">
-              <Table>
+              <Table searchable={false} dataScope="page">
                 <TableHeader>
                   <TableRow>
                     <TableHead>SKU</TableHead>

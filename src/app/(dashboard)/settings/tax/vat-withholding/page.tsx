@@ -245,7 +245,7 @@ export default function VatWithholdingPage() {
                     </TableCell>
                     <TableCell className="font-mono text-xs">{row.invoiceNo}</TableCell>
                     <TableCell>{row.certificateDate}</TableCell>
-                    <TableCell className="text-right">{formatMoney(row.amount, "KES")}</TableCell>
+                    <TableCell className="text-right" data-sort-value={row.amount}>{formatMoney(row.amount, "KES")}</TableCell>
                     <TableCell>{statusLabel(row.matchStatus)}</TableCell>
                   </TableRow>
                 ))}

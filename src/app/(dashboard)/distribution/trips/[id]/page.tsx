@@ -258,7 +258,7 @@ export default function TripDetailPage() {
                       costLines.map((line) => (
                         <TableRow key={line.id}>
                           <TableCell>{COST_TYPE_LABELS[line.costType] ?? line.costType}</TableCell>
-                          <TableCell>{formatMoney(line.amount, line.currency)}</TableCell>
+                          <TableCell data-sort-value={line.amount}>{formatMoney(line.amount, line.currency)}</TableCell>
                           <TableCell className="text-muted-foreground">{line.reference ?? "—"}</TableCell>
                         </TableRow>
                       ))

@@ -12,14 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { DataTable } from "@/components/ui/data-table";
 import { PostingBatchSheet } from "@/components/finance/PostingBatchSheet";
 import { fetchFinanceAccountsApi, fetchFinancePeriodsApi, fetchLedgerEntriesApi } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
@@ -53,17 +46,15 @@ export default function GeneralLedgerPage() {
       .catch((error) => toast.error((error as Error).message || "Failed to load ledger entries."));
   }, [accountId, periodId]);
 
-  const filtered = React.useMemo(() => {
-    if (!search.trim()) return entries;
-    const query = search.trim().toLowerCase();
-    return entries.filter(
-      (entry) =>
-        entry.accountCode.toLowerCase().includes(query) ||
-        entry.accountName.toLowerCase().includes(query) ||
-        entry.description.toLowerCase().includes(query) ||
-        entry.documentNumber.toLowerCase().includes(query)
-    );
-  }, [entries, search]);
+  const columns = React.useMemo(() => [
+    { id: 'date', header: 'Date', accessor: (entry: (typeof entries)[number]) => entry.date.slice(0, 10), sortValue: (entry: (typeof entries)[number]) => entry.date },
+    { id: 'account', header: 'Account', accessor: (entry: (typeof entries)[number]) => `${entry.accountCode} · ${entry.accountName}`, sortValue: (entry: (typeof entries)[number]) => `${entry.accountCode} ${entry.accountName}` },
+    { id: 'description', header: 'Description', accessor: 'description' as const },
+    { id: 'source', header: 'Source', accessor: (entry: (typeof entries)[number]) => <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setPostingSource({ sourceType: entry.sourceType, sourceId: entry.sourceId })}>{entry.documentNumber}</Button>, sortValue: (entry: (typeof entries)[number]) => entry.documentNumber },
+    { id: 'debit', header: 'Debit', className: 'text-right', accessor: (entry: (typeof entries)[number]) => entry.debit ? formatMoney(entry.debit, baseCurrency) : '—', sortValue: (entry: (typeof entries)[number]) => entry.debit },
+    { id: 'credit', header: 'Credit', className: 'text-right', accessor: (entry: (typeof entries)[number]) => entry.credit ? formatMoney(entry.credit, baseCurrency) : '—', sortValue: (entry: (typeof entries)[number]) => entry.credit },
+    { id: 'balance', header: 'Balance', className: 'text-right', accessor: (entry: (typeof entries)[number]) => formatMoney(entry.balance, baseCurrency), sortValue: (entry: (typeof entries)[number]) => entry.balance },
+  ], [baseCurrency]);
 
   return (
     <PageLayout
@@ -104,44 +95,8 @@ export default function GeneralLedgerPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Account</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead className="text-right">Debit</TableHead>
-                <TableHead className="text-right">Credit</TableHead>
-                <TableHead className="text-right">Balance</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((entry) => (
-                <TableRow key={`${entry.documentId}-${entry.accountId}-${entry.date}`}>
-                  <TableCell>{entry.date.slice(0, 10)}</TableCell>
-                  <TableCell>{entry.accountCode} · {entry.accountName}</TableCell>
-                  <TableCell>{entry.description}</TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2"
-                      onClick={() => setPostingSource({ sourceType: entry.sourceType, sourceId: entry.sourceId })}
-                    >
-                      {entry.documentNumber}
-                    </Button>
-                  </TableCell>
-                  <TableCell className="text-right">{entry.debit ? formatMoney(entry.debit, baseCurrency) : "—"}</TableCell>
-                  <TableCell className="text-right">{entry.credit ? formatMoney(entry.credit, baseCurrency) : "—"}</TableCell>
-                  <TableCell className="text-right">{formatMoney(entry.balance, baseCurrency)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          {filtered.length === 0 ? (
-            <p className="pt-4 text-sm text-muted-foreground">No ledger entries found.</p>
-          ) : null}
+          <DataTable data={entries} columns={columns} searchable={false} search={search} emptyMessage="No ledger entries found." />
+          <p className="mt-2 text-xs text-muted-foreground">Balances follow the original posting sequence when rows are sorted.</p>
         </CardContent>
       </Card>
       <PostingBatchSheet

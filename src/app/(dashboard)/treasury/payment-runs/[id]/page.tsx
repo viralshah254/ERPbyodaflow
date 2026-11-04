@@ -154,7 +154,7 @@ export default function PaymentRunDetailPage() {
                             {line.poRef && <span className="text-muted-foreground">PO: {line.poRef}</span>}
                           </div>
                         </TableCell>
-                        <TableCell className="text-right">{formatMoney(line.amount, line.currency)}</TableCell>
+                        <TableCell className="text-right" data-sort-value={line.amount}>{formatMoney(line.amount, line.currency)}</TableCell>
                         <TableCell className="text-right">
                           {hasLanded ? (
                             <Tooltip>
@@ -175,7 +175,7 @@ export default function PaymentRunDetailPage() {
                             <span className="text-muted-foreground">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right font-medium">
+                        <TableCell className="text-right font-medium" data-sort-value={line.economicTotal ?? line.amount}>
                           {formatMoney(line.economicTotal ?? line.amount, line.currency)}
                         </TableCell>
                         <TableCell>{line.currency}</TableCell>

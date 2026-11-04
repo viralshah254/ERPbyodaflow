@@ -270,14 +270,14 @@ export default function PickPackPage() {
                   : "Each row is a delivery note the warehouse is working."}
             </p>
           </div>
-          <DataTable<WarehousePickPackRow>
+          <DataTable<WarehousePickPackRow> dataScope="page"
             data={rows}
             columns={columns}
             onRowClick={(row) => void openRow(row)}
             emptyMessage={emptyMessage}
             scrollMode="natural"
             size="comfortable"
-            className="border-0 shadow-none"
+            className="border-0 shadow-none" searchable={false}
           />
         </div>
         {initialLoading || (waiting && totalCount === 0) ? null : (

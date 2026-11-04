@@ -87,7 +87,7 @@ export default function VatSummaryReportPage() {
                 <TableRow>
                   <TableCell className="font-medium">{summary?.dateFrom?.slice(0, 10) ?? "All time"}</TableCell>
                   <TableCell>{summary?.dateTo?.slice(0, 10) ?? "Current"}</TableCell>
-                  <TableCell className="text-right">{summary ? formatMoney(summary.outputVat, "KES") : "—"}</TableCell><TableCell className="text-right">{summary ? formatMoney(summary.inputVat, "KES") : "—"}</TableCell><TableCell className="text-right">{summary ? formatMoney(summary.netVat, "KES") : "—"}</TableCell>
+                  <TableCell className="text-right" data-sort-value={(summary) ? (summary.outputVat) : null}>{summary ? formatMoney(summary.outputVat, "KES") : "—"}</TableCell><TableCell className="text-right" data-sort-value={(summary) ? (summary.inputVat) : null}>{summary ? formatMoney(summary.inputVat, "KES") : "—"}</TableCell><TableCell className="text-right" data-sort-value={(summary) ? (summary.netVat) : null}>{summary ? formatMoney(summary.netVat, "KES") : "—"}</TableCell>
                   <TableCell className="text-right">{summary?.invoiceCount ?? "—"}</TableCell>
                   <TableCell>KES</TableCell>
                 </TableRow>
@@ -97,7 +97,7 @@ export default function VatSummaryReportPage() {
         </Card>
         <p className="py-3 text-sm text-muted-foreground">{summary?.note}</p>
         <Table><TableHeader><TableRow><TableHead>Document</TableHead><TableHead>Side</TableHead><TableHead>CU reference</TableHead><TableHead>Gross KES</TableHead><TableHead>VAT KES</TableHead></TableRow></TableHeader>
-          <TableBody>{summary?.rows.map((row) => <TableRow key={`${row.id}:${row.date}:${row.number}`}><TableCell><Link href={`/docs/${row.type}/${encodeURIComponent(row.id)}`} className="underline">{row.number}</Link></TableCell><TableCell>{row.side}</TableCell><TableCell>{row.cuNumber || "Missing CU reference"}</TableCell><TableCell>{formatMoney(row.gross, "KES")}</TableCell><TableCell>{formatMoney(row.tax, "KES")}</TableCell></TableRow>)}</TableBody></Table>
+          <TableBody>{summary?.rows.map((row) => <TableRow key={`${row.id}:${row.date}:${row.number}`}><TableCell><Link href={`/docs/${row.type}/${encodeURIComponent(row.id)}`} className="underline">{row.number}</Link></TableCell><TableCell>{row.side}</TableCell><TableCell>{row.cuNumber || "Missing CU reference"}</TableCell><TableCell data-sort-value={row.gross}>{formatMoney(row.gross, "KES")}</TableCell><TableCell data-sort-value={row.tax}>{formatMoney(row.tax, "KES")}</TableCell></TableRow>)}</TableBody></Table>
       </div>
     </PageShell>
   );

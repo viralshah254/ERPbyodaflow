@@ -506,7 +506,7 @@ function PriceListsContent() {
                       )}
                     </TableCell>
                     ) : null}
-                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap align-top">
+                    <TableCell className="text-xs text-muted-foreground whitespace-nowrap align-top" data-sort-value={(pl.lastCalculatedAt) ? (pl.lastCalculatedAt) : null}>
                       {pl.lastCalculatedAt
                         ? new Date(pl.lastCalculatedAt).toLocaleString("en-KE", {
                             dateStyle: "short",

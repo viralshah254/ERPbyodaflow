@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -93,7 +95,7 @@ function P9MonthTable({ months, currency = "KES" }: { months: P9MonthRow[]; curr
 
   return (
     <div className="overflow-x-auto rounded-lg border text-xs">
-      <table className="w-full min-w-[640px]">
+      <InteractiveTable className="w-full min-w-[640px]">
         <thead>
           <tr className="border-b bg-muted/40">
             <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-muted/40 w-20">Month</th>
@@ -128,7 +130,7 @@ function P9MonthTable({ months, currency = "KES" }: { months: P9MonthRow[]; curr
             ))}
           </tr>
         </tbody>
-      </table>
+      </InteractiveTable>
     </div>
   );
 }
@@ -359,7 +361,7 @@ export default function P9FormsPage() {
               onRowClick={handleOpenDetail}
               emptyMessage={loading ? "Loading…" : `No P9 cards for ${year}.`}
               scrollMode="natural"
-              size="comfortable"
+              size="comfortable" searchable={false}
               />
         </div>
       </div>

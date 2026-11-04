@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
@@ -207,7 +209,7 @@ export default function TrialBalancePage() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <InteractiveTable className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/30">
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground">Code</th>
@@ -222,10 +224,10 @@ export default function TrialBalancePage() {
                         <tr key={row.accountId} className="border-b last:border-0 hover:bg-muted/20">
                           <td className="px-4 py-2 font-mono text-xs text-muted-foreground">{row.code}</td>
                           <td className="px-4 py-2">{row.name}</td>
-                          <td className="px-4 py-2 text-right tabular-nums">
+                          <td className="px-4 py-2 text-right tabular-nums" data-sort-value={(row.debit > 0) ? (row.debit) : null}>
                             {row.debit > 0 ? formatMoney(row.debit, baseCurrency) : "—"}
                           </td>
-                          <td className="px-4 py-2 text-right tabular-nums">
+                          <td className="px-4 py-2 text-right tabular-nums" data-sort-value={(row.credit > 0) ? (row.credit) : null}>
                             {row.credit > 0 ? formatMoney(row.credit, baseCurrency) : "—"}
                           </td>
                           <td
@@ -245,18 +247,18 @@ export default function TrialBalancePage() {
                         <td className="px-4 py-2" colSpan={2}>
                           Subtotal
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">
+                        <td className="px-4 py-2 text-right tabular-nums" data-sort-value={rows.reduce((s, r) => s + r.debit, 0)}>
                           {formatMoney(rows.reduce((s, r) => s + r.debit, 0), baseCurrency)}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">
+                        <td className="px-4 py-2 text-right tabular-nums" data-sort-value={rows.reduce((s, r) => s + r.credit, 0)}>
                           {formatMoney(rows.reduce((s, r) => s + r.credit, 0), baseCurrency)}
                         </td>
-                        <td className="px-4 py-2 text-right tabular-nums">
+                        <td className="px-4 py-2 text-right tabular-nums" data-sort-value={Math.abs(rows.reduce((s, r) => s + r.balance, 0))}>
                           {formatMoney(Math.abs(rows.reduce((s, r) => s + r.balance, 0)), baseCurrency)}
                         </td>
                       </tr>
                     </tfoot>
-                  </table>
+                  </InteractiveTable>
                 </div>
               </CardContent>
             </Card>

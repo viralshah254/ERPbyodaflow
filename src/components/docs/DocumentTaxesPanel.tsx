@@ -116,7 +116,7 @@ function LandedCostCard({
                 <TableCell className="text-muted-foreground text-sm">
                   {line.reference ?? "—"}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">
+                <TableCell className="text-right tabular-nums" data-sort-value={line.amount}>
                   {formatMoney(line.amount, line.currency ?? currency)}
                 </TableCell>
               </TableRow>
@@ -363,9 +363,9 @@ export function DocumentTaxesPanel({
                 {vat.map((l) => (
                   <TableRow key={l.code}>
                     <TableCell className="font-medium">{l.code}</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.base, docCurrency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.base}>{formatMoney(l.base, docCurrency)}</TableCell>
                     <TableCell className="text-right">{l.rate}%</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.amount, docCurrency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.amount}>{formatMoney(l.amount, docCurrency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -408,9 +408,9 @@ export function DocumentTaxesPanel({
                 {wht.map((l) => (
                   <TableRow key={l.code}>
                     <TableCell className="font-medium">{l.code}</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.base, docCurrency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.base}>{formatMoney(l.base, docCurrency)}</TableCell>
                     <TableCell className="text-right">{l.rate}%</TableCell>
-                    <TableCell className="text-right">{formatMoney(l.amount, docCurrency)}</TableCell>
+                    <TableCell className="text-right" data-sort-value={l.amount}>{formatMoney(l.amount, docCurrency)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

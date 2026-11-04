@@ -1,4 +1,6 @@
 "use client";
+import { Table as InteractiveTable } from "@/components/ui/table";
+
 
 import * as React from "react";
 import Link from "next/link";
@@ -609,7 +611,7 @@ export default function BatchCostingReportPage() {
                 <div className="space-y-2">
                   <Label>Prices to set (KES / kg)</Label>
                   <div className="rounded-md border overflow-hidden">
-                    <table className="w-full text-sm">
+                    <InteractiveTable className="w-full text-sm">
                       <thead className="bg-muted/50">
                         <tr>
                           <th className="text-left px-3 py-2 font-medium text-muted-foreground">Product</th>
@@ -640,7 +642,7 @@ export default function BatchCostingReportPage() {
                           </tr>
                         ))}
                       </tbody>
-                    </table>
+                    </InteractiveTable>
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Pre-filled from recommended sell price. Existing items in the price list will be updated; new products will be added.

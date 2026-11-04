@@ -124,7 +124,7 @@ export function PartyDocumentsPanel(props: { kind: PartyDocumentsKind; partyId: 
               <TableCell>
                 <StatusBadge status={row.status} />
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="text-right" data-sort-value={(row.total != null) ? (row.total) : null}>
                 {row.total != null ? formatMoney(row.total, row.currency ?? "KES") : "—"}
               </TableCell>
             </TableRow>

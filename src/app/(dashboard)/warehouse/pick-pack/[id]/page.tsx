@@ -1311,7 +1311,7 @@ export default function PickPackDetailPage() {
             </div>
           ) : null}
           <CardContent className="p-0">
-            <Table>
+            <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
                   <TableHead className="min-w-[12rem]">Product (substitute)</TableHead>
