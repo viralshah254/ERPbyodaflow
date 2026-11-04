@@ -30,8 +30,9 @@ function formatVal(v: number, f: FormatKind, currency: string) {
 export function InsightCanvas({ result, viz, className }: InsightCanvasProps) {
   const def = getMetric(result.query.metric);
   const form = def.format;
-  const currency = result.query.filters?.currency ?? "KES";
+  const currency = result.currency ?? result.query.filters?.currency ?? "KES";
   const v = viz ?? def.defaultVisualization;
+  const evidence = <div className="space-y-2 text-xs text-muted-foreground">{result.basis && <p>{result.basis}</p>}{result.warnings?.map((warning) => <p key={warning} role="status" className="text-amber-700 dark:text-amber-400">{warning}</p>)}</div>;
 
   if (v === "kpi") {
     return (
@@ -48,6 +49,7 @@ export function InsightCanvas({ result, viz, className }: InsightCanvasProps) {
             currency={currency}
             prior={result.priorTotal}
           />
+          {evidence}
         </CardContent>
       </Card>
     );
@@ -81,6 +83,7 @@ export function InsightCanvas({ result, viz, className }: InsightCanvasProps) {
             Prior: {formatVal(prior, form, currency)}
           </p>
         )}
+        {evidence}
       </CardContent>
     </Card>
   );

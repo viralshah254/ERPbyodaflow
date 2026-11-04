@@ -241,7 +241,7 @@ export default function BomsPage() {
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild>
-              <Link href="/manufacturing/routing">Routing</Link>
+              <Link href="/manufacturing/recipe-governance">Recipe governance</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/mrp">MRP</Link>

@@ -67,6 +67,7 @@ import {
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isSeafoodOrg } from "@/config/industry";
@@ -89,6 +90,7 @@ export default function UsersRolesPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const deepLinkUserId = searchParams.get("userId")?.trim() ?? "";
+  const canManageUsers = useHasPermission("admin.users");
   const currentUserId = useAuthStore((s) => s.user?.userId);
   const setSession = useAuthStore((s) => s.setSession);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -153,7 +155,7 @@ export default function UsersRolesPage() {
   );
 
   const standardCatalogueCopy = fmcgOrg
-    ? "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales, plus FMCG roles (Manufacturing, Production Planner, QC, Warehouse, Distribution)"
+    ? "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales, plus FMCG roles (Manufacturing, Production Planner, Production Supervisor, QC, Warehouse, Distribution)"
     : showFranchisees
       ? "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales, Franchise Network Manager"
       : "Owner, IT / Org Admin, Finance, Procurement, Dispatch, Logistics Coordinator, Sales";
@@ -723,8 +725,7 @@ export default function UsersRolesPage() {
                   <CardTitle>Roles</CardTitle>
                   <CardDescription>
                     {visibleRoles.length} role(s). Standard catalogue:{" "}
-                    {standardCatalogueCopy} — use &quot;Provision standard
-                    roles&quot; to seed them.
+                    {standardCatalogueCopy} — use &quot;Add missing standard roles&quot; to create any missing definitions. Existing permissions and user assignments are preserved.
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -732,13 +733,13 @@ export default function UsersRolesPage() {
                     size="sm"
                     variant="secondary"
                     data-tutorial-hint="roles-provision"
-                    disabled={seedingRoles}
+                    disabled={seedingRoles || !canManageUsers || !currentUserRoleIds.some((id) => ownerRoleIds.includes(id))}
                     onClick={async () => {
                       try {
                         setSeedingRoles(true);
                         const result = await seedStandardRolesApi();
                         toast.success(
-                          `Standard roles ready (${result.count} roles, template ${result.templateId}).`,
+                          `Role catalogue reviewed (${result.count} definitions). Existing permissions and assignments were preserved.`,
                         );
                         await refreshRoles();
                       } catch (error) {
@@ -754,9 +755,9 @@ export default function UsersRolesPage() {
                   >
                     {seedingRoles
                       ? "Provisioning…"
-                      : "Provision standard roles"}
+                      : "Add missing standard roles"}
                   </Button>
-                  <Button size="sm" onClick={openCreateRole}>
+                  <Button size="sm" disabled={!canManageUsers} onClick={openCreateRole}>
                     <Icons.Plus className="mr-2 h-4 w-4" />
                     Add Role
                   </Button>

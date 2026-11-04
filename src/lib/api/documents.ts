@@ -141,6 +141,7 @@ type BackendWarehouseDrop = {
 };
 
 type BackendDocumentDetail = {
+  accountingDate?: string; costPostingDate?: string;
   adjustmentEffect?: DocumentDetailRecord["adjustmentEffect"];
   stockAccountingVersion?: number;
   companyAverageCosting?: boolean;
@@ -447,6 +448,8 @@ function mapDocumentDetail(
     id: payload.id,
     type,
     number: payload.number,
+    accountingDate: payload.accountingDate,
+    costPostingDate: payload.costPostingDate,
     date: payload.date,
     partyId: payload.partyId,
     party: payload.party,

@@ -112,17 +112,17 @@ export function GaiaChatWidget() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open]);
 
-  const sendRef = React.useRef<(text: string) => Promise<void>>(async () => undefined);
+  const sendRef = React.useRef<(text: string, tutorialGuide?: string) => Promise<void>>(async () => undefined);
 
   const send = React.useCallback(
-    async (text: string) => {
+    async (text: string, tutorialGuide?: string) => {
       const trimmed = text.trim();
       if (!trimmed || loading) return;
       setMessages((prev) => [...prev, { id: uid(), role: "user", content: trimmed }]);
       setInput("");
       setLoading(true);
       try {
-        const reply = await sendGaiaMessage(trimmed);
+        const reply = await sendGaiaMessage(trimmed, { tutorialGuide, route: window.location.pathname });
         setMessages((prev) => [
           ...prev,
           {
@@ -158,10 +158,11 @@ export function GaiaChatWidget() {
 
   React.useEffect(() => {
     const onAsk = (e: Event) => {
-      const message = (e as CustomEvent<{ message?: string }>).detail?.message;
+      const detail = (e as CustomEvent<{ message?: string; tutorialGuide?: string }>).detail;
+      const message = detail?.message;
       if (!message) return;
       setOpen(true);
-      void sendRef.current(message);
+      void sendRef.current(message, detail.tutorialGuide);
     };
     window.addEventListener("gaia:ask", onAsk);
     return () => window.removeEventListener("gaia:ask", onAsk);

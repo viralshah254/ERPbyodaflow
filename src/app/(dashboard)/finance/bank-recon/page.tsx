@@ -62,6 +62,10 @@ import type { PartyLookupOption } from "@/lib/api/parties";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { BankSettlementReview, BankSettlementEvidence, type ReviewedBankSettlement } from "@/components/finance/BankSettlementReview";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useAuthStore } from "@/stores/auth-store";
+import { bankAllocationAction, allocationBalance } from "@/lib/finance/bank-allocation-workflow";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 
 function statementEquation(lines: BankStatementLine[]) {
@@ -88,6 +92,21 @@ function formatMoney(amount: number, currency = "KES") {
 
 export default function BankReconPage() {
   const baseCurrency = useBaseCurrency();
+  const permissions = useAuthStore((state) => state.permissions);
+  const userId = useAuthStore((state) => state.user?.userId);
+  const canWrite = permissions.includes("finance.write");
+  const canReadControls = permissions.includes("finance.read");
+  const mutationLock = React.useRef(false);
+  const snapshotRequest = React.useRef(0);
+  const scopeKey = useAuthStore((state) => `${state.org?.orgId}:${state.user?.userId}:${state.currentBranch?.branchId}:${state.permissions.join(",")}`);
+  const activeScope = React.useRef(scopeKey);
+  activeScope.current = scopeKey;
+  const invalidateSnapshot = React.useCallback(() => { snapshotRequest.current++; }, []);
+  const [mutating, setMutating] = React.useState(false);
+  const [workspaceError, setWorkspaceError] = React.useState("");
+  const [confirmMatch, setConfirmMatch] = React.useState<{ lineId: string; amount: number; currency: string; document: BankReconOpenItemSuggestion } | null>(null);
+  const beginMutation = () => { if (mutationLock.current) return false; mutationLock.current = true; setMutating(true); return true; };
+  const endMutation = () => { mutationLock.current = false; setMutating(false); };
   const router = useRouter();
   const importInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -104,6 +123,8 @@ export default function BankReconPage() {
   const [matchingDocId, setMatchingDocId] = React.useState<string | null>(null);
 
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [settlementEnabled, setSettlementEnabled] = React.useState(false);
+  const [settlementReady, setSettlementReady] = React.useState<ReviewedBankSettlement | null>(null);
   const [creating, setCreating] = React.useState(false);
   const [pendingLine, setPendingLine] = React.useState<BankStatementLine | null>(null);
   const [counterpartyId, setCounterpartyId] = React.useState("");
@@ -124,30 +145,44 @@ export default function BankReconPage() {
   }>>([]);
 
   const refreshSnapshot = React.useCallback(async (accountId?: string) => {
+    const generation = ++snapshotRequest.current;
+    const requestScope = scopeKey;
     setLoading(true);
+    setWorkspaceError("");
     try {
       const data = await fetchBankReconSnapshotApi(accountId || undefined, {
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
       });
+      if (generation !== snapshotRequest.current || requestScope !== activeScope.current) return;
       setSnapshot(data);
       if (!accountId && data.bankAccounts[0]?.id) {
         setBankAccountId(data.bankAccounts[0].id);
       }
       const sessionList = await fetchBankReconSessionsApi(accountId || data.bankAccounts[0]?.id);
+      if (generation !== snapshotRequest.current || requestScope !== activeScope.current) return;
       setSessions(sessionList);
       const [proposals, controls] = await Promise.all([
         fetchBankAllocationProposalsApi(),
-        fetchControlAccountReconciliationApi(),
+        canReadControls ? fetchControlAccountReconciliationApi() : Promise.resolve([]),
       ]);
-      setAllocationProposals(proposals);
+      if (generation !== snapshotRequest.current || requestScope !== activeScope.current) return;
+      setAllocationProposals(proposals.filter((proposal) => data.statements.some((line) => line.id === proposal.statementLineId)));
       setControlAccounts(controls);
     } catch (e) {
+      if (generation !== snapshotRequest.current || requestScope !== activeScope.current) return;
+      setWorkspaceError((e as Error).message);
       toast.error((e as Error).message);
     } finally {
-      setLoading(false);
+      if (generation === snapshotRequest.current && requestScope === activeScope.current) setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, canReadControls, scopeKey]);
+
+  React.useEffect(() => {
+    snapshotRequest.current++;
+    setSnapshot(null); setBankAccountId(""); setSelectedStmt(null); setSelectedSys(null); setConfirmMatch(null); setAllocationProposals([]); setControlAccounts([]); setCreateOpen(false); setViewPaymentDetail(null); setSessions([]); setSuggestions([]); setPendingLine(null);
+    return invalidateSnapshot;
+  }, [scopeKey, invalidateSnapshot]);
 
   React.useEffect(() => {
     void refreshSnapshot(bankAccountId || undefined);
@@ -191,6 +226,7 @@ export default function BankReconPage() {
       toast.error("Select a bank account first.");
       return;
     }
+    if (!canWrite || !beginMutation()) return;
     setAutoMatching(true);
     try {
       const result = await autoMatchBankReconApi(bankAccountId);
@@ -200,21 +236,23 @@ export default function BankReconPage() {
       toast.error((e as Error).message || "Auto-match failed.");
     } finally {
       setAutoMatching(false);
+      endMutation();
     }
   };
 
-  const handleMatchToDocument = async (documentId: string) => {
-    if (!selectedStmt) return;
+  const handleMatchToDocument = async (documentId: string, lineId: string) => {
+    if (!canWrite || !beginMutation()) return;
     setMatchingDocId(documentId);
     try {
-      const result = await matchBankReconToDocumentApi(selectedStmt, documentId);
-      toast.success(`Matched to ${result.number}.`);
+      const result = await matchBankReconToDocumentApi(lineId, documentId);
+      toast.success(result.replayed ? `Already completed · ${result.number}. No new payment created.` : `Payment ${result.number} created and matched.`);
       setSelectedStmt(null);
       await refreshSnapshot(bankAccountId);
     } catch (e) {
       toast.error((e as Error).message || "Match failed.");
     } finally {
       setMatchingDocId(null);
+      endMutation();
     }
   };
 
@@ -223,6 +261,7 @@ export default function BankReconPage() {
       toast.error("Select an unmatched statement line first.");
       return;
     }
+    if (!canWrite || !beginMutation()) return;
     setCreatingAdjusting(true);
     try {
       const { journalId } = await createBankReconAdjustingEntryApi(selectedStmt);
@@ -234,6 +273,7 @@ export default function BankReconPage() {
       toast.error((e as Error).message);
     } finally {
       setCreatingAdjusting(false);
+      endMutation();
     }
   };
 
@@ -242,6 +282,7 @@ export default function BankReconPage() {
       toast.error("Select a bank account first.");
       return;
     }
+    if (!canWrite || !beginMutation()) return;
     setCompleting(true);
     try {
       const result = await completeBankReconApi({
@@ -255,6 +296,7 @@ export default function BankReconPage() {
       toast.error((e as Error).message || "Complete reconciliation failed.");
     } finally {
       setCompleting(false);
+      endMutation();
     }
   };
 
@@ -305,6 +347,7 @@ export default function BankReconPage() {
   }, [createOpen, pendingLine, counterpartyId]);
 
   const handleCreatePayment = (line: BankStatementLine) => {
+    setSettlementEnabled(false); setSettlementReady(null);
     setPendingLine(line);
     setCounterpartyId("");
     setSelectedCounterpartyOption(null);
@@ -313,11 +356,15 @@ export default function BankReconPage() {
     setCreateOpen(true);
   };
 
+  const groupedAllocations = Object.entries(openItemAllocations).filter(([, amount]) => amount > 0).map(([documentId, amount]) => ({ documentId, amount }));
+  const settlementSourceKey = JSON.stringify({ lineId: pendingLine?.id ?? "", partyId: counterpartyId, allocations: groupedAllocations });
+  const allocationReady = pendingLine && (settlementEnabled ? settlementReady?.sourceKey === settlementSourceKey : allocationBalance(pendingLine.amount, openItemAllocations).valid);
   const handleCreatePaymentSubmit = async () => {
     if (!pendingLine || !counterpartyId) {
       toast.error("Select a counterparty first.");
       return;
     }
+    if (!canWrite || !allocationReady || !beginMutation()) return;
     setCreating(true);
     try {
       const allocations = Object.entries(openItemAllocations)
@@ -328,6 +375,7 @@ export default function BankReconPage() {
         partyId: counterpartyId,
         allocations,
         source: "MANUAL",
+        ...(settlementEnabled && settlementReady ? { settlementTerms: settlementReady.terms, previewDigest: settlementReady.preview.digest } : {}),
       });
       toast.success("Grouped allocation suggested. A different user must approve, post, and close it.");
       setCreateOpen(false);
@@ -338,6 +386,7 @@ export default function BankReconPage() {
       toast.error((e as Error).message || "Failed to create payment.");
     } finally {
       setCreating(false);
+      endMutation();
     }
   };
 
@@ -388,6 +437,7 @@ export default function BankReconPage() {
         showCommandHint
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild><Link href="/finance/legacy-fx">Legacy FX review</Link></Button>
             <input
               ref={importInputRef}
               type="file"
@@ -401,13 +451,13 @@ export default function BankReconPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={autoMatching || !bankAccountId}
+              disabled={!canWrite || mutating || autoMatching || !bankAccountId}
               onClick={() => void handleAutoMatch()}
             >
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               {autoMatching ? "Matching…" : "Auto-match payments"}
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+            <Button variant="outline" size="sm" disabled={!canWrite || mutating} onClick={() => setImportOpen(true)}>
               <Icons.Upload className="mr-2 h-4 w-4" />
               Import CSV
             </Button>
@@ -425,7 +475,7 @@ export default function BankReconPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">2</span>
-                <span><span className="font-medium">Auto-match</span> — link statement lines to existing payments or open bills/invoices.</span>
+                <span><span className="font-medium">Auto-match</span> — link statement lines to existing payments. Review open invoices/bills separately before creating payments.</span>
               </li>
               <li className="flex items-start gap-2">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">3</span>
@@ -435,32 +485,40 @@ export default function BankReconPage() {
           </CardContent>
         </Card>
 
+        {workspaceError && <div role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm"><p className="font-medium">Reconciliation could not refresh</p><p>{workspaceError}</p><Button variant="outline" size="sm" className="mt-2" onClick={() => void refreshSnapshot(bankAccountId)}>Retry refresh</Button></div>}
+        {mutating && <p role="status" className="text-sm text-muted-foreground">Saving this action. Please wait before starting another match.</p>}
+        <ConfirmDialog open={!!confirmMatch} onOpenChange={(open) => { if (!open) setConfirmMatch(null); }} title="Create and post a payment?" description={confirmMatch ? `This creates a new ${confirmMatch.document.side === "AR" ? "receipt" : "payment"} for ${confirmMatch.document.partyName}, settles ${confirmMatch.document.number}, and matches the bank line. Check existing system payments first. The amount is ${formatMoney(confirmMatch.amount, confirmMatch.currency)}.` : ""} confirmLabel="Create payment & match" onConfirm={() => { if (confirmMatch) void handleMatchToDocument(confirmMatch.document.id, confirmMatch.lineId); }}/>
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Allocation authorization</CardTitle>
-              <CardDescription>Suggest → approve → post → close. Each step requires a different authorized user; GAIA can only suggest.</CardDescription>
+              <CardDescription>Suggest → approve → post → close. Each step requires a different authorized user; GAIA can only suggest. Review source documents and amounts before taking the next action.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               {allocationProposals.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No grouped allocation proposals.</p>
-              ) : allocationProposals.slice(0, 8).map((proposal) => {
-                const next = proposal.status === "SUGGESTED" ? "approve" : proposal.status === "APPROVED" ? "post" : proposal.status === "POSTED" ? "close" : null;
+              ) : allocationProposals.map((proposal) => {
+                const workflow = bankAllocationAction(proposal, userId, permissions);
+                const next = workflow.action;
                 return (
                   <div key={proposal._id} className="flex items-center justify-between gap-3 rounded-md border p-3 text-sm">
                     <div>
                       <p className="font-medium">{proposal.allocations.length} allocation(s) · {proposal.status}</p>
                       <p className="text-xs text-muted-foreground">{proposal.source === "GAIA" ? "GAIA proposal — never auto-posted" : "Manual proposal"}</p>
+                      {workflow.reason && next && <p className="mt-1 text-xs text-muted-foreground">{workflow.reason}</p>}
                     </div>
+                    <details className="text-xs"><summary className="cursor-pointer font-medium">Review allocations</summary><ul className="mt-2 space-y-2">{proposal.allocations.map((allocation) => <li key={allocation.documentId}><Link className="text-primary underline" href={`/docs/${statements.find((line) => line.id === proposal.statementLineId)!.amount >= 0 ? "invoice" : "bill"}/${encodeURIComponent(allocation.documentId)}`}>Open document</Link> · {formatMoney(allocation.amount, proposal.settlementPreview?.invoiceCurrency ?? currency)}</li>)}</ul></details>
+                    {proposal.settlementPreview && <details className="text-xs"><summary className="cursor-pointer font-medium">Review fees, FX and journal</summary><BankSettlementEvidence preview={proposal.settlementPreview}/></details>}
                     {next ? (
-                      <Button size="sm" variant="outline" onClick={async () => {
+                      <Button size="sm" variant="outline" disabled={mutating || !workflow.allowed} title={workflow.reason || undefined} onClick={async () => {
+                        if (!beginMutation()) return;
                         try {
                           await advanceBankAllocationProposalApi(proposal._id, next);
                           toast.success(`Allocation ${next} complete.`);
                           await refreshSnapshot(bankAccountId);
                         } catch (error) {
-                          toast.error(error instanceof Error ? error.message : "Action failed.");
-                        }
+                          toast.error(error instanceof Error ? error.message : "Action failed. Refresh before retrying.");
+                        } finally { endMutation(); }
                       }}>{next[0].toUpperCase() + next.slice(1)}</Button>
                     ) : <Badge>Closed</Badge>}
                   </div>
@@ -544,7 +602,7 @@ export default function BankReconPage() {
               <Button
                 size="sm"
                 data-tutorial-hint="bank-close"
-                disabled={completing || !bankAccountId || unmatchedStmt.length > 0 || statements.length === 0}
+                disabled={!canWrite || mutating || completing || !bankAccountId || unmatchedStmt.length > 0 || statements.length === 0}
                 onClick={() => void handleCompleteReconciliation()}
               >
                 {completing ? "Completing…" : "Complete reconciliation"}
@@ -570,7 +628,7 @@ export default function BankReconPage() {
               ) : statements.length === 0 ? (
                 <div className="py-12 text-center space-y-3">
                   <p className="text-sm text-muted-foreground">No statement lines yet.</p>
-                  <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+                  <Button variant="outline" size="sm" disabled={!canWrite || mutating} onClick={() => setImportOpen(true)}>
                     <Icons.Upload className="mr-2 h-4 w-4" />
                     Import bank statement CSV
                   </Button>
@@ -655,8 +713,8 @@ export default function BankReconPage() {
                               >
                                 Match
                               </Button>
-                              <Button size="sm" variant="ghost" onClick={() => handleCreatePayment(line)}>
-                                Pay
+                              <Button size="sm" variant="ghost" disabled={!canWrite || mutating} onClick={() => handleCreatePayment(line)}>
+                                Group allocation
                               </Button>
                             </div>
                           ) : null}
@@ -689,12 +747,12 @@ export default function BankReconPage() {
                 ) : suggestions.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     No open {selectedLine.amount >= 0 ? "invoices" : "bills"} match this amount.
-                    Use Pay to create a payment manually. Partial allocation is not supported yet — amounts must match exactly.
+                    First check existing system payments to avoid creating another receipt or payment. For several invoices/bills, use a grouped allocation.
                   </p>
                 ) : (
                   <>
                     <p className="text-xs text-muted-foreground">
-                      Amount must match the statement line exactly. Partial allocation is not supported yet.
+                      Creating a payment posts to the ledger and settles the selected document. To link an existing payment, use the system payments panel.
                     </p>
                     {suggestions.map((item) => (
                     <div key={item.id} className="rounded-lg border p-3 space-y-2">
@@ -713,10 +771,10 @@ export default function BankReconPage() {
                         </span>
                         <Button
                           size="sm"
-                          disabled={matchingDocId === item.id}
-                          onClick={() => void handleMatchToDocument(item.id)}
+                          disabled={!canWrite || mutating || matchingDocId !== null || item.outstanding + 0.005 < Math.abs(selectedLine.amount) || (item.currency != null && item.currency !== currency)}
+                          onClick={() => setConfirmMatch({ lineId: selectedLine.id, amount: Math.abs(selectedLine.amount), currency, document: item })}
                         >
-                          {matchingDocId === item.id ? "Matching…" : "Match"}
+                          {matchingDocId === item.id ? "Posting…" : "Create payment & match"}
                         </Button>
                       </div>
                     </div>
@@ -767,9 +825,9 @@ export default function BankReconPage() {
                   variant="outline"
                   size="sm"
                   className="w-full"
-                  disabled={!selectedStmt || !selectedSys}
+                  disabled={!canWrite || mutating || !selectedStmt || !selectedSys}
                   onClick={async () => {
-                    if (!selectedStmt || !selectedSys) return;
+                    if (!selectedStmt || !selectedSys || !beginMutation()) return;
                     try {
                       await matchBankReconLinesApi(selectedStmt, selectedSys);
                       await refreshSnapshot(bankAccountId);
@@ -777,8 +835,8 @@ export default function BankReconPage() {
                       setSelectedSys(null);
                       toast.success("Statement line matched to system payment.");
                     } catch (e) {
-                      toast.error((e as Error).message || "Match failed.");
-                    }
+                      toast.error((e as Error).message || "Match failed. Refresh before retrying.");
+                    } finally { endMutation(); }
                   }}
                 >
                   Match selected to payment
@@ -827,7 +885,7 @@ export default function BankReconPage() {
             <Button
               variant="default"
               size="sm"
-              disabled={!selectedStmt || creatingAdjusting}
+              disabled={!canWrite || mutating || !selectedStmt || creatingAdjusting}
               onClick={() => void handleCreateAdjustingEntry()}
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -889,7 +947,7 @@ export default function BankReconPage() {
       <Sheet open={createOpen} onOpenChange={setCreateOpen}>
         <SheetContent side="right" className="w-full">
           <SheetHeader>
-            <SheetTitle>Create payment from statement line</SheetTitle>
+            <SheetTitle>Suggest a grouped allocation</SheetTitle>
             <SheetDescription>
               {pendingLine
                 ? `${pendingLine.payIn > 0 ? "Receipt (pay in)" : "Payment (pay out)"} for ${pendingLine.description}`
@@ -948,6 +1006,10 @@ export default function BankReconPage() {
                       </span>
                       <Input
                         type="number"
+                        aria-label={`Allocate to ${item.number}`}
+                        min={0}
+                        max={item.outstanding}
+                        step="0.01"
                         className="w-28 h-8 shrink-0"
                         placeholder="Amount"
                         value={openItemAllocations[item.id] ?? ""}
@@ -964,9 +1026,11 @@ export default function BankReconPage() {
               </div>
             </div>
           </div>
+          {pendingLine && <div className="mt-5"><BankSettlementReview enabled={settlementEnabled} onEnabled={setSettlementEnabled} lineId={pendingLine.id} partyId={counterpartyId} allocations={groupedAllocations} bankCurrency={currency} baseCurrency={baseCurrency} disabled={creating || mutating} onReady={setSettlementReady}/></div>}
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={creating || !counterpartyId}>
+            {pendingLine && !settlementEnabled && <div className="mr-auto text-sm" role="status">Allocated {formatMoney(allocationBalance(pendingLine.amount, openItemAllocations).allocated, currency)} · Remaining {formatMoney(allocationBalance(pendingLine.amount, openItemAllocations).remaining, currency)}</div>}
+            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={!canWrite || mutating || creating || !counterpartyId || !pendingLine || !allocationReady}>
               {creating ? "Saving…" : "Suggest grouped allocation"}
             </Button>
           </SheetFooter>
@@ -990,7 +1054,7 @@ export default function BankReconPage() {
                 </div>
                 <div>
                   <p className="text-muted-foreground">Amount</p>
-                  <p className="font-medium">{formatMoney(viewPaymentDetail.amount, currency)}</p>
+                  <p className="font-medium">{formatMoney(viewPaymentDetail.amount, viewPaymentDetail.currency ?? currency)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Date</p>
@@ -1012,7 +1076,7 @@ export default function BankReconPage() {
                         <div>
                           <p className="font-medium">{allocation.documentNumber ?? allocation.documentId}</p>
                           <p className="text-xs text-muted-foreground">
-                            {formatMoney(allocation.amount, currency)}
+                            {formatMoney(allocation.amount, viewPaymentDetail.currency ?? currency)}
                           </p>
                         </div>
                         <Button variant="outline" size="sm" asChild>

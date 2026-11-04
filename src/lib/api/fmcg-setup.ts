@@ -1,4 +1,4 @@
-import { apiRequest, getApiBase } from "./client";
+import { apiRequest } from "./client";
 export type FmcgSetup = {
   version: string; capturedAt: string; orgId: string; openingDate: string | null; status: string; fiscalYearEndMonth: number | null; valuationMethod: string;
   gates: Array<{ id: string; title: string; status: "PASS" | "PENDING"; detail: string; href: string; required: boolean }>;
@@ -7,12 +7,10 @@ export type FmcgSetup = {
   readyForAcceptance: boolean; readOnlyPreview?: boolean;
 };
 export async function fetchFmcgSetup(): Promise<FmcgSetup> {
-  const path = "/api/settings/fmcg-setup";
-  try { return await apiRequest<FmcgSetup>(path); }
+  try { return await apiRequest<FmcgSetup>("/api/settings/fmcg-setup"); }
   catch (error) {
-    if ((error as { status?: number }).status === 404 && typeof window !== "undefined" && ["localhost", "127.0.0.1"].includes(window.location.hostname) && getApiBase() !== "http://localhost:4000") {
-      const result = await apiRequest<FmcgSetup>(path, { baseUrl: "http://localhost:4000" });
-      return { ...result, readOnlyPreview: true };
+    if ((error as { status?: number }).status === 404) {
+      throw new Error("The connected ERP server does not support operational setup yet. Deploy the matching backend and verify its API routing, then retry. Your data has not been changed.");
     }
     throw error;
   }

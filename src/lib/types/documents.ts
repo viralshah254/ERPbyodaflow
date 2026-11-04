@@ -49,6 +49,8 @@ export type DocListRow = {
   supplierInvoiceNumber?: string;
   supplierCuInvoiceNumber?: string;
   pendingApprovalReason?: string;
+  fiscalState?: string;
+  fiscalAttemptId?: string;
   kraSigning?: KraSigningRecord | null;
 };
 
@@ -196,6 +198,7 @@ export type WarehouseDropRecord = {
 };
 
 export type DocumentDetailRecord = {
+  accountingDate?: string; costPostingDate?: string;
   adjustmentEffect?: "SUPPLIER_RETURN" | "PRICE_DECREASE" | "PRICE_INCREASE" | "PHYSICAL_RETURN";
   stockAccountingVersion?: number;
   companyAverageCosting?: boolean;
@@ -332,6 +335,8 @@ export type DocumentDetailRecord = {
   /** Admin can amend in-transit dispatch when allowed (delivery-note only). */
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
   /** KRA / Incotex signing (invoice, credit note, debit note). */
+  fiscalState?: string;
+  fiscalAttemptId?: string;
   kraSigning?: KraSigningRecord | null;
   /** FMCG sales document flow: separate status tracks and the next warehouse action. */
   salesFlow?: {

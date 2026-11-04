@@ -17,6 +17,7 @@ import { useNavCounts } from "@/lib/use-nav-counts";
 import { canonicalIndustryTemplateId } from "@/config/industry";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { formatMoney } from "@/lib/money";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -56,6 +57,7 @@ export function FmcgControlTower({
   onLoadingChange,
   onRefreshed,
 }: Props) {
+  const canReviewSetup = useHasPermission("admin.settings", "finance.close.write");
   const [snapshot, setSnapshot] = React.useState<FmcgControlTowerSnapshot | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -149,6 +151,7 @@ export function FmcgControlTower({
 
   return (
     <div className="space-y-6">
+      {canReviewSetup && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-semibold">Operational preparation</p><p className="mt-1 text-xs text-muted-foreground">Review store classification, opening reconciliation, approvals and fiscal connections.</p></div><Button variant="outline" size="sm" asChild><Link href="/settings/fmcg-setup">Open setup checklist<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button></div>}
       {!hasFacts ? (
         <Card data-tutorial-hint="fmcg-control-tower-empty">
           <CardHeader>

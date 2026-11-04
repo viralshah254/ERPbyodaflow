@@ -24,6 +24,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
 import { fetchPartiesApi, hidePartyInOrgApi, updatePartyApi } from "@/lib/api/parties";
+import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import type { PartyRow } from "@/lib/types/masters";
 import { CustomerHideConfirmDialog, type CustomerHideKind } from "@/components/customers/CustomerHideConfirmDialog";
 
@@ -42,8 +43,8 @@ type SupermarketBranchesSheetProps = {
 };
 
 /**
- * Lists modern-trade branch customers (Parties with parentPartyId = HQ).
- * Each branch is a full AR customer — add/edit uses the customer stepper.
+ * Lists delivery branches of a supermarket. SFA outlets are sites on the supermarket.
+ * Invoices stay on the supermarket. A branch is a customer only when one was added that way.
  */
 export function SupermarketBranchesSheet({
   open,
@@ -56,6 +57,7 @@ export function SupermarketBranchesSheet({
   onHqHidden,
 }: SupermarketBranchesSheetProps) {
   const [branches, setBranches] = React.useState<PartyRow[]>([]);
+  const [sites, setSites] = React.useState<PartySiteRow[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [hideTarget, setHideTarget] = React.useState<{
@@ -101,21 +103,27 @@ export function SupermarketBranchesSheet({
   const loadBranches = React.useCallback(async () => {
     if (!supermarket?.id) {
       setBranches([]);
+      setSites([]);
       return;
     }
     setLoading(true);
     try {
-      const items = await fetchPartiesApi({
-        role: "customer",
-        parentPartyId: supermarket.id,
-        sfaSegment: "MODERN_TRADE_BRANCH",
-        status: "ACTIVE",
-        limit: 100,
-      });
+      const [items, sitePage] = await Promise.all([
+        fetchPartiesApi({
+          role: "customer",
+          parentPartyId: supermarket.id,
+          sfaSegment: "MODERN_TRADE_BRANCH",
+          status: "ACTIVE",
+          limit: 100,
+        }),
+        fetchPartySitesApi({ partyId: supermarket.id, status: "ACTIVE", limit: 2000 }),
+      ]);
       setBranches(items);
+      setSites(sitePage.items);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load branches");
       setBranches([]);
+      setSites([]);
     } finally {
       setLoading(false);
     }
@@ -128,6 +136,18 @@ export function SupermarketBranchesSheet({
     }
     void loadBranches();
   }, [open, loadBranches, refreshKey]);
+
+  const filteredSites = React.useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return sites;
+    return sites.filter((site) => {
+      const hay = [site.name, site.code, site.phone, site.address?.line1, site.address?.city]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [sites, search]);
 
   const filtered = React.useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -186,8 +206,8 @@ export function SupermarketBranchesSheet({
                 {supermarket?.name ?? "Branches"}
               </SheetTitle>
               <SheetDescription>
-                Outlets supplied under this chain
-                {supermarket?.code ? ` · ${supermarket.code}` : ""}. Delivery stays on the branch.
+                Delivery outlets of this supermarket
+                {supermarket?.code ? ` · ${supermarket.code}` : ""}. Invoices stay on the supermarket.
               </SheetDescription>
             </div>
             {supermarket ? (
@@ -243,18 +263,18 @@ export function SupermarketBranchesSheet({
         <div className="flex-1 overflow-y-auto">
           {loading ? (
             <p className="p-6 text-sm text-muted-foreground">Loading branches…</p>
-          ) : filtered.length === 0 ? (
+          ) : filtered.length === 0 && filteredSites.length === 0 ? (
             <div className="p-4">
               <EmptyState
                 icon="GitBranch"
-                title={branches.length === 0 ? "No branches yet" : "No matching branches"}
+                title={branches.length === 0 && sites.length === 0 ? "No branches yet" : "No matching branches"}
                 description={
-                  branches.length === 0
-                    ? "Add a branch as a full customer (credit, price tag, contact) under this supermarket."
+                  branches.length === 0 && sites.length === 0
+                    ? "Branches of the linked SFA supermarket show here. Invoices stay on this supermarket."
                     : "Try a different search."
                 }
                 action={
-                  branches.length === 0 && supermarket
+                  branches.length === 0 && sites.length === 0 && supermarket
                     ? {
                         label: "Add branch",
                         onClick: () => onAddBranch(supermarket.id),
@@ -274,6 +294,27 @@ export function SupermarketBranchesSheet({
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {filteredSites.map((site) => (
+                  <TableRow key={site.id}>
+                    <TableCell>
+                      <div className="min-w-0">
+                        <p className="font-medium">{site.name}</p>
+                        {site.phone ? (
+                          <p className="text-xs text-muted-foreground">{site.phone}</p>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {site.code || "—"}
+                    </TableCell>
+                    <TableCell className="max-w-[180px] text-sm text-muted-foreground">
+                      <span className="line-clamp-2">
+                        {site.address?.line1 || site.address?.city || "—"}
+                      </span>
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                ))}
                 {filtered.map((branch) => (
                   <TableRow key={branch.id}>
                     <TableCell>

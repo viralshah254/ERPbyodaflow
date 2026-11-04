@@ -139,6 +139,7 @@ export type PartyRow = {
 
 export type WarehouseRow = {
   id: string;
+  branchId?: string;
   code: string;
   name: string;
   branch?: string;

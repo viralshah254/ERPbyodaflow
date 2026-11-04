@@ -13,7 +13,6 @@ import {
   fetchFinancePeriodsApi,
   fetchInvoiceCogsExceptionsApi,
   formatFinancePeriodLoadError,
-  reopenFinancePeriodApi,
   retryInvoiceCogsApi,
   type CloseChecklistItem,
   type InvoiceCogsException,
@@ -42,7 +41,7 @@ function ChecklistRow({ item }: { item: CloseChecklistItem }) {
         ) : (
           <Icons.AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
         )}
-        <span className="text-sm font-medium">{item.label}</span>
+        <div><span className="text-sm font-medium">{item.label}</span>{item.detail && <p className="mt-1 max-w-3xl break-words text-xs text-muted-foreground">{item.detail}</p>}</div>
       </div>
       <div className="flex items-center gap-2">
         {!isOk && (
@@ -67,7 +66,7 @@ function ChecklistRow({ item }: { item: CloseChecklistItem }) {
 }
 
 export default function PeriodClosePage() {
-  const [loading, setLoading] = React.useState<"close" | "reopen" | null>(null);
+  const [loading, setLoading] = React.useState<"close" | null>(null);
   const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number; status: "OPEN" | "CLOSED" }>>([]);
   const [periodsLoadFailed, setPeriodsLoadFailed] = React.useState(false);
   const [checklist, setChecklist] = React.useState<CloseChecklistItem[]>([]);
@@ -77,7 +76,6 @@ export default function PeriodClosePage() {
 
   const openPeriodRow = React.useMemo(() => periods.find((p) => p.status === "OPEN"), [periods]);
   const currentPeriodId = openPeriodRow?.id;
-  const closedPeriodId = React.useMemo(() => periods.find((p) => p.status === "CLOSED")?.id, [periods]);
   const hasOpenPeriod = Boolean(currentPeriodId);
 
   const hasBlockers = checklist.some((item) => item.count > 0 && item.severity === "error");
@@ -285,34 +283,10 @@ export default function PeriodClosePage() {
                   ? "No open period to close"
                   : "Close period"}
             </Button>
-            <Button
-              variant="outline"
-              className="w-full"
-              size="lg"
-              disabled={loading !== null || !closedPeriodId}
-              onClick={async () => {
-                setLoading("reopen");
-                try {
-                  if (!closedPeriodId) {
-                    toast.error("No closed fiscal period to reopen.");
-                    return;
-                  }
-                  await reopenFinancePeriodApi(closedPeriodId);
-                  await refreshAll();
-                  toast.success("Period reopened.");
-                } catch (e) {
-                  toast.error((e as Error).message);
-                } finally {
-                  setLoading(null);
-                }
-              }}
-            >
-              <Icons.Unlock className="mr-2 h-4 w-4" />
-              {closedPeriodId ? "Reopen period" : "No closed period to reopen"}
-            </Button>
+            <Button variant="outline" className="w-full" size="lg" asChild><Link href="/finance/period-governance"><Icons.Unlock className="mr-2 h-4 w-4"/>Request reopening or warning review</Link></Button>
             <p className="text-xs text-muted-foreground mt-2 text-center">
               Closing a period prevents any transactions from being posted to it. Only users with{" "}
-              <code>finance.close.write</code> permission can close or reopen.
+              <code>finance.close.write</code> permission can close. Reopening requires an independently approved request.
             </p>
           </CardContent>
         </Card>

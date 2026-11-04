@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -12,8 +13,7 @@ import { fetchDocumentListPageApi } from "@/lib/api/documents";
 import type { DocListRow } from "@/lib/types/documents";
 import { apiRequest, isApiConfigured } from "@/lib/api/client";
 import { formatMoney } from "@/lib/money";
-import { toast } from "sonner";
-import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { useCanWriteSales, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 
 const NAV_LINKS = [
@@ -35,34 +35,42 @@ type KpiData = {
   openOrders: number;
   pendingApprovalCount: number;
   onTheRoad: number;
-  arTotal: number;
-  arInvoiceCount: number;
+  arTotal: number | null;
+  arInvoiceCount: number | null;
   recentOrders: DocListRow[];
   stages: Array<{ status: string; label: string; hint: string; count: number }>;
 };
 
+function completeCount(total: number | undefined) {
+  if (total == null || !Number.isInteger(total) || total < 0) throw new Error("The connected server did not return a complete sales count. Update the API before relying on these totals.");
+  return total;
+}
+
 export default function SalesOverviewPage() {
   const canWrite = useCanWriteSales();
+  const canReadAr = useHasPermission("finance.ar.read", "finance.read");
   const [kpis, setKpis] = React.useState<KpiData | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+  const [refreshKey, setRefreshKey] = React.useState(0);
 
   React.useEffect(() => {
-    if (!isApiConfigured()) return;
-    setLoading(true);
+    if (!isApiConfigured()) { setError("Connect the ERP API to load sales activity."); setLoading(false); return; }
+    let cancelled = false;
+    setLoading(true); setError(""); setKpis(null);
     Promise.all([
       Promise.all(
         FULFILLMENT.map((stage) =>
           fetchDocumentListPageApi("sales-order", { limit: 1, status: stage.status })
-            .then((page) => page.total ?? page.items.length)
-            .catch(() => 0),
+            .then((page) => completeCount(page.total)),
         ),
       ),
-      fetchDocumentListPageApi("sales-order", { limit: 5 }).catch(() => null),
+      fetchDocumentListPageApi("sales-order", { limit: 5 }),
       fetchDocumentListPageApi("delivery-note", { limit: 1, status: "IN_TRANSIT" })
-        .then((page) => page.total ?? 0)
-        .catch(() => 0),
-      apiRequest<{ totalAr: number; invoiceCount: number }>("/api/finance/ar").catch(() => ({ totalAr: 0, invoiceCount: 0 })),
+        .then((page) => completeCount(page.total)),
+      canReadAr ? apiRequest<{ totalAr: number; invoiceCount: number }>("/api/finance/ar").catch(() => null) : Promise.resolve(null),
     ]).then(([counts, recent, onTheRoad, arData]) => {
+      if (cancelled) return;
       const stages = FULFILLMENT.map((stage, index) => ({
         ...stage,
         count: counts[index] ?? 0,
@@ -74,14 +82,15 @@ export default function SalesOverviewPage() {
         openOrders,
         pendingApprovalCount: stages.find((stage) => stage.status === "PENDING_APPROVAL")?.count ?? 0,
         onTheRoad,
-        arTotal: arData.totalAr,
-        arInvoiceCount: arData.invoiceCount,
+        arTotal: arData?.totalAr ?? null,
+        arInvoiceCount: arData?.invoiceCount ?? null,
         recentOrders: recent?.items ?? [],
         stages,
       });
-    }).catch((e) => toast.error((e as Error).message))
-    .finally(() => setLoading(false));
-  }, []);
+    }).catch((cause) => { if (!cancelled) setError(cause instanceof Error ? cause.message : "Sales activity could not load."); })
+    .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [refreshKey, canReadAr]);
 
   const maxStageCount = Math.max(...(kpis?.stages.map((stage) => stage.count) ?? [1]), 1);
 
@@ -103,6 +112,8 @@ export default function SalesOverviewPage() {
         ) : undefined}
       />
       <div className="p-6 space-y-6">
+        <OperationalFlowNav flow="sales" current="Orders" />
+        {error && <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-500/40 bg-amber-500/5 p-4"><p className="text-sm">Sales activity is unavailable: {error}</p><Button variant="outline" size="sm" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}>Retry</Button></div>}
 
         {/* KPI Row */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4" data-tutorial-hint="sales-kpis">
@@ -113,7 +124,7 @@ export default function SalesOverviewPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Open orders</p>
               </div>
               <p className="text-2xl font-bold tabular-nums">
-                {loading ? "—" : (kpis?.openOrders ?? 0)}
+                {loading ? "—" : (kpis?.openOrders ?? "—")}
               </p>
               <Link href="/sales/orders" className="text-xs text-primary hover:underline">Still to ship</Link>
             </CardContent>
@@ -125,7 +136,7 @@ export default function SalesOverviewPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Waiting approval</p>
               </div>
               <p className="text-2xl font-bold tabular-nums text-amber-600">
-                {loading ? "—" : (kpis?.pendingApprovalCount ?? 0)}
+                {loading ? "—" : (kpis?.pendingApprovalCount ?? "—")}
               </p>
               <Link href="/sales/orders?status=PENDING_APPROVAL" className="text-xs text-primary hover:underline">Review</Link>
             </CardContent>
@@ -137,12 +148,12 @@ export default function SalesOverviewPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">Outstanding AR</p>
               </div>
               <p className="text-2xl font-bold text-red-600">
-                {loading ? "—" : formatMoney(kpis?.arTotal ?? 0, "KES")}
+                {loading || kpis?.arTotal == null ? "—" : formatMoney(kpis.arTotal, "KES")}
               </p>
               {kpis?.arInvoiceCount ? (
                 <p className="text-xs text-muted-foreground">{kpis.arInvoiceCount} invoice{kpis.arInvoiceCount !== 1 ? "s" : ""} open</p>
               ) : (
-                <Link href="/ar/aging" className="text-xs text-primary hover:underline">View aging →</Link>
+                <>{canReadAr ? <Link href="/ar/aging" className="text-xs text-primary hover:underline">View aging →</Link> : <p className="text-xs text-muted-foreground">Managed by finance</p>}</>
               )}
             </CardContent>
           </Card>
@@ -153,7 +164,7 @@ export default function SalesOverviewPage() {
                 <p className="text-xs text-muted-foreground uppercase tracking-wide">On the road</p>
               </div>
               <p className="text-2xl font-bold tabular-nums">
-                {loading ? "—" : (kpis?.onTheRoad ?? 0)}
+                {loading ? "—" : (kpis?.onTheRoad ?? "—")}
               </p>
               <Link href="/docs/delivery-note?status=IN_TRANSIT" className="text-xs text-primary hover:underline">Delivery notes</Link>
             </CardContent>

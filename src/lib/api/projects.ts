@@ -48,14 +48,15 @@ type BackendProjectCostLink = {
 type BackendProjectCostingResponse = {
   summary: {
     timesheetHours: number;
-    timesheetAmount: number;
-    documentAmount: number;
-    totalBurn: number;
+    timesheetAmount: number | null;
+    documentAmount: number | null;
+    totalBurn: number | null;
     budget: number;
-    burnPct: number;
+    burnPct: number | null;
     timesheetCostingMode: "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
     defaultHourlyRate: number;
     postedDocumentCount: number;
+  basis?: string; warnings?: string[];
   };
   items: BackendProjectCostLink[];
 };
@@ -99,14 +100,15 @@ export type ProjectCostLinkRow = {
 
 export type ProjectCostingSummary = {
   timesheetHours: number;
-  timesheetAmount: number;
-  documentAmount: number;
-  totalBurn: number;
+  timesheetAmount: number | null;
+  documentAmount: number | null;
+  totalBurn: number | null;
   budget: number;
-  burnPct: number;
+  burnPct: number | null;
   timesheetCostingMode: "EMPLOYEE_SALARY_MONTHLY_173" | "PROJECT_DEFAULT_RATE";
   defaultHourlyRate: number;
   postedDocumentCount: number;
+  basis?: string; warnings?: string[];
 };
 
 export type LinkableProjectDocument = {

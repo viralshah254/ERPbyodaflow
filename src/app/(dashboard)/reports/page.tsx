@@ -28,6 +28,7 @@ import { resolveIndustryCategoryFromTemplateId } from "@/config/industry";
 import { useHasPermission } from "@/lib/rbac/use-write-guard";
 
 const QUICK_LINKS = [
+  { href: "/reports/snapshots", label: "Snapshots", desc: "Frozen report evidence with PDF and Excel downloads", icon: "Camera" as const },
   { href: "/reports/saved", label: "Saved Views", desc: "Your saved report views", icon: "Bookmark" as const },
   { href: "/reports/scheduled", label: "Scheduled", desc: "Automated report schedules", icon: "Clock" as const },
   { href: "/reports/exports", label: "Exports", desc: "Export history & downloads", icon: "Download" as const },
@@ -99,7 +100,7 @@ export default function ReportsPage() {
       <div className="p-6 space-y-8">
         <FmcgReportCoverage />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {QUICK_LINKS.filter((link) => (!isFmcg || !["Commission reconciliation", "Batch Costing"].includes(link.label)) && (!["VAT summary", "WHT summary", "KRA CU numbers"].includes(link.label) || canTax) && (link.label !== "Scheduled" || canReadSchedules) && (link.label !== "Exports" || canReadExports)).map(({ href, label, desc, icon }) => {
+          {QUICK_LINKS.filter((link) => (!isFmcg || !["Commission reconciliation", "Batch Costing"].includes(link.label)) && (!["VAT summary", "WHT summary", "KRA CU numbers"].includes(link.label) || canTax) && (link.label !== "Scheduled" || canReadSchedules) && (!["Exports", "Snapshots"].includes(link.label) || canReadExports)).map(({ href, label, desc, icon }) => {
             const Icon = (Icons[icon] || Icons.FileText) as React.ComponentType<{ className?: string }>;
             const count =
               label === "Saved Views" ? savedCount :

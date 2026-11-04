@@ -66,6 +66,7 @@ export default function VatSummaryReportPage() {
       />
       <div className="p-6">
         {loadError && <p role="alert" className="mb-4 rounded-md border border-destructive p-4 text-destructive">{loadError}</p>}
+        {summary && <div className="mb-5 grid gap-3 sm:grid-cols-2"><div className="rounded-xl border bg-muted/20 p-4"><p className="text-xs text-muted-foreground">Non-recoverable VAT retained in costs</p><p className="mt-1 font-semibold">{formatMoney(summary.nonrecoverableVat ?? 0, "KES")}</p></div><div className={`rounded-xl border p-4 ${(summary.unconfirmedInputVat ?? 0) !== 0 ? "border-amber-500/40 bg-amber-500/5" : "bg-muted/20"}`}><p className="text-xs text-muted-foreground">Unconfirmed input VAT · excluded from the claim</p><p className="mt-1 font-semibold">{formatMoney(summary.unconfirmedInputVat ?? 0, "KES")}</p><Link className="mt-2 inline-block text-xs text-primary underline" href="/finance/input-vat">Review input VAT evidence</Link></div></div>}
         <Card>
           <CardHeader>
             <CardTitle>VAT summary</CardTitle>
@@ -77,7 +78,7 @@ export default function VatSummaryReportPage() {
                 <TableRow>
                   <TableHead>From</TableHead>
                   <TableHead>To</TableHead>
-                  <TableHead className="text-right">Output VAT</TableHead><TableHead className="text-right">Purchase VAT</TableHead><TableHead className="text-right">Difference</TableHead>
+                  <TableHead className="text-right">Output VAT</TableHead><TableHead className="text-right">Recoverable input VAT</TableHead><TableHead className="text-right">Output less confirmed input</TableHead>
                   <TableHead className="text-right">Posted invoices</TableHead>
                   <TableHead>Currency</TableHead>
                 </TableRow>

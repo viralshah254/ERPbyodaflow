@@ -62,6 +62,7 @@ export type APPaymentAllocation = {
 };
 
 export type APPaymentRow = {
+  currency?: string;
   id: string;
   number: string;
   date: string;

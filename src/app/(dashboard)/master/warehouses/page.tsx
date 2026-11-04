@@ -26,9 +26,9 @@ import {
   fetchWarehouseCodesApi,
   fetchWarehousesApi,
   mapWarehouseRow,
-  approveWarehouseDispositionApi,
   updateWarehouseApi,
 } from "@/lib/api/warehouses";
+import { WarehouseDispositionActions } from "@/components/warehouse/WarehouseDispositionActions";
 import { t } from "@/lib/terminology";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { useTerminology } from "@/stores/orgContextStore";
@@ -63,7 +63,7 @@ export default function MasterWarehousesPage() {
     code: "",
     name: "",
     branchId: "none",
-    purpose: "RECEIVING" as "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT",
+    purpose: "" as "" | "STORAGE" | "RECEIVING" | "QUARANTINE" | "DISPATCH" | "TRANSIT",
     capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"],
   });
 
@@ -109,18 +109,18 @@ export default function MasterWarehousesPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ code: "", name: "", branchId: "none", purpose: "RECEIVING", capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"] });
+    setForm({ code: "", name: "", branchId: "none", purpose: "", capabilities: ["RECEIVE", "STORE", "QUARANTINE", "QC"] });
     setDrawerOpen(true);
   };
 
   const openEdit = (row: WarehouseRow) => {
     setEditingId(row.id);
-    const branchId = branches.find((branch) => branch.label === row.branch)?.id ?? "none";
+    const branchId = row.branchId ?? "none";
     setForm({
       code: row.code,
       name: row.name,
       branchId,
-      purpose: row.purpose ?? "STORAGE",
+      purpose: row.purpose ?? "",
       capabilities: row.capabilities,
     });
     setDrawerOpen(true);
@@ -131,6 +131,7 @@ export default function MasterWarehousesPage() {
       toast.error("Warehouse name is required.");
       return;
     }
+    if (!form.purpose) { toast.error("Choose the warehouse purpose before saving."); return; }
     if (form.capabilities.length === 0) {
       toast.error("Select at least one warehouse capability.");
       return;
@@ -181,47 +182,7 @@ export default function MasterWarehousesPage() {
       {
         id: "disposition",
         header: "Disposition",
-        accessor: (r: WarehouseRow) => (
-          <div className="flex flex-wrap items-center gap-2">
-            <span>{r.dispositionPending ? `Pending ${r.dispositionPending}` : (r.stockDisposition || "Usable until approved")}</span>
-            {canWrite && !r.dispositionPending ? (
-              <>
-                <Button size="sm" variant="outline" onClick={async (event) => {
-                  event.stopPropagation();
-                  try {
-                    await updateWarehouseApi(r.id, { stockDisposition: "EXPIRED" });
-                    toast.success("Expired disposition is waiting for a second person.");
-                    await reload();
-                  } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "Could not request the disposition.");
-                  }
-                }}>Request expired</Button>
-                <Button size="sm" variant="outline" onClick={async (event) => {
-                  event.stopPropagation();
-                  try {
-                    await updateWarehouseApi(r.id, { stockDisposition: "DAMAGED" });
-                    toast.success("Damaged disposition is waiting for a second person.");
-                    await reload();
-                  } catch (error) {
-                    toast.error(error instanceof Error ? error.message : "Could not request the disposition.");
-                  }
-                }}>Request damaged</Button>
-              </>
-            ) : null}
-            {canWrite && r.dispositionPending ? (
-              <Button size="sm" onClick={async (event) => {
-                event.stopPropagation();
-                try {
-                  await approveWarehouseDispositionApi(r.id);
-                  toast.success("Disposition approved.");
-                  await reload();
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Could not approve the disposition.");
-                }
-              }}>Approve</Button>
-            ) : null}
-          </div>
-        ),
+        accessor: (r: WarehouseRow) => <WarehouseDispositionActions row={r} canWrite={canWrite} onChanged={reload} />,
       },
     ],
     [canWrite, reload]
@@ -231,7 +192,7 @@ export default function MasterWarehousesPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={warehouseLabel + "s"}
-        description="Manage warehouses and locations"
+        description="Know where stock belongs, which stores can supply demand and which need review."
         breadcrumbs={[
           { label: "Masters", href: "/master" },
           { label: warehouseLabel + "s" },
@@ -250,6 +211,10 @@ export default function MasterWarehousesPage() {
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <div className="grid shrink-0 gap-3 sm:grid-cols-3" aria-label="Warehouse setup summary">
+          {[{ label: "Active stores", value: rows.filter((row) => row.status !== "INACTIVE").length }, { label: "Need purpose", value: rows.filter((row) => row.status !== "INACTIVE" && !row.purpose).length }, { label: "Awaiting approval", value: rows.filter((row) => row.dispositionPending).length }].map((item) => <div key={item.label} className="rounded-xl border bg-card px-4 py-3"><p className="text-xs text-muted-foreground">{item.label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{loading ? "—" : item.value}</p></div>)}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 px-4 py-3 text-sm"><p className="max-w-3xl text-muted-foreground">Classify each store before use. Unclassified, inactive and held stores cannot supply sales or production. Disposition changes require independent approval.</p><Button variant="outline" size="sm" asChild><Link href="/settings/fmcg-setup">Operational setup</Link></Button></div>
         <DataTableToolbar
           searchPlaceholder={`Search by code, name, branch...`}
           searchValue={search}

@@ -29,7 +29,7 @@ export const ITEM_GUIDES: Partial<
       "Read the exception or alert sections first; they usually represent documents, approvals, or stock situations that will get worse if ignored.",
       "Apply date range or filters so you compare “this week vs last” or focus on a branch or warehouse if your role is regional.",
       "Drill from a tile or row into the underlying list or document; the Control Tower is a map, not the place to post every transaction.",
-      "If a metric is unclear, use Tutorial → Ask Copilot on this page to get a plain-language definition and suggested follow-up screens.",
+      "If a metric is unclear, use Ask Gaia on this page for a plain-language explanation and linked workflow guides.",
       "Pair with Dashboard for a more personal or role-based view; Control Tower tends to be org-wide or leadership-focused.",
     ],
     guideTips: [
@@ -58,7 +58,7 @@ export const ITEM_GUIDES: Partial<
     guideSteps: [
       "Identify which widgets matter for your role (e.g. open orders, stock alerts, approvals) and read them top to bottom.",
       "Use any quick links or recent-activity rows to reopen documents you were working on without searching.",
-      "Press ⌘K (Mac) or Ctrl+K (Windows) to open the command palette: jump to any page or trigger Copilot with context.",
+      "Press ⌘K (Mac) or Ctrl+K (Windows) to open the command palette and jump to a page. Use Ask Gaia for workflow explanations.",
       "Click a KPI or chart segment when the UI allows drill-through; you should land on a filtered list or detail, not a dead end.",
       "If you use multiple branches or warehouses, set the org/branch context in the header (if available) before trusting location-specific numbers.",
       "When onboarding, complete Setup (onboarding checklist) so dashboard tiles start showing real data instead of empty states.",
@@ -99,7 +99,7 @@ export const ITEM_GUIDES: Partial<
     ],
     guideTips: [
       "Use keyboard-friendly flows if your org trains speed: open → review → approve → next.",
-      "If the same submitter repeats errors, consider a training snippet in the rejection comment or a Copilot prompt to explain the policy.",
+      "If the same submitter repeats errors, consider a training snippet in the rejection comment or a Gaia prompt to explain the policy.",
     ],
     elementHints: [
       {
@@ -161,7 +161,7 @@ export const ITEM_GUIDES: Partial<
       "Use Create / New on a list page to start a draft; mandatory fields (customer/supplier, dates, lines) must be complete before submit or approval.",
       "Search and filters on each list help you find drafts, posted, or period-specific documents—use status filters during month-end.",
       "Understand linkage: many documents reference a predecessor (invoice from order, GRN from PO). Maintaining those links improves traceability and three-way match.",
-      "Use Copilot from Page Help to get a narrative of “what happens when I post this document” for your org’s configuration.",
+      "Use Gaia from Page Help to get a narrative of “what happens when I post this document” for your org’s configuration.",
       "After posting, follow through in Finance (AR/AP, GL) or Inventory (movements) if reconciliation is part of your role.",
     ],
     guideTips: [
@@ -736,7 +736,7 @@ export const ITEM_GUIDES: Partial<
       "Verify tax, withholding, and payment terms before post.",
       "Post when accounting recognises revenue; some orgs batch nightly.",
       "After post, AR aging and customer statements (Finance → Customer statements) should update.",
-      "Use Copilot to clarify “what still blocks posting” on a complex invoice.",
+      "Use Gaia to clarify “what still blocks posting” on a complex invoice.",
     ],
     guideTips: [
       "E-invoicing or fiscal printers may add a final submission step after ERP post.",
@@ -998,7 +998,11 @@ export const ITEM_GUIDES: Partial<
       "Bank Reconciliation matches each statement line to one eligible payment or receipt. Automatic matching stops on ambiguous equal amounts and never reuses a payment.",
     guideSteps: [
       "Import a statement and verify its bank account, date range, opening balance, and closing balance.",
-      "Review suggested matches. Suggested is not matched: confirm the payment, reference, amount, and date.",
+      "Match an existing system payment first. Automatic matching links existing payments; it does not create a new receipt or payment.",
+      "If no payment exists, select an open invoice or bill, review Create payment & match, and confirm the amount and counterparty. This posts a new payment and settles the document.",
+      "For several documents, use Group allocation. Allocate in the invoice currency. For fees or FX, enable Include bank charges or currency conversion, enter the actual bank advice, rates and applicable accounts, then Preview balanced settlement.",
+      "Review the original invoice carrying values, bank movement, charges, realised FX and balanced journal. Save the reviewed proposal; independent authorised users must approve, post and close. Changed source evidence requires a new preview.",
+      "If a response is interrupted, refresh the statement and inspect its payment. Retrying the same completed settlement returns the existing payment; changed details require review.",
       "Resolve ambiguous lines manually; choose an account for every fee or other adjustment.",
       "Confirm matches, then verify the bank closing balance agrees to the reconciled GL balance before closing.",
     ],
@@ -1259,7 +1263,7 @@ export const ITEM_GUIDES: Partial<
   "franchise-outlet-workspace": {
     guideSummary:
       "Outlet Workspace is the lightweight view for franchisees. See orders, stock, and key tasks for your outlet.",
-    guideSteps: ["View outlet-specific data.", "Create orders or requests as allowed.", "Use Copilot for help."],
+    guideSteps: ["View outlet-specific data.", "Create orders or requests as allowed.", "Use Gaia for help."],
   },
   "franchise-manage-outlets": {
     guideSummary:
@@ -1322,7 +1326,7 @@ export const ITEM_GUIDES: Partial<
   "payroll-overview": {
     guideSummary:
       "Payroll Overview shows payroll summary and links to employees, pay runs, and statutories. Use it to start a pay run or check status.",
-    guideSteps: ["Open Employees or Pay runs from the overview.", "Run pay for a period and post.", "Review statutories (NSSF, NHIF, PAYE)."],
+    guideSteps: ["Open Employees or Pay runs from the overview.", "Confirm the employee pay basis and period inputs before reviewing the pay run.", "Review configured deductions and approved payroll totals before any authorised posting."],
   },
   "payroll-employees": {
     guideSummary:
@@ -1341,7 +1345,7 @@ export const ITEM_GUIDES: Partial<
   },
   "payroll-statutories": {
     guideSummary:
-      "Statutories shows NSSF, NHIF, PAYE and other statutory settings and amounts. Configure rates and view liability per period.",
+      "Statutories shows configured payroll deductions and amounts for the selected period. Review current approved configuration and source payroll evidence.",
     guideSteps: ["Review statutory config and rates.", "See liability per pay run or period.", "Export for filing if needed."],
   },
   // Intercompany
@@ -1424,7 +1428,7 @@ export const ITEM_GUIDES: Partial<
   "finance-tax": {
     guideSummary:
       "Tax / VAT shows tax configuration and summary. View input vs output VAT and run tax reports.",
-    guideSteps: ["Review tax setup and rates.", "Run VAT or WHT reports as needed."],
+    guideSteps: ["Search for a tax definition. An administrator can edit an unused code and save its rate, type and effective dates.", "A used tax code keeps its historical identity and rate. Use a revised code and effective date for a rate change, or retire the old code prospectively.", "Confirm the organisation tax registration and approved recovery schedule. For partial recovery, open Input VAT review and have an independent approver review each expense-bill allocation.", "Run the VAT report and reconcile tax controls at period close. Missing client evidence and unsupported inventory VAT capitalisation remain posting gates."],
   },
   "finance-statements": {
     guideSummary:
@@ -1541,7 +1545,7 @@ export const ITEM_GUIDES: Partial<
   "analytics-hub": {
     guideSummary:
       "Analytics Studio is the main analytics entry. Explore data, view insights, or open product, finance, or other analytics.",
-    guideSteps: ["Open Explore or a specific analytics module.", "Apply filters and view charts or tables.", "Ask Copilot to explain a metric."],
+    guideSteps: ["Open Explore or a specific analytics module.", "Apply filters and view charts or tables.", "Ask Gaia to explain a metric."],
   },
   "analytics-explore": {
     guideSummary:
@@ -1791,7 +1795,7 @@ export const ITEM_GUIDES: Partial<
   },
   "settings-payroll": {
     guideSummary:
-      "Payroll settings configures pay periods, statutory rates (NSSF, NHIF, PAYE), and payroll defaults.",
+      "Payroll settings configures pay periods, approved statutory parameters and payroll defaults.",
     guideSteps: ["Set pay period and cut-off.", "Configure statutory rates.", "Map payroll accounts."],
   },
   "settings-audit-log": {
@@ -1822,11 +1826,11 @@ export const ITEM_GUIDES: Partial<
   // Help
   tutorial: {
     guideSummary:
-      "The Tutorial helps you learn the ERP by module. Open a chapter to see all screens in that section, with links to each page and the option to ask Copilot about any topic.",
+      "The Tutorial helps you learn the ERP by module. Open a chapter to see all screens in that section, with links to each page and the option to ask Gaia about any topic.",
     guideSteps: [
       "Browse chapters and click Go to page to open a screen.",
-      "Click Ask Copilot on a topic for an explanation.",
-      "Use the Tutorial and Ask Copilot buttons on any page for in-context help.",
+      "Click Ask Gaia on a topic for an explanation.",
+      "Use the Tutorial and Ask Gaia buttons on any page for in-context help.",
     ],
   },
 };

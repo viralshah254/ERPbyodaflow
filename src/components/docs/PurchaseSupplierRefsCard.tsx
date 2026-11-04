@@ -15,6 +15,7 @@ type PurchaseSupplierRefsCardProps = {
   supplierInvoiceNumber?: string;
   supplierCuInvoiceNumber?: string;
   canWrite: boolean;
+  documentStatus?: string;
   onSaved: () => Promise<void> | void;
 };
 
@@ -24,6 +25,7 @@ export function PurchaseSupplierRefsCard({
   supplierInvoiceNumber,
   supplierCuInvoiceNumber,
   canWrite,
+  documentStatus,
   onSaved,
 }: PurchaseSupplierRefsCardProps) {
   const [invoiceNo, setInvoiceNo] = React.useState(supplierInvoiceNumber ?? "");
@@ -54,7 +56,7 @@ export function PurchaseSupplierRefsCard({
             id="supplier-invoice-number"
             value={invoiceNo}
             onChange={(event) => setInvoiceNo(event.target.value)}
-            disabled={!canWrite || saving}
+            disabled={!canWrite || saving || documentStatus === "POSTED"}
             className="font-mono"
             placeholder="Invoice number on their invoice"
           />
@@ -65,14 +67,15 @@ export function PurchaseSupplierRefsCard({
             id="supplier-cu-number"
             value={cuNo}
             onChange={(event) => setCuNo(event.target.value)}
-            disabled={!canWrite || saving}
+            disabled={!canWrite || saving || documentStatus === "POSTED"}
             className="font-mono"
             placeholder="CU number on their invoice"
           />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {canWrite ? (
+        {documentStatus === "POSTED" && <Button size="sm" variant="outline" asChild><Link href={`/purchasing/exceptions?documentId=${encodeURIComponent(documentId)}`}>Review corrections and exceptions</Link></Button>}
+        {canWrite && documentStatus !== "POSTED" ? (
           <Button
             type="button"
             size="sm"

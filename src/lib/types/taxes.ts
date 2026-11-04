@@ -3,6 +3,8 @@ export type TaxRow = {
   code: string;
   name: string;
   rate: number;
+  type?: string;
+  used?: boolean;
   inclusive: boolean;
   effectiveFrom: string;
   effectiveTo?: string | null;

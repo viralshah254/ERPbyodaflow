@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ManufacturingWorkOrder } from "@/lib/api/manufacturing";
-import { productionSheetHtml } from "./production-sheet";
+import { productionSheetHtml, productionPlanHtml } from "./production-sheet";
+import type { ExplodedProductionPlan } from "@/lib/api/manufacturing";
 describe("printable saved material requirements", () => {
   it("includes full batch requirements, stores and posting guidance and escapes user data", () => {
     const html = productionSheetHtml({ number: "WO-1", productName: "Cake <script>", notes: '<img src=x onerror="alert(1)">', plannedQuantity: 10, producedQuantity: 2, openQuantity: 8, materialLines: [{ productId: "flour", plannedQuantity: 5, warehouseId: "RM-1", uom: "KG", issuedQuantity: 1, consumedQuantity: 1 }], outputLines: [{ warehouseId: "FG-1" }] } as ManufacturingWorkOrder);
@@ -8,6 +9,18 @@ describe("printable saved material requirements", () => {
     expect(html).toContain("<td>5</td><td>KG</td>");
     expect(html).toContain("Printing does not reserve"); expect(html).toContain("&lt;script&gt;"); expect(html).not.toContain("<img");
   });
+});
+
+it("dates the planning preview in Nairobi and separates full formula from net material requirements", () => {
+  const plan = { packLines: [{ productName: "Cake <script>", productSku: "FG1", requiredQty: 10, uom: "EA" }], make: [], buy: [{ productName: "Flour", requiredQty: 2, onHandQty: 1, warehouseShortfallQty: 1, uom: "KG" }], tree: [{ productId: "flour", productName: "Flour", quantity: 5, uom: "KG", kind: "buy", children: [] }] } as unknown as ExplodedProductionPlan;
+  const date = new Date("2026-11-03T18:40:00Z");
+  const html = productionPlanHtml(plan, date, date);
+  expect(html).toContain("21:40:00 EAT (Africa/Nairobi)");
+  expect(html).toContain("not a released production instruction");
+  expect(html).toContain("<td>Flour</td><td>5</td><td>KG</td>");
+  expect(html).toContain("<td>Flour</td><td>2</td><td>1</td><td>1</td><td>KG</td>");
+  expect(html).not.toContain("Cake <script>");
+  expect(html).toContain("Cake &lt;script&gt;");
 });
 
 describe("daily packet units", () => {

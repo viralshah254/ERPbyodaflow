@@ -1,4 +1,5 @@
 "use client";
+import * as React from "react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -22,7 +23,7 @@ export function KraSigningBadge({
   className,
 }: KraSigningBadgeProps) {
   const posted = String(documentStatus ?? "").toUpperCase() === "POSTED";
-  if (!posted) {
+  if (!posted && !kraSigning) {
     return <span className={cn("text-muted-foreground text-sm", className)}>—</span>;
   }
 

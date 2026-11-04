@@ -26,12 +26,13 @@ export interface PageGuideSheetProps {
   /** Optional: start spotlight tour when available */
   onStartTour?: () => void;
   hasTour?: boolean;
+  guideHref?: string;
 }
 
 const FALLBACK_NO_COPILOT =
   "No specific guide for this page. Use the Tutorial chapter links and navigation to find related screens.";
 const FALLBACK_WITH_COPILOT =
-  "No specific guide for this page. Use Ask Copilot to get help and next steps.";
+  "Search the help centre or ask Gaia for related workflow instructions.";
 
 export function PageGuideSheet({
   open,
@@ -42,6 +43,7 @@ export function PageGuideSheet({
   onAskCopilot,
   onStartTour,
   hasTour,
+  guideHref,
 }: PageGuideSheetProps) {
   React.useEffect(() => {
     if (open && route) {
@@ -100,7 +102,7 @@ export function PageGuideSheet({
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 {elementHints.map((eh, i) => (
                   <li key={i}>
-                    <code className="text-xs bg-muted px-1 rounded">{eh.selector}</code>: {eh.hint}
+                    {eh.hint}
                   </li>
                 ))}
               </ul>
@@ -144,9 +146,11 @@ export function PageGuideSheet({
               }}
             >
               <Sparkles className="mr-2 h-4 w-4" />
-              Ask Copilot about this page
+              Ask Gaia about this page
             </Button>
           ) : null}
+          {guideHref && <Button variant="outline" size="sm" className="w-full" asChild><Link href={guideHref} onClick={() => onOpenChange(false)}>Read the full step-by-step guide</Link></Button>}
+          <Button variant="ghost" size="sm" className="w-full" asChild><Link href="/tutorial" onClick={() => onOpenChange(false)}>Search all ERP tutorials</Link></Button>
           {hasChapterLink && (
             <Button variant="outline" size="sm" className="w-full" asChild>
               <Link href={info!.hrefToChapter} onClick={() => onOpenChange(false)}>

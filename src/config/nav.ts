@@ -230,6 +230,9 @@ export const NAV_SECTIONS: NavSection[] = [
         permission: "finance.accounts.read",
       },
       {
+        id: "finance-employee-expenses", label: "Employee Expenses", href: "/finance/employee-expenses", icon: "Receipt", moduleId: "finance", permission: "finance.read",
+      },
+      {
         id: "finance-journals",
         label: "Journal Entries",
         href: "/finance/journals",
@@ -268,6 +271,9 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: "CreditCard",
         moduleId: "finance",
         permission: "finance.payments.read",
+      },
+      {
+        id: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleId: "finance", permission: "finance.bank.read",
       },
       {
         id: "finance-bank-recon",

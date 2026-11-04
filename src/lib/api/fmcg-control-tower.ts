@@ -1,4 +1,4 @@
-import { apiRequest, getApiBase } from "./client";
+import { apiRequest } from "./client";
 
 export type FmcgControlTowerException = {
   id: string;
@@ -40,14 +40,7 @@ export async function fetchFmcgControlTower(params: {
   try {
     return await apiRequest<FmcgControlTowerSnapshot>(path, request);
   } catch (error) {
-    const status = (error as { status?: number }).status;
-    const local = "http://localhost:4000";
-    const onLocalPage =
-      typeof window !== "undefined" &&
-      (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1");
-    if (status === 404 && onLocalPage && getApiBase() !== local) {
-      return apiRequest<FmcgControlTowerSnapshot>(path, { ...request, baseUrl: local });
-    }
+    if ((error as { status?: number }).status === 404) throw new Error("The connected ERP server needs the matching control-tower release. Verify deployment and API routing, then retry.");
     throw error;
   }
 }

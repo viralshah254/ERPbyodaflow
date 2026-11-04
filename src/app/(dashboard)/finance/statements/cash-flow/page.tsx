@@ -1,4 +1,6 @@
 "use client";
+import { useAuthStore } from "@/stores/auth-store";
+import { FinancialStatementExport } from "@/components/reports/FinancialStatementExport";
 
 import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
@@ -29,35 +31,43 @@ import { cn } from "@/lib/utils";
 type DrilldownState = { sectionKey: string; label: string };
 
 export default function CashFlowPage() {
-  const baseCurrency = useBaseCurrency();
+  const scopeKey = useAuthStore((state) => `${state.org?.orgId}:${state.user?.userId}:${state.permissions.join(",")}`);
+  const configuredCurrency = useBaseCurrency();
+  const [currency, setCurrency] = React.useState("");
   const [periods, setPeriods] = React.useState<FinancePeriod[]>([]);
   const [periodsLoading, setPeriodsLoading] = React.useState(true);
   const [periodsError, setPeriodsError] = React.useState<string | null>(null);
   const [periodId, setPeriodId] = React.useState("");
   const [statement, setStatement] = React.useState<Awaited<ReturnType<typeof fetchFinancialStatementApi>> | null>(null);
+  const baseCurrency = statement?.currency ?? configuredCurrency;
   const [statementLoading, setStatementLoading] = React.useState(false);
   const [drilldown, setDrilldown] = React.useState<DrilldownState | null>(null);
   const [drilldownItems, setDrilldownItems] = React.useState<FinanceStatementDrilldownItem[]>([]);
   const [drilldownLoading, setDrilldownLoading] = React.useState(false);
 
   React.useEffect(() => {
+    let current = true;
+    setPeriods([]); setStatement(null); setPeriodId("");
     setPeriodsLoading(true);
     setPeriodsError(null);
     fetchFinancePeriodsApi()
       .then((items) => {
+        if (!current) return;
         setPeriods(items);
         setPeriodId(items.find((item) => item.status === "OPEN")?.id ?? items[0]?.id ?? "");
       })
       .catch((error) => {
+        if (!current) return;
         const msg = formatFinancePeriodLoadError(error);
         setPeriodsError(msg);
         toast.error(msg);
       })
-      .finally(() => setPeriodsLoading(false));
-  }, []);
+      .finally(() => { if (current) setPeriodsLoading(false); });
+    return () => { current = false; };
+  }, [scopeKey]);
 
   React.useEffect(() => {
-    if (!periodId) {
+    if (!periodId || (currency && !/^[A-Z]{3}$/.test(currency))) {
       setStatement(null);
       setStatementLoading(false);
       return;
@@ -66,24 +76,29 @@ export default function CashFlowPage() {
     setStatementLoading(true);
     setDrilldown(null);
     setDrilldownItems([]);
-    fetchFinancialStatementApi("cash-flow", periodId)
-      .then(setStatement)
+    let current = true;
+    fetchFinancialStatementApi("cash-flow", periodId, currency)
+      .then((data) => { if (current) setStatement(data); })
       .catch((error) => {
+        if (!current) return;
         setStatement(null);
         toast.error((error as Error).message || "Failed to load cash flow statement.");
       })
-      .finally(() => setStatementLoading(false));
-  }, [periodId]);
+      .finally(() => { if (current) setStatementLoading(false); });
+    return () => { current = false; };
+  }, [periodId, currency, scopeKey]);
 
   React.useEffect(() => {
     if (!drilldown || !periodId) return;
     setDrilldownLoading(true);
     setDrilldownItems([]);
-    fetchFinancialStatementDrilldownApi("cash-flow", drilldown.sectionKey, periodId)
-      .then(setDrilldownItems)
-      .catch((error) => toast.error((error as Error).message || "Failed to load drilldown."))
-      .finally(() => setDrilldownLoading(false));
-  }, [drilldown, periodId]);
+    let current = true;
+    fetchFinancialStatementDrilldownApi("cash-flow", drilldown.sectionKey, periodId, undefined, currency)
+      .then((items) => { if (current) setDrilldownItems(items); })
+      .catch((error) => { if (current) toast.error((error as Error).message || "Failed to load drilldown."); })
+      .finally(() => { if (current) setDrilldownLoading(false); });
+    return () => { current = false; };
+  }, [drilldown, periodId, currency, scopeKey]);
 
   const periodsEmptyOk = !periodsLoading && !periodsError && periods.length === 0;
   const canPickPeriod = !periodsLoading && !periodsError && periods.length > 0;
@@ -99,12 +114,10 @@ export default function CashFlowPage() {
       title="Cash Flow Statement"
       description="Cash inflows and outflows for the selected period"
       actions={
-        <Button variant="outline">
-          <Icons.Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
+<FinancialStatementExport completeExports={!!statement?.exportFormats?.includes("pdf")} type="cash-flow" periodId={periodId} currency={currency} disabled={!statement || statementLoading} />
       }
     >
+      <div className="flex items-center gap-3 print:hidden"><label htmlFor="statement-report-currency" className="text-sm font-medium">Currency</label><input id="statement-report-currency" className="h-10 w-44 rounded-md border bg-background px-3 text-sm" maxLength={3} placeholder="Auto (single currency)" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} /></div>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">
@@ -256,20 +269,20 @@ export default function CashFlowPage() {
                     <tr className="border-b bg-muted/50 text-muted-foreground">
                       <th className="px-4 py-2 text-left font-medium">Date</th>
                       <th className="px-4 py-2 text-left font-medium">Document</th>
-                      <th className="px-4 py-2 text-left font-medium">Account</th>
-                      <th className="px-4 py-2 text-right font-medium">Debit</th>
-                      <th className="px-4 py-2 text-right font-medium">Credit</th>
+                      <th className="px-4 py-2 text-left font-medium">{statement?.reportingPolicyId ? "Classification / basis" : "Account"}</th>
+                      <th className="px-4 py-2 text-right font-medium">{statement?.reportingPolicyId ? "Cash in / allocation" : "Debit"}</th>
+                      <th className="px-4 py-2 text-right font-medium">{statement?.reportingPolicyId ? "Cash out / allocation" : "Credit"}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {drilldownItems.map((item) => (
-                      <tr key={item.postingLineId} className="border-b last:border-0 hover:bg-muted/20">
+                      <tr key={item.rowId ?? item.postingLineId} className="border-b last:border-0 hover:bg-muted/20">
                         <td className="px-4 py-1.5 tabular-nums">
                           {new Date(item.postingDate).toLocaleDateString()}
                         </td>
                         <td className="px-4 py-1.5">{item.documentNumber ?? item.sourceNumber}</td>
                         <td className="px-4 py-1.5 text-muted-foreground">
-                          {item.accountCode ? `${item.accountCode} · ` : ""}{item.accountName ?? "—"}
+                          {item.accountCode ? `${item.accountCode} · ` : ""}{item.accountName ?? "—"}{item.reference && <p className="mt-1 text-xs">{item.reference}</p>}
                         </td>
                         <td className="px-4 py-1.5 text-right tabular-nums">
                           {item.debit > 0 ? formatMoney(item.debit, baseCurrency) : ""}
@@ -298,10 +311,10 @@ export default function CashFlowPage() {
           )}
 
           {/* IAS 7 phase-2 note */}
-          {statement && !hasBankWarning && (
+          {statement && !hasBankWarning && !statement.reportingPolicyId && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
               <Icons.Info className="mt-0.5 h-3 w-3 shrink-0" />
-              This statement uses the direct method applied to bank GL accounts (period debits = receipts, credits = payments). Operating / Investing / Financing classification (IAS 7) requires assigning a cash flow activity tag to each ledger account — a future enhancement.
+              This view shows bank-account movements. Approve the company reporting policy to classify operating, investing and financing cash flow.
             </p>
           )}
         </CardContent>

@@ -22,7 +22,7 @@ import {
 import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import { listUoms } from "@/lib/data/uom.repo";
 import { manufacturingAreaLabel } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -40,6 +40,8 @@ export default function BomDetailPage() {
   })();
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const isPlant = ["fmcg-manufacturer", "fmcg-bakery", "bakex", "bakery"].includes(templateId ?? "");
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const uoms = React.useMemo(() => listUoms().map((item) => item.code), []);
@@ -123,6 +125,7 @@ export default function BomDetailPage() {
     );
   }
 
+  const editable = canWrite && !["EFFECTIVE", "RETIRED"].includes(bom.lifecycle ?? "") && (!isPlant || bom.lifecycle === "DRAFT");
   const saveTolerance = async () => {
     if (!bom) return;
     try { const updated = await updateManufacturingBom(bom.id, { yieldTolerancePercent: Number(tolerance) }); setBom(updated); toast.success("Yield tolerance saved for future preparations"); }
@@ -150,7 +153,8 @@ export default function BomDetailPage() {
             <Badge variant={bom.isActive ? "outline" : "secondary"}>
               {bom.isActive ? "Active" : "Inactive"}
             </Badge>
-            {canWrite && (
+            <Button variant="outline" size="sm" asChild><Link href="/manufacturing/recipe-governance">Review revisions</Link></Button>
+            {editable && !isPlant && (
               <Button
                 variant="outline"
                 size="sm"
@@ -164,7 +168,7 @@ export default function BomDetailPage() {
                   : "Activate"}
               </Button>
             )}
-            {canWrite && (confirmDelete ? (
+            {editable && (confirmDelete ? (
               <>
                 <Button
                   variant="destructive"
@@ -203,13 +207,13 @@ export default function BomDetailPage() {
               Search and add products, then set quantity, unit, store, and scrap on each row. A draft is kept so you can leave and continue. Save components when the list is ready.
             </CardDescription>
           </CardHeader>
-          <CardContent className="p-0">{canApprove && <div className="mb-4 flex flex-wrap items-end gap-2"><label className="text-sm">Yield tolerance % (current {bom.yieldTolerancePercent ?? 0})<input className="ml-2 rounded border bg-background p-2" type="number" min="0" max="1000" step="0.1" value={tolerance} onChange={(event) => setTolerance(event.target.value)} /></label><Button variant="outline" disabled={!tolerance || !Number.isFinite(Number(tolerance))} onClick={() => void saveTolerance()}>Save tolerance</Button></div>}
+          <CardContent className="p-0">{canApprove && editable && <div className="mb-4 flex flex-wrap items-end gap-2"><label className="text-sm">Yield tolerance % (current {bom.yieldTolerancePercent ?? 0})<input className="ml-2 rounded border bg-background p-2" type="number" min="0" max="1000" step="0.1" value={tolerance} onChange={(event) => setTolerance(event.target.value)} /></label><Button variant="outline" disabled={!tolerance || !Number.isFinite(Number(tolerance))} onClick={() => void saveTolerance()}>Save tolerance</Button></div>}
             <BomComponentEditor
               bomId={bom.id}
               savedItems={bom.items}
               uoms={uoms}
               warehouses={warehouses}
-              canWrite={canWrite}
+              canWrite={editable}
               onSaved={setBom}
             />
           </CardContent>
@@ -224,7 +228,7 @@ export default function BomDetailPage() {
             <div className="space-y-2">
               <Label>Route</Label>
               <Select
-                disabled={!canWrite}
+                disabled={!editable}
                 value={bom.routeId ?? "__none__"}
                 onValueChange={async (value) => {
                   try {

@@ -17,6 +17,7 @@ function CustomerStatementsContent() {
       partyId={searchParams.get("partyId") ?? searchParams.get("id")}
       from={searchParams.get("from")}
       to={searchParams.get("to")}
+      currency={searchParams.get("currency")}
       loadOptions={searchArCustomerOptionsApi}
       canEmail={canWriteFinance}
     />

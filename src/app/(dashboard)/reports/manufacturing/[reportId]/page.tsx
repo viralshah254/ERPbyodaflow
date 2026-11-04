@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,13 @@ import { Label } from "@/components/ui/label";
 import { MANUFACTURING_REPORT_IDS, fetchManufacturingReport, downloadManufacturingReport, type ManufacturingReport, type ManufacturingReportId, type ManufacturingReportParams } from "@/lib/api/manufacturing-reports";
 import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
+import { ReportExportActions } from "@/components/reports/ReportExportActions";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/money";
 
 export default function ManufacturingReportPage() {
   const scopeKey = useAuthStore((state) => `${state.org?.orgId}:${state.user?.userId}:${state.permissions.join(",")}`);
+  const query = useSearchParams();
   const id = String(useParams().reportId) as ManufacturingReportId;
   const [report, setReport] = React.useState<ManufacturingReport | null>(null);
   const [selection, setSelection] = React.useState("");
@@ -35,7 +37,7 @@ export default function ManufacturingReportPage() {
     catch (e) { if (request === serial.current) { setError(e instanceof Error ? e.message : "Report could not load."); setReport((previous) => previous ? { ...previous, rows: [], warnings: [], totalWipValue: undefined } : null); } }
     finally { if (request === serial.current) setBusy(false); }
   }, [id]);
-  React.useEffect(() => { setReport(null); setSelection(""); setQuantity("1"); setDateFrom(""); setDateTo(""); if (MANUFACTURING_REPORT_IDS.includes(id)) void load(); return cancelPending; }, [id, load, cancelPending, scopeKey]);
+  React.useEffect(() => { const initial = Object.fromEntries(["bomId", "productId", "quantity", "dateFrom", "dateTo"].flatMap((key) => query.get(key) ? [[key, query.get(key)!]] : [])); setReport(null); setSelection(initial.bomId || initial.productId || ""); setQuantity(initial.quantity || "1"); setDateFrom(initial.dateFrom || ""); setDateTo(initial.dateTo || ""); if (MANUFACTURING_REPORT_IDS.includes(id)) void load(initial); return cancelPending; }, [id, load, query, cancelPending, scopeKey]);
   if (!MANUFACTURING_REPORT_IDS.includes(id)) return <PageShell><PageHeader title="Report not found" /></PageShell>;
   const isBom = id.startsWith("bom-");
   const invalidate = () => setApplied(null);
@@ -47,9 +49,9 @@ export default function ManufacturingReportPage() {
         {id === "bom-explosion" && <div className="space-y-2"><Label htmlFor="output-qty">Output quantity in recipe UOM</Label><Input id="output-qty" type="number" min="0.000001" step="any" value={quantity} onChange={(event) => { setQuantity(event.target.value); invalidate(); }} /></div>}
         {["manufacture-orders", "reconciliation"].includes(id) && <>{id === "manufacture-orders" && <div className="space-y-2"><Label htmlFor="created-from">Created from</Label><Input id="created-from" type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); invalidate(); }} /></div>}<div className="space-y-2"><Label htmlFor="created-to">{id === "reconciliation" ? "Reconcile through (Nairobi)" : "Created through"}</Label><Input id="created-to" type="date" value={dateTo} onChange={(event) => { setDateTo(event.target.value); invalidate(); }} /></div></>}
         <Button disabled={busy || (isBom && !selection)}>Run report</Button>
-        {canExport && <><Button variant="outline" type="button" disabled={busy || !applied || report?.readOnlyPreview} onClick={() => applied && downloadManufacturingReport(id, applied, (message) => toast.error(message))}>Export CSV</Button><Button variant="outline" type="button" disabled={busy || !applied} onClick={() => window.print()}>Print this page / PDF</Button></>}
+        {canExport && <ReportExportActions completeExports={!!report?.exportFormats?.includes("pdf") && !!report?.snapshotSupport} family="manufacturing" reportId={id} disabled={busy || !applied || !!report?.readOnlyPreview} params={applied} onExport={(format) => applied && downloadManufacturingReport(id, applied, (message) => toast.error(message), format)} />}
       </form>
-      <p className="text-xs text-muted-foreground print:hidden">CSV exports refresh live data and include their own generation time, report basis and evidence warnings. No quantities or values from different UOMs are combined.</p>
+      <p className="text-xs text-muted-foreground print:hidden">{report?.exportFormats?.includes("pdf") ? "PDF, Excel and CSV include every applied report row, with generation time, report basis and evidence warnings. Exports refresh live data." : "The connected backend currently offers CSV only. Full-report PDF, Excel and saved snapshots require the reporting backend update."} No quantities or values from different UOMs are combined.</p>
       {error && <p role="alert" className="rounded-md border border-destructive p-3 text-destructive">{error}</p>}
       {busy && <p role="status">Loading report…</p>}
       {report && <>{report.readOnlyPreview && <p className="rounded-md border p-3 text-sm">Local read-only preview. Production report access and CSV export require the matching backend release.</p>}<p className="rounded-xl border bg-muted/30 p-5 text-sm leading-6 text-muted-foreground">{report.basis}</p>{report.warnings.map((warning) => <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm leading-6" key={warning}>{warning}</p>)}

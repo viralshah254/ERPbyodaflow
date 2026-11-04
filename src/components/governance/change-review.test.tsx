@@ -1,0 +1,30 @@
+import * as React from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+const state = vi.hoisted(() => ({ actor: "checker" }));
+vi.mock("@/stores/auth-store", () => ({ useAuthStore: (select: (s: unknown) => unknown) => select({ user: { userId: state.actor } }) }));
+import { ChangeReview, type ChangeRecord } from "./change-review";
+const row: ChangeRecord = { _id: "case", subjectId: "recipe", kind: "RECIPE_RELEASE", digest: "frozen-proposal", sourceDigest: "frozen-source", state: "PENDING", proposedBy: "maker", reason: "Approved recipe trial is ready for release", evidenceReference: "Synthetic trial record 42", payload: { recipe: { name: "Queen cakes", quantity: 100, items: [{ product: "Flour", quantity: 12, uom: "KG" }] } }, createdAt: "2026-11-01T08:00:00Z" };
+beforeEach(() => { state.actor = "checker"; });
+afterEach(cleanup);
+it("shows frozen evidence and requires an explicit independent review", async () => {
+  const review = vi.fn().mockResolvedValue(undefined);
+  render(<ChangeReview rows={[row]} canApprove onReview={review}/>);
+  fireEvent.click(screen.getByRole("button", { name: /Awaiting independent review/ }));
+  expect(screen.getByText("Queen cakes")).toBeInTheDocument();
+  expect(screen.getByText("Flour")).toBeInTheDocument();
+  expect(review).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Decision"), { target: { value: "reject" } });
+  fireEvent.change(screen.getByLabelText("Review reason"), { target: { value: "Trial evidence needs correction" } });
+  fireEvent.click(screen.getByRole("button", { name: "Confirm independent review" }));
+  await waitFor(() => expect(review).toHaveBeenCalledWith(row, false, "Trial evidence needs correction"));
+});
+it("prevents the preparer and read-only users from submitting a review", () => {
+  state.actor = "maker";
+  const review = vi.fn(), view = render(<ChangeReview rows={[row]} canApprove onReview={review}/>);
+  fireEvent.click(screen.getByRole("button", { name: /Awaiting independent review/ }));
+  expect(screen.queryByRole("button", { name: "Confirm independent review" })).not.toBeInTheDocument();
+  view.rerender(<ChangeReview rows={[row]} canApprove={false} onReview={review}/>);
+  expect(screen.queryByLabelText("Decision")).not.toBeInTheDocument();
+  expect(review).not.toHaveBeenCalled();
+});

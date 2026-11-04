@@ -631,9 +631,11 @@ export default function DocViewPage() {
   const availableActions = document?.availableActions ?? [];
   const canRequestApproval = availableActions.includes("submit");
   const canApprove = availableActions.includes("approve");
-  const canPost = availableActions.includes("post");
+  const fiscalUnresolved = ["PREPARED", "DISPATCHING", "UNCERTAIN"].includes(document?.fiscalState ?? "");
+  const canPost = availableActions.includes("post") && !fiscalUnresolved;
   const signAndPost = isIncotexSignableDocType(type);
-  const canCancel = availableActions.includes("cancel");
+  const fiscallySigned = ["invoice", "credit-note", "debit-note"].includes(type) && document?.kraSigning?.status === "signed";
+  const canCancel = availableActions.includes("cancel") && !fiscallySigned && !fiscalUnresolved;
   const canReverse = availableActions.includes("reverse");
   const odaflowSalesOrder = type === "sales-order" && isOdaflowSalesOrder(document);
   const odaflowSource = odaflowSourceFromDetail(document);
@@ -1316,6 +1318,7 @@ export default function DocViewPage() {
             <Button
               size="sm"
               variant="outline"
+              disabled={fiscallySigned || fiscalUnresolved}
               onClick={() => router.push(`/docs/${type}/${id}/edit`)}
             >
               <Icons.Pencil className="mr-2 h-4 w-4" />
@@ -1469,7 +1472,7 @@ export default function DocViewPage() {
                 onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
-                {signAndPost ? "Sign and post" : "Post"}
+                {fiscallySigned ? "Recover posting" : signAndPost ? "Sign and post" : "Post"}
               </Button>
               )}
             </>
@@ -1681,6 +1684,7 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
+              ...(document?.accountingDate ? [{ label: "Accounting date", value: document.accountingDate.slice(0,10) }, { label: "Original invoice date", value: document.date?.slice(0,10) ?? "—" }, ...(document.costPostingDate ? [{ label: "Cost allocation date", value: document.costPostingDate.slice(0,10) }] : [])] : []),
               ...(purchaseTaxDoc
                 ? [
                     {
@@ -1763,7 +1767,7 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type) && document ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite} onSaved={() => refreshDocument(true)} /> }] : []),
+              ...(["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type) && document ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite && !fiscallySigned && !fiscalUnresolved} onSaved={() => refreshDocument(true)} /> }] : []),
               ...(["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) && document
                 ? [
                     {
@@ -1952,6 +1956,7 @@ export default function DocViewPage() {
                   <PurchaseSupplierRefsCard
                     documentId={document.id}
                     type={type as DocTypeKey}
+                    documentStatus={document.status}
                     supplierInvoiceNumber={document.supplierInvoiceNumber}
                     supplierCuInvoiceNumber={document.supplierCuInvoiceNumber}
                     canWrite={canWrite}
@@ -2074,6 +2079,7 @@ export default function DocViewPage() {
             documentId={id}
             documentStatus={document.status}
             kraSigning={document.kraSigning}
+            fiscalState={document.fiscalState}
             canRetry={canWrite || canWriteFinance}
             onUpdated={(kraSigning) =>
               setDocument((prev) => (prev ? { ...prev, kraSigning } : prev))

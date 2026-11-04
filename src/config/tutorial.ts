@@ -5,6 +5,9 @@
 
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation/sections";
 import type { NavItemConfig } from "@/config/navigation/types";
+import { SETTINGS_HUB_GROUPS } from "@/lib/settings/settings-hub-links";
+import { COMPLETION_GUIDES, GUIDE_ALIASES, ROUTE_GUIDES, WORKFLOW_GUIDES, TUTORIAL_ROUTE_ALIASES } from "./tutorial-completion";
+import { REPORT_SUITE_CATALOG, SUITE_DESCRIPTIONS } from "@/lib/reports/suite-catalog";
 import {
   ITEM_GUIDES,
   ORPHAN_ROUTE_GUIDES,
@@ -27,6 +30,12 @@ export interface TutorialItem {
   elementHints?: ElementHint[];
   /** Recommended next step after this page. */
   recommendedNextStep?: { label: string; href: string };
+  requiresPermissions?: string[];
+  requiresPlatformOperator?: boolean;
+  requiresFmcg?: boolean;
+  requiresAllPermissions?: string[];
+  requiresModule?: string;
+  requiresFlags?: string[];
 }
 
 export interface TutorialChapter {
@@ -82,7 +91,7 @@ const ITEM_PROMPTS: Partial<Record<string, string>> = {
   "assets-depreciation": "Explain depreciation runs and methods.",
   "assets-disposals": "Explain asset disposal and gain/loss accounting.",
   "payroll-payruns": "Explain pay run flow and statutory computation.",
-  "payroll-statutories": "Explain VAT vs WHT in Kenya. Explain NSSF, NHIF, PAYE.",
+  "payroll-statutories": "Explain how to review configured payroll deductions, their period and source payroll evidence. Do not infer current statutory rates from a tutorial.",
   "projects-list": "Explain projects, cost centers, and linked transactions.",
   "intercompany-overview": "Explain consolidation and elimination entries.",
   "intercompany-transactions": "Explain intercompany transactions and reconciliation.",
@@ -290,7 +299,7 @@ const CHAPTER_META: Record<
   },
   payroll: {
     description:
-      "Payroll overview, employees, pay runs, payslips, and statutories (NSSF, NHIF, PAYE).",
+      "Payroll overview, employees, pay runs, payslips and configured statutory deductions.",
     copilotPrompt:
       "Explain payroll: pay runs, payslips, and statutory deductions in Kenya.",
   },
@@ -344,13 +353,19 @@ const CHAPTER_META: Record<
   },
 };
 
+export function writtenGuide(key: string, href: string) {
+  const alias = GUIDE_ALIASES[key];
+  return ROUTE_GUIDES[href] ?? COMPLETION_GUIDES[key] ?? ITEM_GUIDES[key] ??
+    (alias ? COMPLETION_GUIDES[alias] ?? ITEM_GUIDES[alias] : undefined) ?? ORPHAN_ROUTE_GUIDES[href];
+}
+
 function flattenNavItems(items: NavItemConfig[]): TutorialItem[] {
   const out: TutorialItem[] = [];
   for (const item of items) {
     const key = item.key;
     const href = item.href;
     if (href) {
-      const guide = ITEM_GUIDES[key];
+      const guide = writtenGuide(key, href);
       out.push({
         key,
         label: item.label,
@@ -373,7 +388,7 @@ function flattenNavItems(items: NavItemConfig[]): TutorialItem[] {
 /** Build tutorial chapters from nav config. */
 export const TUTORIAL_CHAPTERS: TutorialChapter[] = NAV_SECTIONS_CONFIG.map(
   (section) => {
-    const meta = CHAPTER_META[section.key] ?? {
+    const meta = CHAPTER_META[section.key === "processing" ? "manufacturing" : section.key] ?? {
       description: `Learn about ${section.label}.`,
       copilotPrompt: `Explain ${section.label} and how to use it.`,
     };
@@ -387,6 +402,35 @@ export const TUTORIAL_CHAPTERS: TutorialChapter[] = NAV_SECTIONS_CONFIG.map(
     };
   }
 );
+
+// Settings live in their own hub rather than the main sidebar configuration.
+TUTORIAL_CHAPTERS.push({ id: "settings", title: "Settings & administration", description: "Organisation, access, accounting, taxes, integrations and operational setup.", copilotPrompt: "Help me configure the ERP using the saved setup guides.", items: SETTINGS_HUB_GROUPS.flatMap((group) => group.links.map((link) => {
+  const key = link.href.slice(1).replaceAll("/", "-");
+  const guide = writtenGuide(key, link.href);
+  return { key, label: link.label, href: link.href, requiresPermissions: link.requiresPermissions, requiresPlatformOperator: link.requiresPlatformOperator, requiresFmcg: link.requiresFmcg,
+    guideSummary: guide?.guideSummary ?? link.description,
+    guideSteps: guide?.guideSteps ?? [`Open ${link.label} and review the current ${link.description.toLowerCase()}.`, "Confirm the active organisation and review the existing values before making changes.", "Use the fields and actions available to your role. Have the responsible administrator review changes that affect transactions or access.", "Save where a save action is offered, reopen the screen and verify the resulting configuration in a representative draft or read-only review."],
+    guideTips: guide?.guideTips ?? ["A tutorial does not grant permission to change a setting. Restricted actions remain subject to ERP role checks."], recommendedNextStep: guide?.recommendedNextStep };
+})) });
+for (const [href, guide] of Object.entries(ROUTE_GUIDES)) {
+  if (TUTORIAL_CHAPTERS.some((chapter) => chapter.items.some((item) => item.href === href))) continue;
+  const section = href.startsWith("/manufacturing/") ? "processing" : href.startsWith("/projects/") ? "projects" : href.split("/")[1];
+  const chapter = TUTORIAL_CHAPTERS.find((candidate) => candidate.id === section);
+  if (chapter) chapter.items.push({ key: href.slice(1).replaceAll("/", "-"), href, label: href.split("/").at(-1)!.split("-").map((word) => word[0].toUpperCase() + word.slice(1)).join(" "), ...guide, requiresFlags: href.includes("coolcatch") || href.endsWith("/commissions") ? ["commissionEngine"] : undefined, requiresPermissions: href.startsWith("/settings") ? ["settings.org.read", "admin.settings"] : [section === "processing" ? "manufacturing.read" : section === "projects" ? "projects.read" : `${section}.read`] });
+}
+const reportChapter = TUTORIAL_CHAPTERS.find((chapter) => chapter.id === "reports")!;
+for (const entry of REPORT_SUITE_CATALOG) {
+  if (!entry.href || entry.kind !== "report" || TUTORIAL_CHAPTERS.some((chapter) => chapter.items.some((item) => item.href === entry.href))) continue;
+  const description = SUITE_DESCRIPTIONS[entry.id.replace(/^suite-/, "")] ?? `${entry.name} in the ${entry.group} reporting workspace.`;
+  reportChapter.items.push({ key: `report-${entry.id}`, label: entry.name, href: entry.href, guideSummary: description,
+    requiresPermissions: [entry.permission], requiresAllPermissions: entry.additionalPermissions,
+    requiresModule: ["Bill of Materials", "Manufacturing"].includes(entry.group) ? "manufacturing" : undefined,
+    guideSteps: [`Open ${entry.name} and review the report basis and availability shown by the workspace.`, "Select the offered period, branch, warehouse, customer, supplier or product filters relevant to this report, then load the result.", "Review warnings, missing source evidence and units or currencies. Open linked records to investigate differences before relying on totals.", "Use only the export formats offered by the loaded report. Check its organisation, filters, generated time and source basis before sharing it.", "Save a snapshot where the report offers that action. Re-run the report for a current position; saved evidence retains its original generation context."],
+    guideTips: ["A report or tutorial does not post transactions or prove that a period has been reconciled. Follow the source workflow for corrections."],
+  });
+}
+TUTORIAL_CHAPTERS.unshift({ id: "workflows", title: "Complete workflows", description: "Follow work across teams: sales to cash, purchasing to payment, production to verified stock, returns, reconciliation and close.", copilotPrompt: "Explain an end-to-end ERP workflow using the saved handbook.", items: WORKFLOW_GUIDES });
+TUTORIAL_CHAPTERS.push({ id: "help", title: "Using ERP help", description: "Search, read guides, follow screen links and ask Gaia for explanations.", copilotPrompt: "Explain how to find and use ERP tutorials.", items: [{ key: "help-centre", label: "Search tutorials and ask Gaia", href: "/tutorial", guideSummary: "Find instructions across the ERP and share links to the exact guide a colleague needs.", guideSteps: ["Search a task or abbreviation in the ERP help centre. Use the module filter to narrow the results.", "Open Read guide for numbered instructions, tips and the related ERP screen link.", "Choose Explain with Gaia to ask about that exact guide. Gaia uses the handbook as reference and offers saved steps if its AI service is unavailable.", "Use Copy guide link to share the tutorial address. Access to screens and actions still follows the recipient's ERP role."] }] });
 
 export interface TutorialForRoute {
   chapterId: string;
@@ -437,7 +481,8 @@ function orphanPayloadToTutorial(o: {
 }
 
 export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
-  const normalized = pathname.replace(/\/$/, "") || "/";
+  const original = pathname.replace(/\/$/, "") || "/";
+  const normalized = TUTORIAL_ROUTE_ALIASES[original] ?? original;
 
   const exactOrphan = ORPHAN_ROUTE_GUIDES[normalized];
   if (exactOrphan) {

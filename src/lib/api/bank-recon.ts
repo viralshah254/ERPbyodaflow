@@ -30,6 +30,7 @@ type BackendBankStatementLine = {
 };
 
 type BackendPayment = {
+  bankSettlement?: { bankAmount: number; bankCurrency: string };
   id: string;
   number: string;
   date: string;
@@ -90,20 +91,16 @@ export async function fetchBankReconSnapshotApi(
 ): Promise<BankReconSnapshot> {
   requireLiveApi("Bank reconciliation");
 
-  const statementParams: Record<string, string> = {};
-  if (bankAccountId) statementParams.bankAccountId = bankAccountId;
+  const bankAccountsRes = await apiRequest<{ items: BankAccount[] }>("/api/treasury/bank-accounts");
+  const selectedAccount = bankAccountId ? bankAccountsRes.items.find((account) => account.id === bankAccountId) : bankAccountsRes.items[0];
+  if (bankAccountId && !selectedAccount) throw new Error("The selected bank account is no longer available. Refresh and select an account.");
+  const statementParams: Record<string, string> = { bankAccountId: selectedAccount?.id ?? "" };
   if (opts?.dateFrom) statementParams.dateFrom = opts.dateFrom;
   if (opts?.dateTo) statementParams.dateTo = opts.dateTo;
-
-  const [bankAccountsRes, statementsRes, paymentsRes] = await Promise.all([
-    apiRequest<{ items: BankAccount[] }>("/api/treasury/bank-accounts"),
-    apiRequest<{ items: BackendBankStatementLine[] }>("/api/finance/bank-recon", {
-      params: Object.keys(statementParams).length ? statementParams : undefined,
-    }),
-    apiRequest<{ items: BackendPayment[] }>("/api/finance/payments", {
-      params: bankAccountId ? { bankAccountId } : undefined,
-    }),
-  ]);
+  const [statementsRes, paymentsRes] = selectedAccount ? await Promise.all([
+    apiRequest<{ items: BackendBankStatementLine[] }>("/api/finance/bank-recon", { params: statementParams }),
+    apiRequest<{ items: BackendPayment[] }>("/api/finance/payments", { params: { bankAccountId: selectedAccount.id } }),
+  ]) : [{ items: [] as BackendBankStatementLine[] }, { items: [] as BackendPayment[] }];
 
   const accountCurrency = (id: string) =>
     bankAccountsRes.items.find((account) => account.id === id)?.currency ?? "KES";
@@ -123,7 +120,7 @@ export async function fetchBankReconSnapshotApi(
     date: item.date.slice(0, 10),
     reference: item.number,
     description: item.partyName ?? item.partyId,
-    amount: item.amount * (item.type === "AP_PAYMENT" ? -1 : 1),
+    amount: (item.bankSettlement?.bankAmount ?? item.amount) * (item.type === "AP_PAYMENT" ? -1 : 1),
     type: item.type,
     matchedId: statementByPayment.get(item.id) ?? null,
   }));
@@ -151,7 +148,7 @@ export async function matchBankReconLinesApi(
 export async function matchBankReconToDocumentApi(
   lineId: string,
   documentId: string
-): Promise<{ paymentId: string; number: string; documentId: string }> {
+): Promise<{ paymentId: string; number: string; documentId: string; replayed?: boolean }> {
   requireLiveApi("Bank reconciliation document matching");
   return apiRequest("/api/finance/bank-recon/match-document", {
     method: "POST",
@@ -248,6 +245,11 @@ export type BankAllocationProposal = {
   rationale?: string;
   status: "SUGGESTED" | "APPROVED" | "POSTED" | "CLOSED";
   paymentId?: string;
+  suggestedBy?: string;
+  approvedBy?: string;
+  postedBy?: string;
+  settlementTerms?: SettlementTerms;
+  settlementPreview?: SettlementPreview;
 };
 
 export async function suggestBankAllocationApi(body: {
@@ -256,6 +258,8 @@ export async function suggestBankAllocationApi(body: {
   allocations: Array<{ documentId: string; amount: number }>;
   source?: "MANUAL" | "GAIA";
   rationale?: string;
+  settlementTerms?: SettlementTerms;
+  previewDigest?: string;
 }) {
   return apiRequest<{ id: string; status: string }>("/api/finance/bank-recon/allocation-proposals", {
     method: "POST",
@@ -295,4 +299,10 @@ export async function fetchControlAccountReconciliationApi() {
     }>;
   }>("/api/finance/control-account-reconciliation");
   return result.items ?? [];
+}
+
+export type SettlementTerms = { reverseRevaluations?: boolean; feeBankAmount: number; invoiceToBankRate: number; bankToBaseRate: number; feeAccountId?: string; fxGainAccountId?: string; fxLossAccountId?: string; evidenceReference: string };
+export type SettlementPreview = { statement: { amount: number }; digest: string; invoiceCurrency: string; bankCurrency: string; baseCurrency: string; totalAllocated: number; equation: { bankBase: number; feeBase: number; carryingBase: number; fxGain: number }; sources: Array<{ id: string; number: string; currency: string; amount: number; originalRate: number; carryingBase: number }>; accounts: Array<{ id: string; code: string; name: string; type: string }>; legs: Array<{ accountId: string; debit: number; credit: number; description: string }> };
+export async function previewBankSettlementApi(body: { lineId: string; partyId: string; allocations: Array<{ documentId: string; amount: number }>; terms: SettlementTerms }) {
+  return apiRequest<SettlementPreview>("/api/finance/bank-recon/settlement-preview", { method: "POST", body });
 }

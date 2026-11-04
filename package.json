@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "tutorials:export": "node node_modules/vite-node/vite-node.mjs --config vitest.config.ts scripts/export-tutorial-handbook.ts",
+    "tutorials:check": "node node_modules/vite-node/vite-node.mjs --config vitest.config.ts scripts/export-tutorial-handbook.ts --check",
     "dev": "node ./scripts/assert-port-free.mjs 3000 && next dev --port 3000",
     "build": "next build",
     "build:clean": "rm -rf .next && next build",

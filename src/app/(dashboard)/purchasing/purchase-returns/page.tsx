@@ -1,4 +1,5 @@
 "use client";
+import { SourceReturnWizard } from "@/components/inventory/SourceReturnWizard";
 
 import * as React from "react";
 import Link from "next/link";
@@ -290,12 +291,7 @@ export default function PurchaseReturnsPage() {
         ]}
         showCommandHint
         actions={canWrite ? (
-          <Button asChild data-tutorial-hint="purchase-return-start">
-            <Link href="/purchasing/grn">
-              <Icons.Undo2 className="mr-2 h-4 w-4" />
-              Start from GRN
-            </Link>
-          </Button>
+          <SourceReturnWizard supplier onCreated={() => void loadPage(pageOffset)}/>
         ) : undefined}
       />
       <div className={LIST_PAGE_BODY_CLASS}>
