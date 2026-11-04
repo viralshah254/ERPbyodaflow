@@ -1,0 +1,18 @@
+---
+description: Always typecheck this frontend before pushing
+alwaysApply: true
+---
+
+# Build before push
+
+Before every `git push` from this repo, run:
+
+```bash
+npm run typecheck
+```
+
+Fix every TypeScript error first. Do not push a failing typecheck. Prefer `typecheck` over a full `next build` unless the change needs a production build check.
+
+Order: change → `npm run typecheck` → commit → push.
+
+Skip only when the user says not to build, or the change is docs/rules-only with no TypeScript.
