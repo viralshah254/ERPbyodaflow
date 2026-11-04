@@ -1,0 +1,40 @@
+{
+  "verifiedDate": "2026-11-04",
+  "scope": "ERP business workspaces; public marketing, developer utilities and platform administration are outside this rollout",
+  "coverage": {
+    "routeFiles": 316,
+    "routeVariantSamples": 402,
+    "missing": 0,
+    "incomplete": 0
+  },
+  "checks": {
+    "frontendTests": {
+      "passed": 695,
+      "files": 80
+    },
+    "browserScenarios": {
+      "passed": 41,
+      "apiData": "mocked",
+      "scope": "Representative modules, dynamic reports, document creation, read-only access, dialogs, mobile dark mode, resume, library launch and BOM regression"
+    },
+    "typecheck": "passed",
+    "changedGuideModuleLint": "passed",
+    "productionBuild": "passed",
+    "diffWhitespaceCheck": "passed"
+  },
+  "handbook": {
+    "revision": "erp-handbook-2026-11-04-v4",
+    "articles": 337,
+    "gaiaExport": "synchronized"
+  },
+  "liveTenantAcceptance": "not performed",
+  "productionDeployment": "not performed",
+  "screenshots": [
+    "/Users/v/.codex/visualizations/2026/11/04/01a1a5ae-c7be-7a61-81df-7289fc838eb9/erp-rollout/erp-guide-inventory-stock-levels.png",
+    "/Users/v/.codex/visualizations/2026/11/04/01a1a5ae-c7be-7a61-81df-7289fc838eb9/erp-rollout/erp-guide-mobile.png",
+    "/Users/v/.codex/visualizations/2026/11/04/01a1a5ae-c7be-7a61-81df-7289fc838eb9/erp-rollout/erp-guide-sales-customers.png",
+    "/Users/v/.codex/visualizations/2026/11/04/01a1a5ae-c7be-7a61-81df-7289fc838eb9/erp-rollout/erp-guide-settings-dialog.png",
+    "/Users/v/.codex/visualizations/2026/11/04/01a1a5ae-c7be-7a61-81df-7289fc838eb9/erp-rollout/erp-guide-settings-uom.png",
+    "/Users/v/.codex/visualizations/2026/11/04/01a1a5ae-c7be-7a61-81df-7289fc838eb9/erp-rollout/erp-guide-tutorial.png"
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "commit": "f8e69bffdd27c233461f851ad36b88f1b96dd514",
+  "previous_commit": "49094f4b278108239683a4307c85ddd7dfbc1e02",
+  "production_url": "https://erp.odaflow.com",
+  "deployment": "success (both Vercel projects)",
+  "checks": {
+    "unit_tests": 695,
+    "screen_routes": 316,
+    "route_variants": 402,
+    "browser_scenarios_mocked": 41,
+    "typecheck": "passed",
+    "production_build": "passed",
+    "live_assets": {
+      "http_status": 200,
+      "markers": [
+        {
+          "asset": "/_next/static/chunks/29708-ffd1c5e8d498d905.js?dpl=dpl_GfDHKqA6CC9XvXdRLYPq6g4v9EfH",
+          "markers": [
+            "Workflow checklist",
+            "data-interactive-guide",
+            "erp-page-guide:v2",
+            "erp-handbook-2026-11-04-v4"
+          ]
+        },
+        {
+          "asset": "/_next/static/chunks/37963-b57e5e4aeaf478cf.js?dpl=dpl_GfDHKqA6CC9XvXdRLYPq6g4v9EfH",
+          "markers": [
+            "erp-page-guide:v2",
+            "Open and learn"
+          ]
+        }
+      ]
+    },
+    "protected_local_business_files": "unchanged"
+  },
+  "authenticated_live_verification": {
+    "passed": [
+      "Help centre refresh loaded updated role-visible guide count (282)",
+      "BOM library displays updated UI and page-specific four-step guide",
+      "BOM search filters existing records and unlocks tutorial Next after input",
+      "BOM tutorial Next, Back, Save and exit, and reopening with retained completed search step",
+      "New BOM page displays updated form and its separate six-step CREATE GUIDE; Next disabled until recipe name entered",
+      "2026-11-05: Released BOM detail guide completed all four steps; routing tab detection gated Next; lifecycle restrictions respected; completion screen and replay verified",
+      "2026-11-05: Stock Levels page-specific guide search and warehouse filter detection passed; skip and save/exit controls worked; final handoff did not execute business actions",
+      "2026-11-05: Customers page-specific guide recognized All customers and Multichain selection; restored All customers",
+      "2026-11-05: UOM catalog guide checklist and interactive search detection passed; cleared search",
+      "2026-11-05: Reopened released BOM and confirmed same EFFECTIVE revision, Active status, 1 EA output, 2 component quantities (0.04 EA and 1 EA), and No route; restored Components tab"
+    ],
+    "remaining": [],
+    "blocker": null,
+    "business_writes": "None performed. Only guide progress, navigation, tab selection and temporary search filters; temporary filters cleared.",
+    "scope": "Remaining representative live smoke checks completed; this was not an exhaustive manual walkthrough of every ERP route. Write/submit operations deliberately not exercised."
+  },
+  "safety": "Frontend-only release; no backend deployment, database migration or business-record write performed."
+}

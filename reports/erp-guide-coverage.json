@@ -1,0 +1,3636 @@
+{
+  "revision": "erp-handbook-2026-11-04-v4",
+  "routeFiles": 316,
+  "variantSamples": 402,
+  "missing": [],
+  "obsolete": [],
+  "incomplete": [],
+  "screens": [
+    {
+      "sample": "/analytics/anomalies",
+      "route": "/analytics/anomalies",
+      "identity": "/analytics/anomalies",
+      "title": "Anomalies",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/explore",
+      "route": "/analytics/explore",
+      "identity": "/analytics/explore",
+      "title": "Explore",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/finance",
+      "route": "/analytics/finance",
+      "identity": "/analytics/finance",
+      "title": "Finance",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/insights",
+      "route": "/analytics/insights",
+      "identity": "/analytics/insights",
+      "title": "Insights",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/inventory",
+      "route": "/analytics/inventory",
+      "identity": "/analytics/inventory",
+      "title": "Inventory",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics",
+      "route": "/analytics",
+      "identity": "/analytics",
+      "title": "Analytics Studio",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/payroll",
+      "route": "/analytics/payroll",
+      "identity": "/analytics/payroll",
+      "title": "Payroll",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/pricing",
+      "route": "/analytics/pricing",
+      "identity": "/analytics/pricing",
+      "title": "Pricing",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/products",
+      "route": "/analytics/products",
+      "identity": "/analytics/products",
+      "title": "Products",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/settings",
+      "route": "/analytics/settings",
+      "identity": "/analytics/settings",
+      "title": "Analytics settings",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/analytics/simulations",
+      "route": "/analytics/simulations",
+      "identity": "/analytics/simulations",
+      "title": "Simulations",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ap/bills",
+      "route": "/ap/bills",
+      "identity": "/ap/bills",
+      "title": "Supplier Invoices (AP)",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ap/payments",
+      "route": "/ap/payments",
+      "identity": "/ap/payments",
+      "title": "AP Payments",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ap/statements",
+      "route": "/ap/statements",
+      "identity": "/ap/statements",
+      "title": "Supplier statements",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ap/suppliers/sample-record",
+      "route": "/ap/suppliers/[id]",
+      "identity": "/ap/suppliers/[id]",
+      "title": "Supplier account",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ap/suppliers",
+      "route": "/ap/suppliers",
+      "identity": "/ap/suppliers",
+      "title": "Suppliers",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ap/three-way-match",
+      "route": "/ap/three-way-match",
+      "identity": "/ap/three-way-match",
+      "title": "3-way match",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/approvals/inbox",
+      "route": "/approvals/inbox",
+      "identity": "/approvals/inbox",
+      "title": "Inbox",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/approvals",
+      "route": "/approvals",
+      "identity": "/approvals",
+      "title": "Approvals",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/approvals/requests",
+      "route": "/approvals/requests",
+      "identity": "/approvals/requests",
+      "title": "My requests",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ar/aging",
+      "route": "/ar/aging",
+      "identity": "/ar/aging",
+      "title": "AR Aging Report",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ar/customers",
+      "route": "/ar/customers",
+      "identity": "/ar/customers",
+      "title": "Customer credit",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ar/payments",
+      "route": "/ar/payments",
+      "identity": "/ar/payments",
+      "title": "AR Payments",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ar/receipts",
+      "route": "/ar/receipts",
+      "identity": "/ar/receipts",
+      "title": "Collect receipts",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/ar/statements",
+      "route": "/ar/statements",
+      "identity": "/ar/statements",
+      "title": "Customer statements",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/assets/depreciation",
+      "route": "/assets/depreciation",
+      "identity": "/assets/depreciation",
+      "title": "Depreciation",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/assets/disposals",
+      "route": "/assets/disposals",
+      "identity": "/assets/disposals",
+      "title": "Disposals",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/assets/overview",
+      "route": "/assets/overview",
+      "identity": "/assets/overview",
+      "title": "Assets Overview",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/assets/register/sample-record",
+      "route": "/assets/register/[id]",
+      "identity": "/assets/register/[id]",
+      "title": "Asset record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/assets/register",
+      "route": "/assets/register",
+      "identity": "/assets/register",
+      "title": "Asset register",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation/ai-insights",
+      "route": "/automation/ai-insights",
+      "identity": "/automation/ai-insights",
+      "title": "AI Insights",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation/alerts",
+      "route": "/automation/alerts",
+      "identity": "/automation/alerts",
+      "title": "Alerts & Notifications",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation/integrations",
+      "route": "/automation/integrations",
+      "identity": "/automation/integrations",
+      "title": "Integrations",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation",
+      "route": "/automation",
+      "identity": "/automation",
+      "title": "Automation Dashboard",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation/rules",
+      "route": "/automation/rules",
+      "identity": "/automation/rules",
+      "title": "Rules Engine",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation/schedules",
+      "route": "/automation/schedules",
+      "identity": "/automation/schedules",
+      "title": "Scheduled Jobs",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/automation/workflows",
+      "route": "/automation/workflows",
+      "identity": "/automation/workflows",
+      "title": "Approvals Workflows",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/control-tower",
+      "route": "/control-tower",
+      "identity": "/control-tower",
+      "title": "Control Tower",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/crm/accounts",
+      "route": "/crm/accounts",
+      "identity": "/crm/accounts",
+      "title": "Accounts / Parties",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/crm/activities",
+      "route": "/crm/activities",
+      "identity": "/crm/activities",
+      "title": "Activities / Notes",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/crm/deals",
+      "route": "/crm/deals",
+      "identity": "/crm/deals",
+      "title": "Deals / Opportunities",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/crm/tickets",
+      "route": "/crm/tickets",
+      "identity": "/crm/tickets",
+      "title": "Support / Tickets",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/dashboard",
+      "route": "/dashboard",
+      "identity": "/dashboard",
+      "title": "Dashboard",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/collections",
+      "route": "/distribution/collections",
+      "identity": "/distribution/collections",
+      "title": "Collections",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/deliveries",
+      "route": "/distribution/deliveries",
+      "identity": "/distribution/deliveries",
+      "title": "Deliveries",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/logistics/delivery-note",
+      "route": "/distribution/logistics/delivery-note",
+      "identity": "/distribution/logistics/delivery-note",
+      "title": "DN outbound freight",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/logistics/fleet",
+      "route": "/distribution/logistics/fleet",
+      "identity": "/distribution/logistics/fleet",
+      "title": "Manage fleet",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/logistics/fuel",
+      "route": "/distribution/logistics/fuel",
+      "identity": "/distribution/logistics/fuel",
+      "title": "Fuel audit",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/logistics/period-close",
+      "route": "/distribution/logistics/period-close",
+      "identity": "/distribution/logistics/period-close",
+      "title": "Vehicle period close",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/routes",
+      "route": "/distribution/routes",
+      "identity": "/distribution/routes",
+      "title": "Routes",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/transfer-planning",
+      "route": "/distribution/transfer-planning",
+      "identity": "/distribution/transfer-planning",
+      "title": "Transfer planning",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/trips/sample-record",
+      "route": "/distribution/trips/[id]",
+      "identity": "/distribution/trips/[id]",
+      "title": "Delivery trip",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/distribution/trips",
+      "route": "/distribution/trips",
+      "identity": "/distribution/trips",
+      "title": "Trips / Fleet",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/sales-order/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/sales-order/[id]/edit",
+      "title": "Edit Sales order",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/sales-order/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/sales-order/[id]",
+      "title": "Sales order record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/sales-order/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/sales-order/new",
+      "title": "New Sales order",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/sales-order",
+      "route": "/docs/[type]",
+      "identity": "/docs/sales-order",
+      "title": "Sales order",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/grn/sample-record",
+      "route": "/docs/grn/[id]",
+      "identity": "/docs/grn/[id]",
+      "title": "Grn record",
+      "kind": "record",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/grn/new",
+      "route": "/docs/grn/new",
+      "identity": "/docs/grn/new",
+      "title": "New Grn",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs",
+      "route": "/docs",
+      "identity": "/docs",
+      "title": "Documents",
+      "kind": "workspace",
+      "tasks": 7,
+      "hasSummary": true
+    },
+    {
+      "sample": "/documents/hub/groups",
+      "route": "/documents/hub/groups",
+      "identity": "/documents/hub/groups",
+      "title": "Groups",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/documents/hub",
+      "route": "/documents/hub",
+      "identity": "/documents/hub",
+      "title": "Document Hub",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/documents/hub/rules",
+      "route": "/documents/hub/rules",
+      "identity": "/documents/hub/rules",
+      "title": "Learned rules",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/ap",
+      "route": "/finance/ap",
+      "identity": "/finance/ap",
+      "title": "Accounts Payable (AP)",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/ar",
+      "route": "/finance/ar",
+      "identity": "/finance/ar",
+      "title": "Accounts Receivable (AR)",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/audit",
+      "route": "/finance/audit",
+      "identity": "/finance/audit",
+      "title": "Audit Log",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/bank-recon",
+      "route": "/finance/bank-recon",
+      "identity": "/finance/bank-recon",
+      "title": "Bank Reconciliation",
+      "kind": "workspace",
+      "tasks": 8,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/budgets",
+      "route": "/finance/budgets",
+      "identity": "/finance/budgets",
+      "title": "Budgets",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/chart-of-accounts",
+      "route": "/finance/chart-of-accounts",
+      "identity": "/finance/chart-of-accounts",
+      "title": "Chart of Accounts",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/commission-topup",
+      "route": "/finance/commission-topup",
+      "identity": "/finance/commission-topup",
+      "title": "Commission / Top-up",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/coolcatch-bs-inventory",
+      "route": "/finance/coolcatch-bs-inventory",
+      "identity": "/finance/coolcatch-bs-inventory",
+      "title": "CoolCatch BS Inventory",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/coolcatch-etims",
+      "route": "/finance/coolcatch-etims",
+      "identity": "/finance/coolcatch-etims",
+      "title": "CoolCatch eTIMS",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/coolcatch-month-end",
+      "route": "/finance/coolcatch-month-end",
+      "identity": "/finance/coolcatch-month-end",
+      "title": "CoolCatch Month-End",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/cutoff",
+      "route": "/finance/cutoff",
+      "identity": "/finance/cutoff",
+      "title": "Cutoff drafts",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/employee-expenses",
+      "route": "/finance/employee-expenses",
+      "identity": "/finance/employee-expenses",
+      "title": "Employee Expenses",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/fiscal-recovery",
+      "route": "/finance/fiscal-recovery",
+      "identity": "/finance/fiscal-recovery",
+      "title": "Fiscal Recovery",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/fixed-assets",
+      "route": "/finance/fixed-assets",
+      "identity": "/finance/fixed-assets",
+      "title": "Fixed assets workspace",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/fx-revaluations",
+      "route": "/finance/fx-revaluations",
+      "identity": "/finance/fx-revaluations",
+      "title": "FX valuations",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/gl",
+      "route": "/finance/gl",
+      "identity": "/finance/gl",
+      "title": "General Ledger",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/input-vat",
+      "route": "/finance/input-vat",
+      "identity": "/finance/input-vat",
+      "title": "Input Vat",
+      "kind": "workspace",
+      "tasks": 7,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/journal-events",
+      "route": "/finance/journal-events",
+      "identity": "/finance/journal-events",
+      "title": "Journal Events",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/journals",
+      "route": "/finance/journals",
+      "identity": "/finance/journals",
+      "title": "Journal Entries",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/kra-signing",
+      "route": "/finance/kra-signing",
+      "identity": "/finance/kra-signing",
+      "title": "KRA signing monitor",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/ledger",
+      "route": "/finance/ledger",
+      "identity": "/finance/ledger",
+      "title": "Ledger",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/legacy-fx",
+      "route": "/finance/legacy-fx",
+      "identity": "/finance/legacy-fx",
+      "title": "Legacy Fx",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/mpesa-recon",
+      "route": "/finance/mpesa-recon",
+      "identity": "/finance/mpesa-recon",
+      "title": "M-Pesa Till Reconciliation",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/notes",
+      "route": "/finance/notes",
+      "identity": "/finance/notes",
+      "title": "Credit / debit notes",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance",
+      "route": "/finance",
+      "identity": "/finance",
+      "title": "Finance Dashboard",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/payments",
+      "route": "/finance/payments",
+      "identity": "/finance/payments",
+      "title": "Payments & Receipts",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/period-close",
+      "route": "/finance/period-close",
+      "identity": "/finance/period-close",
+      "title": "Period Close",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/period-governance",
+      "route": "/finance/period-governance",
+      "identity": "/finance/period-governance",
+      "title": "Period Governance",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/procurement-review",
+      "route": "/finance/procurement-review",
+      "identity": "/finance/procurement-review",
+      "title": "Procurement Review",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/reporting-policy",
+      "route": "/finance/reporting-policy",
+      "identity": "/finance/reporting-policy",
+      "title": "Reporting Policy",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/statements/balance-sheet",
+      "route": "/finance/statements/balance-sheet",
+      "identity": "/finance/statements/balance-sheet",
+      "title": "Balance Sheet",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/statements/cash-flow",
+      "route": "/finance/statements/cash-flow",
+      "identity": "/finance/statements/cash-flow",
+      "title": "Cash Flow",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/statements",
+      "route": "/finance/statements",
+      "identity": "/finance/statements",
+      "title": "Financial Statements",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/statements/pnl",
+      "route": "/finance/statements/pnl",
+      "identity": "/finance/statements/pnl",
+      "title": "P&L",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/tax",
+      "route": "/finance/tax",
+      "identity": "/finance/tax",
+      "title": "Tax / VAT",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/finance/trial-balance",
+      "route": "/finance/trial-balance",
+      "identity": "/finance/trial-balance",
+      "title": "Trial Balance",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/sample-record",
+      "route": "/franchise/[id]",
+      "identity": "/franchise/outlets/[id]",
+      "title": "Franchise outlet record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true,
+      "redirect": "/franchise/outlets/sample-record"
+    },
+    {
+      "sample": "/franchise/chase-list",
+      "route": "/franchise/chase-list",
+      "identity": "/franchise/chase-list",
+      "title": "Chase lists (BD leads)",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/commission",
+      "route": "/franchise/commission",
+      "identity": "/franchise/commission",
+      "title": "Commission & Rebates",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/commission/runs/sample-record",
+      "route": "/franchise/commission/runs/[id]",
+      "identity": "/franchise/commission/runs/[id]",
+      "title": "Commission run record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/comparison",
+      "route": "/franchise/comparison",
+      "identity": "/franchise/comparison",
+      "title": "Performance Hub",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/customers",
+      "route": "/franchise/customers",
+      "identity": "/franchise/customers",
+      "title": "Network Customers",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/network/outlets",
+      "route": "/franchise/network/outlets",
+      "identity": "/franchise/network/outlets",
+      "title": "Outlets",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/network/overview",
+      "route": "/franchise/network/overview",
+      "identity": "/franchise/network/overview",
+      "title": "Overview",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/network",
+      "route": "/franchise/network",
+      "identity": "/franchise/network/outlets",
+      "title": "Outlets",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true,
+      "redirect": "/franchise/network/outlets"
+    },
+    {
+      "sample": "/franchise/outlet",
+      "route": "/franchise/outlet",
+      "identity": "/franchise/outlet",
+      "title": "Outlet Workspace",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/outlets/sample-record",
+      "route": "/franchise/outlets/[id]",
+      "identity": "/franchise/outlets/[id]",
+      "title": "Franchise outlet record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/outlets",
+      "route": "/franchise/outlets",
+      "identity": "/franchise/network/outlets",
+      "title": "Outlets",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true,
+      "redirect": "/franchise/network/outlets"
+    },
+    {
+      "sample": "/franchise/overview",
+      "route": "/franchise/overview",
+      "identity": "/franchise/network/overview",
+      "title": "Overview",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true,
+      "redirect": "/franchise/network/overview"
+    },
+    {
+      "sample": "/franchise/royalties",
+      "route": "/franchise/royalties",
+      "identity": "/franchise/royalties",
+      "title": "Royalty billing",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/franchise/vmi",
+      "route": "/franchise/vmi",
+      "identity": "/franchise/vmi",
+      "title": "VMI & Replenishment",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inbox",
+      "route": "/inbox",
+      "identity": "/inbox",
+      "title": "Work inbox",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/intercompany/overview",
+      "route": "/intercompany/overview",
+      "identity": "/intercompany/overview",
+      "title": "Intercompany Overview",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/intercompany/transactions",
+      "route": "/intercompany/transactions",
+      "identity": "/intercompany/transactions",
+      "title": "IC Transactions",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/costing",
+      "route": "/inventory/costing",
+      "identity": "/inventory/costing",
+      "title": "Costing",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/movements",
+      "route": "/inventory/movements",
+      "identity": "/inventory/movements",
+      "title": "Stock Movements",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/products",
+      "route": "/inventory/products",
+      "identity": "/inventory/products",
+      "title": "Products",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/quality",
+      "route": "/inventory/quality",
+      "identity": "/inventory/quality",
+      "title": "Quality",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/receipts/sample-record",
+      "route": "/inventory/receipts/[id]",
+      "identity": "/inventory/receipts/[id]",
+      "title": "Inventory receipt record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/receipts",
+      "route": "/inventory/receipts",
+      "identity": "/inventory/receipts",
+      "title": "Receipts (GRN)",
+      "kind": "workspace",
+      "tasks": 8,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/receiving",
+      "route": "/inventory/receiving",
+      "identity": "/inventory/receiving",
+      "title": "Receiving Queue",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/replenishment-policy",
+      "route": "/inventory/replenishment-policy",
+      "identity": "/inventory/replenishment-policy",
+      "title": "Replenishment Policy",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/stock",
+      "route": "/inventory/stock",
+      "identity": "/inventory/stock",
+      "title": "Stock workspace",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/stock-explorer",
+      "route": "/inventory/stock-explorer",
+      "identity": "/inventory/stock-explorer",
+      "title": "Stock Explorer",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/stock-levels/sample-record",
+      "route": "/inventory/stock-levels/[id]",
+      "identity": "/inventory/stock-levels/[id]",
+      "title": "Stock location record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/stock-levels",
+      "route": "/inventory/stock-levels",
+      "identity": "/inventory/stock-levels",
+      "title": "Stock Levels",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/valuation",
+      "route": "/inventory/valuation",
+      "identity": "/inventory/valuation",
+      "title": "Valuation",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/inventory/warehouses",
+      "route": "/inventory/warehouses",
+      "identity": "/inventory/warehouses",
+      "title": "Warehouses & Locations",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/boms/sample-record",
+      "route": "/manufacturing/boms/[id]",
+      "identity": "/manufacturing/boms/[id]",
+      "title": "BOM record",
+      "kind": "record",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/boms/new",
+      "route": "/manufacturing/boms/new",
+      "identity": "/manufacturing/boms/new",
+      "title": "New BOM",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/boms",
+      "route": "/manufacturing/boms",
+      "identity": "/manufacturing/boms",
+      "title": "Bills of Material (BOM)",
+      "kind": "workspace",
+      "tasks": 7,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/byproducts",
+      "route": "/manufacturing/byproducts",
+      "identity": "/manufacturing/byproducts",
+      "title": "Byproducts",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/capacity",
+      "route": "/manufacturing/capacity",
+      "identity": "/manufacturing/capacity",
+      "title": "Capacity",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/mrp",
+      "route": "/manufacturing/mrp",
+      "identity": "/manufacturing/mrp",
+      "title": "MRP",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/production-plan",
+      "route": "/manufacturing/production-plan",
+      "identity": "/manufacturing/production-plan",
+      "title": "Production Plan",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/quality",
+      "route": "/manufacturing/quality",
+      "identity": "/manufacturing/quality",
+      "title": "Production QC release",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/recipe-governance",
+      "route": "/manufacturing/recipe-governance",
+      "identity": "/manufacturing/recipe-governance",
+      "title": "Recipe Governance",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/routing",
+      "route": "/manufacturing/routing",
+      "identity": "/manufacturing/routing",
+      "title": "Routing",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/subcontracting/orders/sample-record",
+      "route": "/manufacturing/subcontracting/orders/[id]",
+      "identity": "/manufacturing/subcontracting/orders/[id]",
+      "title": "Subcontract order record",
+      "kind": "record",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/subcontracting/orders",
+      "route": "/manufacturing/subcontracting/orders",
+      "identity": "/manufacturing/subcontracting/orders",
+      "title": "Subcontract orders",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/subcontracting",
+      "route": "/manufacturing/subcontracting",
+      "identity": "/manufacturing/subcontracting",
+      "title": "Subcontracting / Job Work",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/trusted-devices",
+      "route": "/manufacturing/trusted-devices",
+      "identity": "/manufacturing/trusted-devices",
+      "title": "Trusted Devices",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/work-orders/sample-record",
+      "route": "/manufacturing/work-orders/[id]",
+      "identity": "/manufacturing/work-orders/[id]",
+      "title": "Production work order",
+      "kind": "record",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/work-orders",
+      "route": "/manufacturing/work-orders",
+      "identity": "/manufacturing/work-orders",
+      "title": "Work Orders",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/yield/sample-record",
+      "route": "/manufacturing/yield/[id]",
+      "identity": "/manufacturing/yield/[id]",
+      "title": "Yield record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/manufacturing/yield",
+      "route": "/manufacturing/yield",
+      "identity": "/manufacturing/yield",
+      "title": "Yield / Mass balance",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/categories",
+      "route": "/master/categories",
+      "identity": "/master/categories",
+      "title": "Categories",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/departments",
+      "route": "/master/departments",
+      "identity": "/master/departments",
+      "title": "Departments",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master",
+      "route": "/master",
+      "identity": "/master",
+      "title": "Masters",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/parties",
+      "route": "/master/parties",
+      "identity": "/master/parties",
+      "title": "Parties",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/products/sample-record/attributes",
+      "route": "/master/products/[id]/attributes",
+      "identity": "/master/products/[id]/attributes",
+      "title": "Product attributes",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/products/sample-record/packaging",
+      "route": "/master/products/[id]/packaging",
+      "identity": "/master/products/[id]/packaging",
+      "title": "Product packaging",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/products/sample-record",
+      "route": "/master/products/[id]",
+      "identity": "/master/products/[id]",
+      "title": "Product record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/products/sample-record/pricing",
+      "route": "/master/products/[id]/pricing",
+      "identity": "/master/products/[id]/pricing",
+      "title": "Product pricing",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/products/sample-record/variants",
+      "route": "/master/products/[id]/variants",
+      "identity": "/master/products/[id]/variants",
+      "title": "Product variants",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/products",
+      "route": "/master/products",
+      "identity": "/master/products",
+      "title": "Products",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/master/warehouses",
+      "route": "/master/warehouses",
+      "identity": "/master/warehouses",
+      "title": "Warehouses",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/onboarding",
+      "route": "/onboarding",
+      "identity": "/onboarding",
+      "title": "Organisation setup",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/operations/dispatch-alerts",
+      "route": "/operations/dispatch-alerts",
+      "identity": "/operations/dispatch-alerts",
+      "title": "Dispatch alerts",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/operations/supply-chain",
+      "route": "/operations/supply-chain",
+      "identity": "/operations/supply-chain",
+      "title": "Supply chain journey",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/employees/sample-record",
+      "route": "/payroll/employees/[id]",
+      "identity": "/payroll/employees/[id]",
+      "title": "Employee record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/employees",
+      "route": "/payroll/employees",
+      "identity": "/payroll/employees",
+      "title": "Employees",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/leave/balances",
+      "route": "/payroll/leave/balances",
+      "identity": "/payroll/leave/balances",
+      "title": "Leave balances",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/leave/calendar",
+      "route": "/payroll/leave/calendar",
+      "identity": "/payroll/leave/calendar",
+      "title": "Leave calendar",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/leave",
+      "route": "/payroll/leave",
+      "identity": "/payroll/leave",
+      "title": "Leave",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/leave/policies",
+      "route": "/payroll/leave/policies",
+      "identity": "/payroll/leave/policies",
+      "title": "Leave policies",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/leave/requests",
+      "route": "/payroll/leave/requests",
+      "identity": "/payroll/leave/requests",
+      "title": "Leave requests",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/overview",
+      "route": "/payroll/overview",
+      "identity": "/payroll/overview",
+      "title": "Payroll Overview",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/p9",
+      "route": "/payroll/p9",
+      "identity": "/payroll/p9",
+      "title": "P9 Forms",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/pay-runs/sample-record",
+      "route": "/payroll/pay-runs/[id]",
+      "identity": "/payroll/pay-runs/[id]",
+      "title": "Payroll run record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/pay-runs",
+      "route": "/payroll/pay-runs",
+      "identity": "/payroll/pay-runs",
+      "title": "Pay runs",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/payslips",
+      "route": "/payroll/payslips",
+      "identity": "/payroll/payslips",
+      "title": "Payslips",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/payroll/statutories",
+      "route": "/payroll/statutories",
+      "identity": "/payroll/statutories",
+      "title": "Statutories",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/daily-review",
+      "route": "/pricing/daily-review",
+      "identity": "/pricing/workspace/approvals",
+      "title": "Approvals",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true,
+      "redirect": "/pricing/workspace/approvals"
+    },
+    {
+      "sample": "/pricing/overview",
+      "route": "/pricing/overview",
+      "identity": "/pricing/workspace/overview",
+      "title": "Overview",
+      "kind": "workspace",
+      "tasks": 7,
+      "hasSummary": true,
+      "redirect": "/pricing/workspace/overview"
+    },
+    {
+      "sample": "/pricing/price-lists/sample-record",
+      "route": "/pricing/price-lists/[id]",
+      "identity": "/pricing/price-lists/[id]",
+      "title": "Price list record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/price-lists",
+      "route": "/pricing/price-lists",
+      "identity": "/pricing/workspace/lists",
+      "title": "Price lists",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true,
+      "redirect": "/pricing/workspace/lists"
+    },
+    {
+      "sample": "/pricing/rules",
+      "route": "/pricing/rules",
+      "identity": "/pricing/rules",
+      "title": "Pricing rules",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace/approvals",
+      "route": "/pricing/workspace/approvals",
+      "identity": "/pricing/workspace/approvals",
+      "title": "Approvals",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace/commissions",
+      "route": "/pricing/workspace/commissions",
+      "identity": "/pricing/workspace/commissions",
+      "title": "Commissions",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace/lists",
+      "route": "/pricing/workspace/lists",
+      "identity": "/pricing/workspace/lists",
+      "title": "Price lists",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace/overview",
+      "route": "/pricing/workspace/overview",
+      "identity": "/pricing/workspace/overview",
+      "title": "Overview",
+      "kind": "workspace",
+      "tasks": 7,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace/packs",
+      "route": "/pricing/workspace/packs",
+      "identity": "/pricing/workspace/packs",
+      "title": "Product pack configuration",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace",
+      "route": "/pricing/workspace",
+      "identity": "/pricing/workspace/overview",
+      "title": "Overview",
+      "kind": "workspace",
+      "tasks": 7,
+      "hasSummary": true,
+      "redirect": "/pricing/workspace/overview"
+    },
+    {
+      "sample": "/pricing/workspace/tax-tags",
+      "route": "/pricing/workspace/tax-tags",
+      "identity": "/pricing/workspace/tax-tags",
+      "title": "Tax tags",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/pricing/workspace/zones",
+      "route": "/pricing/workspace/zones",
+      "identity": "/pricing/workspace/zones",
+      "title": "Franchise zones",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/projects/sample-record",
+      "route": "/projects/[id]",
+      "identity": "/projects/[id]",
+      "title": "Project record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/projects/financials",
+      "route": "/projects/financials",
+      "identity": "/projects/financials",
+      "title": "Financials",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/projects/list",
+      "route": "/projects/list",
+      "identity": "/projects/list",
+      "title": "Projects",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/projects/overview",
+      "route": "/projects/overview",
+      "identity": "/projects/overview",
+      "title": "Projects Overview",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/cash-weight-audit/override/sample-record",
+      "route": "/purchasing/cash-weight-audit/override/[id]",
+      "identity": "/purchasing/cash-weight-audit/override/[id]",
+      "title": "Weight correction request",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/cash-weight-audit",
+      "route": "/purchasing/cash-weight-audit",
+      "identity": "/purchasing/cash-weight-audit",
+      "title": "Cash-to-Weight Audit",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/coolcatch-sourcing",
+      "route": "/purchasing/coolcatch-sourcing",
+      "identity": "/purchasing/coolcatch-sourcing",
+      "title": "CoolCatch New Batch",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/coolcatch-sourcing-batches",
+      "route": "/purchasing/coolcatch-sourcing-batches",
+      "identity": "/purchasing/coolcatch-sourcing-batches",
+      "title": "CoolCatch Sourcing Batches",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/exceptions",
+      "route": "/purchasing/exceptions",
+      "identity": "/purchasing/exceptions",
+      "title": "Exceptions",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/goods-receipt",
+      "route": "/purchasing/goods-receipt",
+      "identity": "/purchasing/goods-receipt",
+      "title": "Goods receipts",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/match-policy",
+      "route": "/purchasing/match-policy",
+      "identity": "/purchasing/match-policy",
+      "title": "Match Policy",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/orders/sample-record",
+      "route": "/purchasing/orders/[id]",
+      "identity": "/purchasing/orders/[id]",
+      "title": "Purchase order record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/orders",
+      "route": "/purchasing/orders",
+      "identity": "/purchasing/orders",
+      "title": "Purchase Orders",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/purchase-orders",
+      "route": "/purchasing/purchase-orders",
+      "identity": "/purchasing/purchase-orders",
+      "title": "Purchase orders workspace",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/purchase-returns",
+      "route": "/purchasing/purchase-returns",
+      "identity": "/purchasing/purchase-returns",
+      "title": "Supplier Returns / Credit Notes",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/requests",
+      "route": "/purchasing/requests",
+      "identity": "/purchasing/requests",
+      "title": "Purchase Requests",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/sourcing-flow",
+      "route": "/purchasing/sourcing-flow",
+      "identity": "/purchasing/sourcing-flow",
+      "title": "Guided Sourcing Flow",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/purchasing/supplier-invoices",
+      "route": "/purchasing/supplier-invoices",
+      "identity": "/purchasing/supplier-invoices",
+      "title": "Supplier invoices",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/batch-costing",
+      "route": "/reports/batch-costing",
+      "identity": "/reports/batch-costing",
+      "title": "Batch costing report",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/commission-reconciliation",
+      "route": "/reports/commission-reconciliation",
+      "identity": "/reports/commission-reconciliation",
+      "title": "Commission reconciliation",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/exports",
+      "route": "/reports/exports",
+      "identity": "/reports/exports",
+      "title": "Exports",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/kra-cu",
+      "route": "/reports/kra-cu",
+      "identity": "/reports/kra-cu",
+      "title": "KRA CU numbers",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/manufacturing/bom-explosion",
+      "route": "/reports/manufacturing/[reportId]",
+      "identity": "/reports/manufacturing/bom-explosion",
+      "title": "BOM explosion",
+      "kind": "report",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/bom-explosion",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/bom-explosion",
+      "title": "Bom explosion report",
+      "kind": "report",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports",
+      "route": "/reports",
+      "identity": "/reports",
+      "title": "Report library / WIP",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/saved",
+      "route": "/reports/saved",
+      "identity": "/reports/saved",
+      "title": "Saved Views",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/scheduled",
+      "route": "/reports/scheduled",
+      "identity": "/reports/scheduled",
+      "title": "Scheduled Reports",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/snapshots",
+      "route": "/reports/snapshots",
+      "identity": "/reports/snapshots",
+      "title": "Snapshots",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/vat-summary",
+      "route": "/reports/vat-summary",
+      "identity": "/reports/vat-summary",
+      "title": "VAT Summary",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/wht-summary",
+      "route": "/reports/wht-summary",
+      "identity": "/reports/wht-summary",
+      "title": "WHT Summary",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/retail/promotions",
+      "route": "/retail/promotions",
+      "identity": "/retail/promotions",
+      "title": "Promotions",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/retail/replenishment",
+      "route": "/retail/replenishment",
+      "identity": "/retail/replenishment",
+      "title": "Replenishment",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/retail/store-performance",
+      "route": "/retail/store-performance",
+      "identity": "/retail/store-performance",
+      "title": "Store Performance",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/customer-approvals",
+      "route": "/sales/customer-approvals",
+      "identity": "/sales/customer-approvals",
+      "title": "Pending approval",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/customer-directory",
+      "route": "/sales/customer-directory",
+      "identity": "/sales/customer-directory",
+      "title": "Delivery Addresses",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/customers/sample-record",
+      "route": "/sales/customers/[id]",
+      "identity": "/sales/customers/[id]",
+      "title": "Customer account",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/customers",
+      "route": "/sales/customers",
+      "identity": "/sales/customers",
+      "title": "Customers",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/deliveries",
+      "route": "/sales/deliveries",
+      "identity": "/sales/deliveries",
+      "title": "Deliveries",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/invoices",
+      "route": "/sales/invoices",
+      "identity": "/sales/invoices",
+      "title": "Invoices",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/odaflow-customer-matching",
+      "route": "/sales/odaflow-customer-matching",
+      "identity": "/sales/odaflow-customer-matching",
+      "title": "Customer matching",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/odaflow-product-matching",
+      "route": "/sales/odaflow-product-matching",
+      "identity": "/sales/odaflow-product-matching",
+      "title": "Product matching",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/odaflow-sync-queue",
+      "route": "/sales/odaflow-sync-queue",
+      "identity": "/sales/odaflow-sync-queue",
+      "title": "Odaflow orders to review",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/orders/franchise-inbound/sample-record/sample-record",
+      "route": "/sales/orders/franchise-inbound/[outletOrgId]/[prId]",
+      "identity": "/sales/orders/franchise-inbound/[outletOrgId]/[prId]",
+      "title": "Franchise inbound order",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/orders/franchise-inbound/new",
+      "route": "/sales/orders/franchise-inbound/new",
+      "identity": "/sales/orders/franchise-inbound/new",
+      "title": "Create franchise order",
+      "kind": "create",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/orders",
+      "route": "/sales/orders",
+      "identity": "/sales/orders",
+      "title": "Orders",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/overview",
+      "route": "/sales/overview",
+      "identity": "/sales/overview",
+      "title": "Sales Overview",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/quotes",
+      "route": "/sales/quotes",
+      "identity": "/sales/quotes",
+      "title": "Quotes",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/sales/returns",
+      "route": "/sales/returns",
+      "identity": "/sales/returns",
+      "title": "Returns / Notes",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/approval-policy",
+      "route": "/settings/approval-policy",
+      "identity": "/settings/approval-policy",
+      "title": "Approval policy",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/audit-log",
+      "route": "/settings/audit-log",
+      "identity": "/settings/audit-log",
+      "title": "Audit log",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/billing",
+      "route": "/settings/billing",
+      "identity": "/settings/billing",
+      "title": "Billing",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/branches",
+      "route": "/settings/branches",
+      "identity": "/settings/branches",
+      "title": "Branches",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/compliance",
+      "route": "/settings/compliance",
+      "identity": "/settings/compliance",
+      "title": "Compliance",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/coolcatch-readiness",
+      "route": "/settings/coolcatch-readiness",
+      "identity": "/settings/coolcatch-readiness",
+      "title": "Coolcatch Readiness",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/customer-categories",
+      "route": "/settings/customer-categories",
+      "identity": "/settings/customer-categories",
+      "title": "Customer categories",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/customization",
+      "route": "/settings/customization",
+      "identity": "/settings/customization",
+      "title": "ERP customisation",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/customizer/dashboards",
+      "route": "/settings/customizer/dashboards",
+      "identity": "/settings/customizer/dashboards",
+      "title": "Dashboards",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/customizer/fields",
+      "route": "/settings/customizer/fields",
+      "identity": "/settings/customizer/fields",
+      "title": "Custom fields",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/customizer/modules",
+      "route": "/settings/customizer/modules",
+      "identity": "/settings/customizer/modules",
+      "title": "Modules",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/customizer/workflows",
+      "route": "/settings/customizer/workflows",
+      "identity": "/settings/customizer/workflows",
+      "title": "Workflows",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/display",
+      "route": "/settings/display",
+      "identity": "/settings/display",
+      "title": "Display",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/environment",
+      "route": "/settings/environment",
+      "identity": "/settings/environment",
+      "title": "Environment",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial/chart-of-accounts",
+      "route": "/settings/financial/chart-of-accounts",
+      "identity": "/settings/financial/chart-of-accounts",
+      "title": "Chart of accounts",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial/currencies",
+      "route": "/settings/financial/currencies",
+      "identity": "/settings/financial/currencies",
+      "title": "Currencies",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial/exchange-rates",
+      "route": "/settings/financial/exchange-rates",
+      "identity": "/settings/financial/exchange-rates",
+      "title": "Exchange rates",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial/fiscal-years",
+      "route": "/settings/financial/fiscal-years",
+      "identity": "/settings/financial/fiscal-years",
+      "title": "Fiscal years",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial",
+      "route": "/settings/financial",
+      "identity": "/settings/financial",
+      "title": "Financial settings hub",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial/posting-mappings",
+      "route": "/settings/financial/posting-mappings",
+      "identity": "/settings/financial/posting-mappings",
+      "title": "Posting mappings",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/financial/taxes",
+      "route": "/settings/financial/taxes",
+      "identity": "/settings/financial/taxes",
+      "title": "Taxes",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/fmcg-setup",
+      "route": "/settings/fmcg-setup",
+      "identity": "/settings/fmcg-setup",
+      "title": "FMCG operational setup",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/integrations/coolcatch-bot",
+      "route": "/settings/integrations/coolcatch-bot",
+      "identity": "/settings/integrations/coolcatch-bot",
+      "title": "Coolcatch bot (WhatsApp)",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/integrations/kra",
+      "route": "/settings/integrations/kra",
+      "identity": "/settings/integrations/kra",
+      "title": "KRA eTIMS",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/integrations/odaflow",
+      "route": "/settings/integrations/odaflow",
+      "identity": "/settings/integrations/odaflow",
+      "title": "Odaflow SFA connector",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/integrations/whatsapp",
+      "route": "/settings/integrations/whatsapp",
+      "identity": "/settings/integrations/whatsapp",
+      "title": "WhatsApp orders",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/inventory/costing",
+      "route": "/settings/inventory/costing",
+      "identity": "/settings/inventory/costing",
+      "title": "Costing",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/master-data-governance",
+      "route": "/settings/master-data-governance",
+      "identity": "/settings/master-data-governance",
+      "title": "Master data governance",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/migrations",
+      "route": "/settings/migrations",
+      "identity": "/settings/migrations",
+      "title": "Migration console",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/notifications",
+      "route": "/settings/notifications",
+      "identity": "/settings/notifications",
+      "title": "Notifications",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/ops-runbook",
+      "route": "/settings/ops-runbook",
+      "identity": "/settings/ops-runbook",
+      "title": "Operations runbook",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/org",
+      "route": "/settings/org",
+      "identity": "/settings/org",
+      "title": "Organization profile",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/organization/entities",
+      "route": "/settings/organization/entities",
+      "identity": "/settings/organization/entities",
+      "title": "Entities",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings",
+      "route": "/settings",
+      "identity": "/settings",
+      "title": "Settings",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/payment-terms",
+      "route": "/settings/payment-terms",
+      "identity": "/settings/payment-terms",
+      "title": "Payment terms",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/payroll",
+      "route": "/settings/payroll",
+      "identity": "/settings/payroll",
+      "title": "Payroll",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/platform",
+      "route": "/settings/platform",
+      "identity": "/settings/platform",
+      "title": "Platform control",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/preferences",
+      "route": "/settings/preferences",
+      "identity": "/settings/preferences",
+      "title": "Preferences",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/products/packaging-defaults",
+      "route": "/settings/products/packaging-defaults",
+      "identity": "/settings/products/packaging-defaults",
+      "title": "Packaging setup",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/products/pricing-rules",
+      "route": "/settings/products/pricing-rules",
+      "identity": "/settings/products/pricing-rules",
+      "title": "Pricing rules",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/purchasing/receiving",
+      "route": "/settings/purchasing/receiving",
+      "identity": "/settings/purchasing/receiving",
+      "title": "Receiving",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/sales/document-flow",
+      "route": "/settings/sales/document-flow",
+      "identity": "/settings/sales/document-flow",
+      "title": "Document flow",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/sequences",
+      "route": "/settings/sequences",
+      "identity": "/settings/sequences",
+      "title": "Numbering sequences",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/sidebar",
+      "route": "/settings/sidebar",
+      "identity": "/settings/sidebar",
+      "title": "Sidebar navigation",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/supplier-categories",
+      "route": "/settings/supplier-categories",
+      "identity": "/settings/supplier-categories",
+      "title": "Supplier categories",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/tax/kenya",
+      "route": "/settings/tax/kenya",
+      "identity": "/settings/tax/kenya",
+      "title": "Kenya profile",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/tax/tax-mappings",
+      "route": "/settings/tax/tax-mappings",
+      "identity": "/settings/tax/tax-mappings",
+      "title": "Tax mappings",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/tax/vat",
+      "route": "/settings/tax/vat",
+      "identity": "/settings/tax/vat",
+      "title": "VAT",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/tax/vat-withholding",
+      "route": "/settings/tax/vat-withholding",
+      "identity": "/settings/tax/vat-withholding",
+      "title": "VAT withholding",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/tax/withholding",
+      "route": "/settings/tax/withholding",
+      "identity": "/settings/tax/withholding",
+      "title": "Withholding",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/uom",
+      "route": "/settings/uom",
+      "identity": "/settings/uom",
+      "title": "UOM catalog",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/settings/users-roles",
+      "route": "/settings/users-roles",
+      "identity": "/settings/users-roles",
+      "title": "Users & roles",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/tasks",
+      "route": "/tasks",
+      "identity": "/tasks",
+      "title": "Tasks / Work Queue",
+      "kind": "workspace",
+      "tasks": 6,
+      "hasSummary": true
+    },
+    {
+      "sample": "/timesheets",
+      "route": "/timesheets",
+      "identity": "/timesheets",
+      "title": "Timesheets",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/treasury/bank-accounts",
+      "route": "/treasury/bank-accounts",
+      "identity": "/treasury/bank-accounts",
+      "title": "Bank accounts",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/treasury/cashflow",
+      "route": "/treasury/cashflow",
+      "identity": "/treasury/cashflow",
+      "title": "Cashflow",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/treasury/collections",
+      "route": "/treasury/collections",
+      "identity": "/treasury/collections",
+      "title": "Collections",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/treasury/overview",
+      "route": "/treasury/overview",
+      "identity": "/treasury/overview",
+      "title": "Treasury Overview",
+      "kind": "workspace",
+      "tasks": 2,
+      "hasSummary": true
+    },
+    {
+      "sample": "/treasury/payment-runs/sample-record",
+      "route": "/treasury/payment-runs/[id]",
+      "identity": "/treasury/payment-runs/[id]",
+      "title": "Payment run record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/treasury/payment-runs",
+      "route": "/treasury/payment-runs",
+      "identity": "/treasury/payment-runs",
+      "title": "Payment runs",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/tutorial/sample-record/sample-record",
+      "route": "/tutorial/[chapterId]/[guideId]",
+      "identity": "/tutorial/[chapterId]/[guideId]",
+      "title": "ERP task guide",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/tutorial/sample-record",
+      "route": "/tutorial/[chapterId]",
+      "identity": "/tutorial/[chapterId]",
+      "title": "ERP module guides",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/tutorial",
+      "route": "/tutorial",
+      "identity": "/tutorial",
+      "title": "Search tutorials and ask Gaia",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/bin-locations",
+      "route": "/warehouse/bin-locations",
+      "identity": "/warehouse/bin-locations",
+      "title": "Bin locations",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/cycle-counts/sample-record",
+      "route": "/warehouse/cycle-counts/[id]",
+      "identity": "/warehouse/cycle-counts/[id]",
+      "title": "Cycle count record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/cycle-counts",
+      "route": "/warehouse/cycle-counts",
+      "identity": "/warehouse/cycle-counts",
+      "title": "Stocktake / Cycle Count",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/dispatch",
+      "route": "/warehouse/dispatch",
+      "identity": "/warehouse/dispatch",
+      "title": "Dispatch",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/dispatch-returns/sample-record",
+      "route": "/warehouse/dispatch-returns/[id]",
+      "identity": "/warehouse/dispatch-returns/[id]",
+      "title": "Dispatch return record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/dispatch-returns",
+      "route": "/warehouse/dispatch-returns",
+      "identity": "/warehouse/dispatch-returns",
+      "title": "Driver returns",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/overview",
+      "route": "/warehouse/overview",
+      "identity": "/warehouse/overview",
+      "title": "Warehouse Overview",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/pick-pack/sample-record",
+      "route": "/warehouse/pick-pack/[id]",
+      "identity": "/warehouse/pick-pack/[id]",
+      "title": "Pick and pack task",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/pick-pack",
+      "route": "/warehouse/pick-pack",
+      "identity": "/warehouse/pick-pack",
+      "title": "Pick & Pack",
+      "kind": "workspace",
+      "tasks": 8,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/putaway/sample-record",
+      "route": "/warehouse/putaway/[id]",
+      "identity": "/warehouse/putaway/[id]",
+      "title": "Putaway task",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/putaway",
+      "route": "/warehouse/putaway",
+      "identity": "/warehouse/putaway",
+      "title": "Putaway",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/route-pick-lists",
+      "route": "/warehouse/route-pick-lists",
+      "identity": "/warehouse/route-pick-lists",
+      "title": "Route pick lists",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/route-settlement",
+      "route": "/warehouse/route-settlement",
+      "identity": "/warehouse/route-settlement",
+      "title": "Route settlement",
+      "kind": "workspace",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/transfers/sample-record",
+      "route": "/warehouse/transfers/[id]",
+      "identity": "/warehouse/transfers/[id]",
+      "title": "Stock transfer record",
+      "kind": "record",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/warehouse/transfers",
+      "route": "/warehouse/transfers",
+      "identity": "/warehouse/transfers",
+      "title": "Transfers",
+      "kind": "workspace",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/work/queue",
+      "route": "/work/queue",
+      "identity": "/work/queue",
+      "title": "Work queue",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/quote",
+      "route": "/docs/[type]",
+      "identity": "/docs/quote",
+      "title": "Quote",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/quote/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/quote/new",
+      "title": "New Quote",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/quote/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/quote/[id]",
+      "title": "Quote record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/quote/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/quote/[id]/edit",
+      "title": "Edit Quote",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/delivery-note",
+      "route": "/docs/[type]",
+      "identity": "/docs/delivery-note",
+      "title": "Delivery note",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/delivery-note/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/delivery-note/new",
+      "title": "New Delivery note",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/delivery-note/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/delivery-note/[id]",
+      "title": "Delivery note record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/delivery-note/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/delivery-note/[id]/edit",
+      "title": "Edit Delivery note",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/invoice",
+      "route": "/docs/[type]",
+      "identity": "/docs/invoice",
+      "title": "Invoice",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/invoice/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/invoice/new",
+      "title": "New Invoice",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/invoice/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/invoice/[id]",
+      "title": "Invoice record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/invoice/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/invoice/[id]/edit",
+      "title": "Edit Invoice",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/credit-note",
+      "route": "/docs/[type]",
+      "identity": "/docs/credit-note",
+      "title": "Credit note",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/credit-note/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/credit-note/new",
+      "title": "New Credit note",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/credit-note/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/credit-note/[id]",
+      "title": "Credit note record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/credit-note/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/credit-note/[id]/edit",
+      "title": "Edit Credit note",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/debit-note",
+      "route": "/docs/[type]",
+      "identity": "/docs/debit-note",
+      "title": "Debit note",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/debit-note/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/debit-note/new",
+      "title": "New Debit note",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/debit-note/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/debit-note/[id]",
+      "title": "Debit note record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/debit-note/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/debit-note/[id]/edit",
+      "title": "Edit Debit note",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-request",
+      "route": "/docs/[type]",
+      "identity": "/docs/purchase-request",
+      "title": "Purchase request",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-request/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/purchase-request/new",
+      "title": "New Purchase request",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-request/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/purchase-request/[id]",
+      "title": "Purchase request record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-request/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/purchase-request/[id]/edit",
+      "title": "Edit Purchase request",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-order",
+      "route": "/docs/[type]",
+      "identity": "/docs/purchase-order",
+      "title": "Purchase order",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-order/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/purchase-order/new",
+      "title": "New Purchase order",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-order/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/purchase-order/[id]",
+      "title": "Purchase order record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-order/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/purchase-order/[id]/edit",
+      "title": "Edit Purchase order",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/grn",
+      "route": "/docs/[type]",
+      "identity": "/docs/grn",
+      "title": "Grn",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/grn/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/grn/[id]/edit",
+      "title": "Edit Grn",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/bill",
+      "route": "/docs/[type]",
+      "identity": "/docs/bill",
+      "title": "Bill",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/bill/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/bill/new",
+      "title": "New Bill",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/bill/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/bill/[id]",
+      "title": "Bill record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/bill/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/bill/[id]/edit",
+      "title": "Edit Bill",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-credit-note",
+      "route": "/docs/[type]",
+      "identity": "/docs/purchase-credit-note",
+      "title": "Purchase credit note",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-credit-note/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/purchase-credit-note/new",
+      "title": "New Purchase credit note",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-credit-note/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/purchase-credit-note/[id]",
+      "title": "Purchase credit note record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-credit-note/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/purchase-credit-note/[id]/edit",
+      "title": "Edit Purchase credit note",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-debit-note",
+      "route": "/docs/[type]",
+      "identity": "/docs/purchase-debit-note",
+      "title": "Purchase debit note",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-debit-note/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/purchase-debit-note/new",
+      "title": "New Purchase debit note",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-debit-note/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/purchase-debit-note/[id]",
+      "title": "Purchase debit note record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/purchase-debit-note/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/purchase-debit-note/[id]/edit",
+      "title": "Edit Purchase debit note",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/journal",
+      "route": "/docs/[type]",
+      "identity": "/docs/journal",
+      "title": "Journal",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/journal/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/journal/new",
+      "title": "New Journal",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/journal/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/journal/[id]",
+      "title": "Journal record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/journal/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/journal/[id]/edit",
+      "title": "Edit Journal",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/franchise-security-deposit",
+      "route": "/docs/[type]",
+      "identity": "/docs/franchise-security-deposit",
+      "title": "Franchise security deposit",
+      "kind": "workspace",
+      "tasks": 3,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/franchise-security-deposit/new",
+      "route": "/docs/[type]/new",
+      "identity": "/docs/franchise-security-deposit/new",
+      "title": "New Franchise security deposit",
+      "kind": "create",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/franchise-security-deposit/sample-record",
+      "route": "/docs/[type]/[id]",
+      "identity": "/docs/franchise-security-deposit/[id]",
+      "title": "Franchise security deposit record",
+      "kind": "record",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/docs/franchise-security-deposit/sample-record/edit",
+      "route": "/docs/[type]/[id]/edit",
+      "identity": "/docs/franchise-security-deposit/[id]/edit",
+      "title": "Edit Franchise security deposit",
+      "kind": "edit",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/manufacturing/bom-where-used",
+      "route": "/reports/manufacturing/[reportId]",
+      "identity": "/reports/manufacturing/bom-where-used",
+      "title": "Where-used",
+      "kind": "report",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/manufacturing/manufacture-orders",
+      "route": "/reports/manufacturing/[reportId]",
+      "identity": "/reports/manufacturing/manufacture-orders",
+      "title": "Manufacture orders",
+      "kind": "report",
+      "tasks": 4,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/manufacturing/work-in-progress",
+      "route": "/reports/manufacturing/[reportId]",
+      "identity": "/reports/manufacturing/work-in-progress",
+      "title": "Work in Progress",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/manufacturing/reconciliation",
+      "route": "/reports/manufacturing/[reportId]",
+      "identity": "/reports/manufacturing/reconciliation",
+      "title": "Manufacturing Reconciliation",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/overdue-sales-orders",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/overdue-sales-orders",
+      "title": "Overdue Sales Orders",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/overdue-purchase-orders",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/overdue-purchase-orders",
+      "title": "Overdue Purchase Orders",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/outstanding-customer-documents",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/outstanding-customer-documents",
+      "title": "Outstanding Customer Documents",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/outstanding-grns",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/outstanding-grns",
+      "title": "Outstanding GRVs",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/linked-purchase-orders",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/linked-purchase-orders",
+      "title": "Linked Purchase Orders",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/executable-orders",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/executable-orders",
+      "title": "Executable Orders",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/lot-transactions",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/lot-transactions",
+      "title": "Lot Tracking Transactions",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/slow-movers",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/slow-movers",
+      "title": "Slow Movers",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/inventory-management",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/inventory-management",
+      "title": "Management",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/top-sales",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/top-sales",
+      "title": "Top Sales",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/sales-by-rep",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/sales-by-rep",
+      "title": "Sales Rep Report",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/sales-vs-purchases",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/sales-vs-purchases",
+      "title": "Sales vs Purchases",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/sales-register",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/sales-register",
+      "title": "Transactions",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/purchase-register",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/purchase-register",
+      "title": "Transactions",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/post-dated-cheques",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/post-dated-cheques",
+      "title": "Post Dated Cheques",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/customer-labels",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/customer-labels",
+      "title": "Labels",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/supplier-labels",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/supplier-labels",
+      "title": "Labels",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/stock-statement",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/stock-statement",
+      "title": "Stock statement",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/stock-valuation",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/stock-valuation",
+      "title": "Stock valuation",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/stock-lots",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/stock-lots",
+      "title": "Lot stock register",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/expiry-stock",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/expiry-stock",
+      "title": "Expiry & shelf-life exceptions",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/qc-held-stock",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/qc-held-stock",
+      "title": "Quality-held stock",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/inventory-labels",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/inventory-labels",
+      "title": "Inventory label register",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/customer-balances",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/customer-balances",
+      "title": "Customer balance summary",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/supplier-balances",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/supplier-balances",
+      "title": "Supplier balance summary",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/customer-aging",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/customer-aging",
+      "title": "Customer outstanding & aging",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/supplier-aging",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/supplier-aging",
+      "title": "Supplier outstanding & aging",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/production-output",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/production-output",
+      "title": "Production output & costing",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/production-material-variance",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/production-material-variance",
+      "title": "Production material variance",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/production-process",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/production-process",
+      "title": "Production operation progress",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/general-ledger",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/general-ledger",
+      "title": "General ledger statement",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    },
+    {
+      "sample": "/reports/operations/trial-balance",
+      "route": "/reports/operations/[reportId]",
+      "identity": "/reports/operations/trial-balance",
+      "title": "Trial balance movement",
+      "kind": "report",
+      "tasks": 5,
+      "hasSummary": true
+    }
+  ]
+}
