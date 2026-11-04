@@ -1,6 +1,6 @@
 import { apiRequest, getApiBase } from "./client";
-export type ManufacturingCapabilities = { version: string; reports?: string; availability?: string; preparation?: string; outputActuals?: string; floorMaterials?: string; operations?: string; yieldPolicy?: string; revision: string };
-export async function requireManufacturingCapability(capability: "reports" | "availability" | "preparation" | "outputActuals" | "floorMaterials" | "operations" | "yieldPolicy", expected: string) {
+export type ManufacturingCapabilities = { version: string; reports?: string; availability?: string; preparation?: string; outputActuals?: string; floorMaterials?: string; operations?: string; yieldPolicy?: string; productionPlan?: string; revision: string };
+export async function requireManufacturingCapability(capability: "reports" | "availability" | "preparation" | "outputActuals" | "floorMaterials" | "operations" | "yieldPolicy" | "productionPlan", expected: string) {
   let capabilities: ManufacturingCapabilities;
   try { capabilities = await apiRequest<ManufacturingCapabilities>("/api/manufacturing/capabilities"); }
   catch (error) {

@@ -34,6 +34,8 @@ export type PartyStatementAging = {
 };
 
 export type PartyStatement = {
+  exportFormats?: string[];
+  generatedAt: string; agingAsOf: string; scope: string; warnings: string[];
   kind: PartyStatementKind;
   side: "AR" | "AP";
   from: string;
@@ -68,8 +70,9 @@ function statementPath(kind: PartyStatementKind, partyId: string, suffix = ""): 
   return `${base}${suffix}`;
 }
 
-function rangeParams(from?: string, to?: string): URLSearchParams {
+function rangeParams(from?: string, to?: string, currency?: string): URLSearchParams {
   const params = new URLSearchParams();
+  if (currency) params.set("currency", currency);
   if (from) params.set("from", from);
   if (to) params.set("to", to);
   return params;
@@ -79,11 +82,12 @@ export async function fetchPartyStatementApi(
   kind: PartyStatementKind,
   partyId: string,
   from?: string,
-  to?: string
+  to?: string,
+  currency?: string
 ): Promise<PartyStatement> {
   requireLiveApi(kind === "customer" ? "Customer statement" : "Supplier statement");
   return apiRequest<PartyStatement>(statementPath(kind, partyId), {
-    params: rangeParams(from, to),
+    params: rangeParams(from, to, currency),
   });
 }
 
@@ -93,17 +97,18 @@ export async function downloadPartyStatementPdfApi(
   from: string,
   to: string,
   fileName: string,
-  onNotAvailable: (message: string) => void
+  onNotAvailable: (message: string) => void,
+  currency?: string
 ): Promise<boolean> {
   requireLiveApi("Statement PDF");
-  const qs = rangeParams(from, to).toString();
+  const qs = rangeParams(from, to, currency).toString();
   return downloadFile(`${statementPath(kind, partyId, "/pdf")}?${qs}`, fileName, onNotAvailable);
 }
 
 export async function emailPartyStatementApi(
   kind: PartyStatementKind,
   partyId: string,
-  body: { from: string; to: string; overrideTo?: string }
+  body: { from: string; to: string; currency?: string; overrideTo?: string }
 ): Promise<{ sent: boolean; to: string }> {
   requireLiveApi("Statement email");
   return apiRequest<{ sent: boolean; to: string }>(statementPath(kind, partyId, "/email"), {
@@ -122,4 +127,9 @@ export function defaultStatementDates(now = new Date()): { from: string; to: str
 /** Wide enough that period lines include opening balances and historical postings. */
 export function allTimeStatementDates(now = new Date()): { from: string; to: string } {
   return { from: "2000-01-01", to: now.toISOString().slice(0, 10) };
+}
+
+export function downloadPartyStatementData(kind: PartyStatementKind, partyId: string, from: string, to: string, currency: string, format: "csv" | "xlsx", onError: (message: string) => void) {
+  const query = rangeParams(from, to, currency); query.set("format", format);
+  return downloadFile(`${statementPath(kind, partyId)}?${query}`, `${kind}-statement.${format}`, onError);
 }

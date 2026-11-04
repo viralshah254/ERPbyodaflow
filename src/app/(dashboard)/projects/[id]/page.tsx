@@ -43,6 +43,7 @@ import * as Icons from "lucide-react";
 export default function ProjectDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const [loadError, setLoadError] = React.useState("");
   const [project, setProject] = React.useState<ProjectRow | null>(null);
   const [costingSummary, setCostingSummary] = React.useState<ProjectCostingSummary>({
     timesheetHours: 0,
@@ -73,7 +74,7 @@ export default function ProjectDetailPage() {
     setProject(projectItem);
     setCostingSummary(costing.summary);
     setCostLinks(costing.items);
-    setLinkableDocuments(candidates);
+    setLinkableDocuments(candidates.filter((doc) => doc.status !== "POSTED"));
     setSelectedDocumentId((current) => current || candidates[0]?.id || "");
   }, [id]);
 
@@ -85,7 +86,7 @@ export default function ProjectDetailPage() {
         if (!cancelled) {
           await reload();
         }
-      } finally {
+      } catch (error) { if (!cancelled) { setProject(null); setLoadError(error instanceof Error ? error.message : "Project could not load."); } } finally {
         if (!cancelled) {
           setLoading(false);
         }
@@ -101,7 +102,7 @@ export default function ProjectDetailPage() {
       <PageShell>
         <PageHeader title="Not found" breadcrumbs={[{ label: "Projects", href: "/projects/overview" }, { label: "List", href: "/projects/list" }, { label: id }]} />
         <div className="p-6">
-          <p className="text-muted-foreground">Project not found.</p>
+          <p className="text-muted-foreground">{loadError || "Project not found."}</p>
           <Button variant="outline" className="mt-4" asChild>
             <Link href="/projects/list">Back to list</Link>
           </Button>
@@ -132,7 +133,8 @@ export default function ProjectDetailPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild><Link href="/projects/financials">Posted financials</Link></Button>
             {copilotEnabled ? (
               <Button variant="outline" size="sm" onClick={() => openWithPrompt(`Summarize project ${project.code} burn vs budget.`)}>
                 <Icons.Sparkles className="mr-2 h-4 w-4" />
@@ -181,32 +183,33 @@ export default function ProjectDetailPage() {
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Linked document value</CardTitle>
+              <CardTitle className="text-sm font-medium">Linked source value</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(costingSummary.documentAmount, "KES")}</div>
+              <div className="text-2xl font-bold">{costingSummary.documentAmount == null ? "Review currencies" : formatMoney(costingSummary.documentAmount, "KES")}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Labor burn</CardTitle>
+              <CardTitle className="text-sm font-medium">Recorded labor estimate</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(costingSummary.timesheetAmount, "KES")}</div>
+              <div className="text-2xl font-bold">{costingSummary.timesheetAmount == null ? "Review currencies" : formatMoney(costingSummary.timesheetAmount, "KES")}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total burn vs budget</CardTitle>
+              <CardTitle className="text-sm font-medium">Planning estimate vs budget</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{formatMoney(costingSummary.totalBurn, "KES")}</div>
+              <div className="text-2xl font-bold">{costingSummary.totalBurn == null ? "Review currencies" : formatMoney(costingSummary.totalBurn, "KES")}</div>
               <div className="text-xs text-muted-foreground">
-                {costingSummary.burnPct.toFixed(1)}% of {formatMoney(project.budget, "KES")}
+                {costingSummary.burnPct == null ? "Unavailable" : `${costingSummary.burnPct.toFixed(1)}%`} of {formatMoney(project.budget, "KES")}
               </div>
             </CardContent>
           </Card>
         </div>
+        <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">{costingSummary.basis ?? "Source planning estimates only. This is not a posted project P&L."}{costingSummary.warnings?.map((warning) => <p key={warning} className="mt-2 text-amber-700 dark:text-amber-400">{warning}</p>)}</div>
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Details</CardTitle>
@@ -293,7 +296,7 @@ export default function ProjectDetailPage() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Link project document</SheetTitle>
-            <SheetDescription>Select a document to link into project costing.</SheetDescription>
+            <SheetDescription>Link a draft source for planning. Posted sources require an independent assignment review in Project financials.</SheetDescription>
           </SheetHeader>
           <div className="py-4 space-y-3">
             {linkableDocuments.length === 0 ? (

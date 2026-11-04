@@ -26,6 +26,7 @@ import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { printProductionSheet } from "@/lib/manufacturing/production-sheet";
+import { DeviceReadingPicker } from "@/components/manufacturing/device-reading-picker";
 import { WorkOrderFloor } from "@/components/manufacturing/work-order-floor";
 import { WorkOrderPreparation } from "@/components/manufacturing/work-order-preparation";
 import { completionInputDefaults, completionIssueShortages } from "@/lib/manufacturing/completion-inputs";
@@ -86,6 +87,7 @@ export default function WorkOrderDetailPage() {
       setOrder(next);
       setCompletionQuantity(String(next.openQuantity));
       setActualInputs(completionInputDefaults(next, next.openQuantity));
+      setMeasuredWeight(""); setDeviceReadingId("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load work order.");
       setOrder(null);
@@ -168,6 +170,7 @@ export default function WorkOrderDetailPage() {
               ? (next.status === "COMPLETED" ? "Production completed. Finished goods received; check QC before dispatch." : "Partial production posted. Remaining quantities updated; check received goods in QC.")
               : "Cancelled."
       );
+      if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Action failed.");
@@ -211,7 +214,7 @@ export default function WorkOrderDetailPage() {
           <Button variant="outline" size="sm" disabled={!order?.materialLines.length} onClick={() => {
             if (!order) return;
             try { printProductionSheet(order); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not print production sheet."); }
-          }}><Icons.Printer className="mr-2 h-4 w-4" />Print production sheet</Button>
+          }}><Icons.Printer className="mr-2 h-4 w-4" />Print / save production PDF</Button>
           <Button variant="outline" size="sm" asChild>
             <Link href="/manufacturing/work-orders">
               <Icons.ArrowLeft className="mr-2 h-4 w-4" />
@@ -229,6 +232,7 @@ export default function WorkOrderDetailPage() {
           <p className="text-sm text-muted-foreground">This work order does not exist or you cannot open it.</p>
         ) : (
           <>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives finished goods into the selected output store under QC hold. QC acceptance makes the lot available for allocation. Do not add the output again with a stock adjustment.</p></div>{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div>
             {canWrite && order.status === "DRAFT" && <WorkOrderPreparation order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             <Card data-tutorial-hint="work-order-lifecycle">
@@ -277,7 +281,7 @@ export default function WorkOrderDetailPage() {
                         data-tutorial-hint="work-order-measurement"
                       >
                         <div className="space-y-1.5">
-                          <Label htmlFor="completion-quantity">Complete now</Label>
+                          <Label htmlFor="completion-quantity">Actual verified output ({order.outputLines.find((line) => line.productId === order.productId)?.uom || "product units"})</Label>
                           <Input id="completion-quantity" type="number" min="0.001" max={order.openQuantity} step="0.001" value={completionQuantity} onChange={(event) => {
                             const value = event.target.value;
                             setCompletionQuantity(value);
@@ -287,14 +291,11 @@ export default function WorkOrderDetailPage() {
                         {order.measurementMode !== "COUNT_ONLY" && (
                           <div className="space-y-1.5">
                             <Label htmlFor="measured-weight">Measured weight</Label>
-                            <Input id="measured-weight" type="number" min="0.001" step="0.001" value={measuredWeight} onChange={(event) => setMeasuredWeight(event.target.value)} />
+                            <Input id="measured-weight" readOnly={order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE"} type="number" min="0.001" step="0.001" value={measuredWeight} onChange={(event) => setMeasuredWeight(event.target.value)} />
                           </div>
                         )}
                         {(order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && (
-                          <div className="space-y-1.5">
-                            <Label htmlFor="reading-id">Reading reference</Label>
-                            <Input id="reading-id" value={deviceReadingId} onChange={(event) => setDeviceReadingId(event.target.value)} />
-                          </div>
+                          <DeviceReadingPicker workOrderId={order.id} value={deviceReadingId} onChange={(id, quantity) => { setDeviceReadingId(id); setMeasuredWeight(quantity == null ? "" : String(quantity)); }} />
                         )}
                         <p className="text-xs text-muted-foreground sm:col-span-3">
                           {order.measurementMode === "COUNT_ONLY" ? "Weighing is optional and disabled for this order." : `Mode: ${order.measurementMode.replaceAll("_", " ").toLowerCase()}.`}
@@ -342,12 +343,12 @@ export default function WorkOrderDetailPage() {
                     <div className="flex flex-wrap gap-2">
                     {order.status === "DRAFT" && (
                       <Button size="sm" disabled={acting || !order.materialLines.length || !order.outputLines.length || Boolean(availError) || availLoading || shortfalls.length > 0} onClick={() => void runAction("release")}>
-                        Release this order
+                        Release to production
                       </Button>
                     )}
                     {order.status === "RELEASED" && (
                       <Button size="sm" variant="outline" disabled={acting} onClick={() => void runAction("start")}>
-                        Mark in progress
+                        Start production
                       </Button>
                     )}
                     {order.status === "IN_PROGRESS" && (
@@ -356,7 +357,7 @@ export default function WorkOrderDetailPage() {
                         disabled={acting || order.operationExecution?.some((step) => step.critical && (step.status !== "COMPLETED" || (step.qcRequired && step.qcOutcome !== "ACCEPTED"))) || issueShortages.length > 0 || availLoading || Boolean(availError) || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
                         onClick={() => void runAction("complete")}
                       >
-                        Complete this order
+                        Receive actual output · QC hold
                       </Button>
                     )}
                     {(order.status === "DRAFT" || order.status === "RELEASED") && (

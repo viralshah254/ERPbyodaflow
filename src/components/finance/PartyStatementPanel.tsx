@@ -20,6 +20,9 @@ import {
   type PartyStatement,
   type PartyStatementKind,
 } from "@/lib/api/party-statements";
+import { useAuthStore } from "@/stores/auth-store";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
+import { downloadPartyStatementData } from "@/lib/api/party-statements";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -41,6 +44,7 @@ export function PartyStatementPanel(props: {
   partyId: string;
   from?: string | null;
   to?: string | null;
+  currency?: string | null;
   canEmail: boolean;
   /** Keep standalone statement pages in sync with the query string. */
   syncUrl?: boolean;
@@ -48,6 +52,11 @@ export function PartyStatementPanel(props: {
   hideAccountCard?: boolean;
 }) {
   const router = useRouter();
+  const scopeKey = useAuthStore((s) => `${s.org?.orgId}:${s.user?.userId}:${s.permissions.join(",")}`);
+  const canExport = useHasPermission("reports.export.read");
+  const serial = React.useRef(0);
+  const cancelPending = React.useCallback(() => { serial.current++; }, []);
+  const [currency, setCurrency] = React.useState(props.currency ?? "");
   const fallback = React.useMemo(
     () => (props.defaultAllTime ? allTimeStatementDates() : defaultStatementDates()),
     [props.defaultAllTime]
@@ -60,9 +69,10 @@ export function PartyStatementPanel(props: {
   const [emailing, setEmailing] = React.useState(false);
 
   React.useEffect(() => {
+    if (props.currency) setCurrency(props.currency);
     if (props.from) setFrom(props.from);
     if (props.to) setTo(props.to);
-  }, [props.from, props.to]);
+  }, [props.currency, props.from, props.to]);
 
   const load = React.useCallback(async (range?: { from: string; to: string }) => {
     if (!isApiConfigured()) {
@@ -72,9 +82,11 @@ export function PartyStatementPanel(props: {
     if (!props.partyId) return;
     const fromDate = range?.from ?? from;
     const toDate = range?.to ?? to;
-    setLoading(true);
+    const request = ++serial.current;
+    setLoading(true); setStatement(null);
     try {
-      const data = await fetchPartyStatementApi(props.kind, props.partyId, fromDate, toDate);
+      const data = await fetchPartyStatementApi(props.kind, props.partyId, fromDate, toDate, currency);
+      if (request !== serial.current) return;
       setStatement(data);
       setEmailTo((current) => current || data.party.email || "");
       if (props.syncUrl) {
@@ -82,20 +94,25 @@ export function PartyStatementPanel(props: {
         params.set("partyId", props.partyId);
         params.set("from", data.from);
         params.set("to", data.to);
+        params.set("currency", data.currency);
         const href = props.kind === "customer" ? "/ar/statements" : "/ap/statements";
         router.replace(`${href}?${params.toString()}`, { scroll: false });
       }
     } catch (error) {
+      if (request !== serial.current) return;
       setStatement(null);
       toast.error((error as Error).message || "Failed to load statement");
     } finally {
-      setLoading(false);
+      if (request === serial.current) setLoading(false);
     }
-  }, [from, props.kind, props.partyId, props.syncUrl, router, to]);
+  }, [currency, from, props.kind, props.partyId, props.syncUrl, router, to]);
 
   React.useEffect(() => {
-    void load();
-  }, [props.partyId]);
+    setStatement(null); setEmailTo(""); void load();
+    return cancelPending;
+    // Run automatically only on identity/scope changes; date and currency use Generate.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.partyId, props.kind, scopeKey]);
 
   const entity = props.kind === "customer" ? "customer" : "supplier";
   const newDocHref = props.kind === "customer" ? "/docs/invoice/new" : "/docs/bill/new";
@@ -122,7 +139,8 @@ export function PartyStatementPanel(props: {
       statement.from,
       statement.to,
       fileName,
-      (message) => toast.error(message)
+      (message) => toast.error(message),
+      statement.currency
     );
   };
 
@@ -133,6 +151,7 @@ export function PartyStatementPanel(props: {
       const result = await emailPartyStatementApi(props.kind, statement.party.id, {
         from: statement.from,
         to: statement.to,
+        currency: statement.currency,
         overrideTo: emailTo.trim() || undefined,
       });
       toast.success(`Statement emailed to ${result.to}`);
@@ -155,13 +174,14 @@ export function PartyStatementPanel(props: {
         <CardContent className="grid gap-4 pt-6 md:grid-cols-4">
           <div className="space-y-2">
             <Label htmlFor="statement-from">From</Label>
-            <Input id="statement-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+            <Input id="statement-from" type="date" value={from} onChange={(e) => { setFrom(e.target.value); setStatement(null); serial.current++; setLoading(false); }} />
           </div>
           <div className="space-y-2">
             <Label htmlFor="statement-to">To</Label>
-            <Input id="statement-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+            <Input id="statement-to" type="date" value={to} onChange={(e) => { setTo(e.target.value); setStatement(null); serial.current++; setLoading(false); }} />
           </div>
-          <div className="md:col-span-2 flex flex-wrap items-end gap-2">
+          <div className="space-y-2"><Label htmlFor="statement-currency">Currency</Label><Input id="statement-currency" maxLength={3} placeholder="Auto (single currency)" value={currency} onChange={(e) => { setCurrency(e.target.value.toUpperCase()); setStatement(null); serial.current++; setLoading(false); }} /></div>
+          <div className="md:col-span-4 flex flex-wrap items-end gap-2">
             <Button onClick={() => void load()} disabled={loading || !props.partyId}>
               {loading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.FileText className="mr-2 h-4 w-4" />}
               Generate
@@ -169,14 +189,15 @@ export function PartyStatementPanel(props: {
             <Button type="button" variant="outline" onClick={applyAllTime}>
               All time
             </Button>
-            <Button variant="outline" onClick={printStatement} disabled={!statement}>
+            <Button variant="outline" onClick={printStatement} disabled={!statement || !canExport}>
               <Icons.Printer className="mr-2 h-4 w-4" />
               Print
             </Button>
-            <Button variant="outline" onClick={() => void downloadPdf()} disabled={!statement}>
+            <Button variant="outline" onClick={() => void downloadPdf()} disabled={!statement || !canExport}>
               <Icons.Download className="mr-2 h-4 w-4" />
               PDF
             </Button>
+            <Button variant="outline" disabled={!statement || !canExport || !statement.exportFormats?.includes("xlsx")} onClick={() => statement && void downloadPartyStatementData(props.kind, statement.party.id, statement.from, statement.to, statement.currency, "xlsx", (message) => toast.error(message))}><Icons.Sheet className="mr-2 h-4 w-4" />Excel</Button>
           </div>
           {props.canEmail && statement ? (
             <div className="md:col-span-4 flex flex-wrap items-end gap-2">
@@ -201,6 +222,7 @@ export function PartyStatementPanel(props: {
 
       {statement ? (
         <div className="space-y-4">
+          {statement.warnings?.map((warning) => <p key={warning} className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-muted-foreground">{warning}</p>)}
           <div className={`grid gap-3 ${props.hideAccountCard ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
             {props.hideAccountCard ? null : (
               <Card>
@@ -237,8 +259,8 @@ export function PartyStatementPanel(props: {
                 <CardTitle className="text-sm text-muted-foreground">Period movement</CardTitle>
               </CardHeader>
               <CardContent className="text-sm">
-                <div>Debits {formatMoney(statement.periodDebits, statement.currency)}</div>
-                <div>Credits {formatMoney(statement.periodCredits, statement.currency)}</div>
+                <div>{props.kind === "supplier" ? "Charges" : "Debits"} {formatMoney(statement.periodDebits, statement.currency)}</div>
+                <div>{props.kind === "supplier" ? "Settlements / credits" : "Credits"} {formatMoney(statement.periodCredits, statement.currency)}</div>
               </CardContent>
             </Card>
             <Card>
@@ -268,8 +290,8 @@ export function PartyStatementPanel(props: {
                     <TableHead>Date</TableHead>
                     {statement.branches?.length ? <TableHead>Branch</TableHead> : null}
                     <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Debit</TableHead>
-                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right">{props.kind === "supplier" ? "Charges" : "Debit"}</TableHead>
+                    <TableHead className="text-right">{props.kind === "supplier" ? "Settlements / credits" : "Credit"}</TableHead>
                     <TableHead className="text-right">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -337,7 +359,7 @@ export function PartyStatementPanel(props: {
           ) : (
             <Card>
               <CardHeader>
-                <CardTitle className="text-sm">Open item aging</CardTitle>
+                <CardTitle className="text-sm">Current outstanding aging {statement.agingAsOf ? `· ${statement.agingAsOf}` : ""}</CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6 text-sm">
                 {[

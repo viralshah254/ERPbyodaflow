@@ -45,6 +45,11 @@ export default function DocEditPage() {
           setError("Document not found.");
           return;
         }
+        if (doc.kraSigning?.status === "signed" || ["PREPARED", "DISPATCHING", "UNCERTAIN", "SIGNED"].includes(doc.fiscalState ?? "")) {
+          toast.error("Fiscal values are frozen. Review fiscal recovery before editing this document.");
+          router.replace(`/docs/${type}/${id}`);
+          return;
+        }
         if (doc.status !== "DRAFT") {
           toast.error("Only draft documents can be edited.");
           router.replace(`/docs/${type}/${id}`);

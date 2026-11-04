@@ -147,7 +147,7 @@ export async function fetchVatSummaryApi(input?: { dateFrom?: string; dateTo?: s
   dateFrom?: string;
   dateTo?: string;
   totalVat: number;
-  outputVat: number; inputVat: number; netVat: number; billCount: number; unsignedCount: number; note: string;
+  nonrecoverableVat?: number; unconfirmedInputVat?: number; outputVat: number; inputVat: number; netVat: number; billCount: number; unsignedCount: number; note: string;
   rows: Array<{ id: string; type: string; number: string; date: string; side: string; gross: number; tax: number; cuNumber: string }>;
   invoiceCount: number;
 }> {
@@ -156,7 +156,7 @@ export async function fetchVatSummaryApi(input?: { dateFrom?: string; dateTo?: s
   if (input?.dateFrom) params.set("dateFrom", input.dateFrom);
   if (input?.dateTo) params.set("dateTo", input.dateTo);
   const result = await apiRequest<Awaited<ReturnType<typeof fetchVatSummaryApi>> & { calculationVersion?: string }>("/api/reports/vat-summary", { params });
-  if (result.calculationVersion !== "source-tax-events-v1" || !Array.isArray(result.rows)) throw new Error("The connected server needs the tax reporting update before a verified VAT summary is available.");
+  if (result.calculationVersion !== "source-tax-events-v2" || !Array.isArray(result.rows)) throw new Error("The connected server needs the tax reporting update before a verified VAT summary is available.");
   return result;
 }
 

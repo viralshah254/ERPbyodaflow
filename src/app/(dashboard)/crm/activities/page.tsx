@@ -22,10 +22,12 @@ import {
   type CrmActivityRow,
   type CrmAccountRow,
 } from "@/lib/api/crm";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CRMActivitiesPage() {
+  const canWrite = useHasPermission("crm.activities.write", "admin.customization");
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<CrmActivityRow[]>([]);
   const [accounts, setAccounts] = React.useState<CrmAccountRow[]>([]);
@@ -79,6 +81,7 @@ export default function CRMActivitiesPage() {
           <div className="flex items-center gap-2">
             {!row.completedAt ? (
               <Button
+                disabled={!canWrite}
                 size="sm"
                 variant="outline"
                 onClick={async () => {
@@ -95,6 +98,7 @@ export default function CRMActivitiesPage() {
               </Button>
             ) : null}
             <Button
+                disabled={!canWrite}
               size="sm"
               variant="destructive"
               onClick={async () => {
@@ -113,7 +117,7 @@ export default function CRMActivitiesPage() {
         ),
       },
     ],
-    [accountNameById, refresh]
+    [accountNameById, refresh, canWrite]
   );
 
   return (
@@ -123,7 +127,7 @@ export default function CRMActivitiesPage() {
         description="Track customer interactions, calls, and follow-up tasks."
         breadcrumbs={[{ label: "CRM", href: "/crm" }, { label: "Activities" }]}
         actions={
-          <Button onClick={() => setDrawerOpen(true)}>
+          <Button disabled={!canWrite} onClick={() => setDrawerOpen(true)}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Add Activity
           </Button>
@@ -206,6 +210,7 @@ export default function CRMActivitiesPage() {
                   Cancel
                 </Button>
                 <Button
+                disabled={!canWrite}
                   onClick={async () => {
                     if (!form.subject.trim()) {
                       toast.error("Subject is required.");

@@ -24,6 +24,12 @@ export interface TourDef {
 }
 
 export const TUTORIAL_TOURS: TourDef[] = [
+  { tourId: "erp-help-centre-tour", route: "/tutorial", title: "Find help in the ERP", steps: [
+    { element: "h1", title: "Your ERP help centre", description: "Find written guides and complete workflows across the modules available to your role." },
+    { element: "[aria-label='Search ERP tutorials']", title: "Search a task", description: "Try customer statement, GRN, production plan or stock count. Search includes the instructions inside each guide." },
+    { element: "[aria-label='Filter tutorials by module']", title: "Focus on a module", description: "Narrow the guide list to the team or module you are learning." },
+    { element: "[data-tutorial-hint=help-library-guides]", title: "Read, open and ask Gaia", description: "Read guide opens numbered steps. Each article links to the working ERP screen and can ask Gaia to explain that exact guide." },
+  ] },
   {
     tourId: "dashboard-tour",
     route: "/dashboard",
@@ -1347,6 +1353,7 @@ function longestPrefix<T extends { route?: string; href?: string }>(
  */
 export function getTourForRoute(pathname: string): TourDef | null {
   const normalized = normalizePath(pathname);
+  if (normalized === "/tutorial") return ensureInteractive(TUTORIAL_TOURS.find((tour) => tour.route === normalized)!);
   if (TOUR_EXCLUDED_PREFIXES.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`))) {
     return null;
   }

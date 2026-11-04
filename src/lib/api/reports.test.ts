@@ -17,7 +17,7 @@ describe("verified tax report contracts", () => {
   it("requires the VAT source-event contract and source rows", async () => {
     mocks.request.mockResolvedValue({ totalVat: 100, invoiceCount: 1 });
     await expect(fetchVatSummaryApi()).rejects.toThrow("tax reporting update");
-    mocks.request.mockResolvedValue({ calculationVersion: "source-tax-events-v1", rows: [], outputVat: 0, inputVat: 0, netVat: 0 });
+    mocks.request.mockResolvedValue({ calculationVersion: "source-tax-events-v2", rows: [], outputVat: 0, inputVat: 0, netVat: 0 });
     expect((await fetchVatSummaryApi()).rows).toEqual([]);
   });
   it("blocks export when the connected server still uses the old calculation", async () => {

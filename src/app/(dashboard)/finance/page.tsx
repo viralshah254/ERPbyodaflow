@@ -55,7 +55,15 @@ export default function FinanceDashboardPage() {
             { label: "AR & Collections", href: "/treasury/collections", icon: "ArrowDownCircle", description: "Customer receipts" },
             { label: "Payment Runs", href: "/treasury/payment-runs", icon: "CreditCard", description: "Batch payments" },
             { label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Landmark", description: "Match statements" },
+            { label: "Employee Expenses", href: "/finance/employee-expenses", icon: "Receipt", description: "HR-approved claims" },
             { label: "Payroll", href: "/payroll/overview", icon: "Users", description: "Gross-to-net" },
+            { label: "Project Financials", href: "/projects/financials", icon: "ChartNoAxesCombined", description: "Posted P&L and budget revisions" },
+            { label: "Store Replenishment", href: "/inventory/replenishment-policy", icon: "PackageSearch", description: "Lead times and safety stock" },
+            { label: "Reporting Policy", href: "/finance/reporting-policy", icon: "Layers3", description: "Gross profit and cash flow" },
+            { label: "Period Governance", href: "/finance/period-governance", icon: "LockKeyhole", description: "Independent period review" },
+            { label: "Purchasing Exceptions", href: "/purchasing/exceptions", icon: "ShieldCheck", description: "Supplier review and disputes" },
+            { label: "Purchasing Policy", href: "/purchasing/match-policy", icon: "Settings2", description: "Matching tolerances" },
+            { label: "Fiscal Recovery", href: "/finance/fiscal-recovery", icon: "ShieldCheck", description: "Resolve signing outcomes" },
             { label: "Period Close", href: "/finance/period-close", icon: "Lock", description: "Close & lock" },
           ].map((module) => {
             const Icon = Icons[module.icon as keyof typeof Icons] as React.ElementType;

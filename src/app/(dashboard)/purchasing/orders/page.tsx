@@ -1,4 +1,5 @@
 "use client";
+import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -270,6 +271,7 @@ export default function PurchaseOrdersPage() {
         ) : undefined}
       />
       <div className={cn(LIST_PAGE_BODY_CLASS, "gap-3 p-3 sm:p-4")}>
+        <OperationalFlowNav flow="purchasing" current="Orders" />
         <div className="grid shrink-0 gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <OperationalKpiCard
             compact

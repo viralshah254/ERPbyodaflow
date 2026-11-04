@@ -63,6 +63,9 @@ export type FinanceStatementSection = {
 };
 
 export type FinanceStatement = {
+  reportingPolicyId?: string;
+  exportFormats?: string[];
+  currency?: string;
   type: "pnl" | "balance-sheet" | "cash-flow";
   periodId?: string | null;
   sections: FinanceStatementSection[];
@@ -72,6 +75,7 @@ export type FinanceStatement = {
 };
 
 export type FinanceStatementDrilldownItem = {
+  rowId?: string;
   postingLineId: string;
   postingDate: string;
   sourceType: string;
@@ -149,7 +153,9 @@ export type FinanceAccount = {
 
 export type PostingMappingKey =
   | "cogsAccountId"
+  | "nonrecoverableVatClearingAccountId"
   | "purchasePriceVarianceAccountId"
+  | "purchaseFxVarianceAccountId"
   | "inputVatAccountId"
   | "outputVatAccountId"
   | "withholdingTaxPayableAccountId"
@@ -204,6 +210,7 @@ export function formatFinancePeriodLoadError(error: unknown): string {
 }
 
 export type CloseChecklistItem = {
+  detail?: string;
   key: string;
   label: string;
   count: number;
@@ -283,10 +290,12 @@ export async function createFinancePeriodApi(payload: {
 
 export async function fetchFinancialStatementApi(
   type: "pnl" | "balance-sheet" | "cash-flow",
-  periodId?: string
+  periodId?: string,
+  currency?: string
 ): Promise<FinanceStatement> {
   requireLiveApi("Financial statements");
   const params = new URLSearchParams();
+  if (currency) params.set("currency", currency);
   if (periodId) params.set("periodId", periodId);
   return apiRequest<FinanceStatement>(`/api/finance/statements/${type}`, { params });
 }
@@ -295,10 +304,12 @@ export async function fetchFinancialStatementDrilldownApi(
   type: "pnl" | "balance-sheet" | "cash-flow",
   sectionKey: string,
   periodId?: string,
-  accountId?: string
+  accountId?: string,
+  currency?: string
 ): Promise<FinanceStatementDrilldownItem[]> {
   requireLiveApi("Financial statement drilldown");
   const params = new URLSearchParams();
+  if (currency) params.set("currency", currency);
   if (periodId) params.set("periodId", periodId);
   if (accountId) params.set("accountId", accountId);
   const payload = await apiRequest<{ items: FinanceStatementDrilldownItem[] }>(

@@ -29,10 +29,12 @@ import {
   type CrmAccountRow,
   type CrmDealRow,
 } from "@/lib/api/crm";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CRMDealsPage() {
+  const canWrite = useHasPermission("crm.deals.write", "admin.customization");
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<CrmDealRow[]>([]);
   const [accounts, setAccounts] = React.useState<CrmAccountRow[]>([]);
@@ -75,13 +77,15 @@ export default function CRMDealsPage() {
   }, [rows, search, accountNameById]);
 
   const openCreate = () => {
+    if (!canWrite) return;
     setEditing(null);
     setAccountOption(null);
     setForm({ accountId: "", name: "", stage: "lead", amount: "", expectedCloseDate: "" });
     setDrawerOpen(true);
   };
 
-  const openEdit = (row: CrmDealRow) => {
+  const openEdit = React.useCallback((row: CrmDealRow) => {
+    if (!canWrite) return;
     setEditing(row);
     setForm({
       accountId: row.accountId,
@@ -95,7 +99,7 @@ export default function CRMDealsPage() {
       label: accountNameById.get(row.accountId) ?? "Selected customer",
     });
     setDrawerOpen(true);
-  };
+  }, [accountNameById, canWrite]);
 
   const columns = React.useMemo(
     () => [
@@ -109,6 +113,7 @@ export default function CRMDealsPage() {
         accessor: (row: CrmDealRow) => (
           <div className="flex items-center gap-2">
             <Button
+                disabled={!canWrite}
               size="sm"
               variant="outline"
               onClick={async () => {
@@ -123,10 +128,11 @@ export default function CRMDealsPage() {
             >
               Mark won
             </Button>
-            <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+            <Button disabled={!canWrite} size="sm" variant="outline" onClick={() => openEdit(row)}>
               Edit
             </Button>
             <Button
+                disabled={!canWrite}
               size="sm"
               variant="destructive"
               onClick={async () => {
@@ -145,7 +151,7 @@ export default function CRMDealsPage() {
         ),
       },
     ],
-    [accountNameById, refresh]
+    [accountNameById, refresh, canWrite, openEdit]
   );
 
   return (
@@ -155,7 +161,7 @@ export default function CRMDealsPage() {
         description="Manage pipeline stages, ownership, and close forecasts."
         breadcrumbs={[{ label: "CRM", href: "/crm" }, { label: "Deals" }]}
         actions={
-          <Button onClick={openCreate}>
+          <Button disabled={!canWrite} onClick={openCreate}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Deal
           </Button>
@@ -174,7 +180,7 @@ export default function CRMDealsPage() {
                 <EmptyState icon="TrendingUp" title="No deals" description="Track sales opportunities and deals here." action={{ label: "Create Deal", onClick: openCreate }} />
               </div>
             ) : (
-              <DataTable<CrmDealRow> data={filtered} columns={columns} onRowClick={openEdit} emptyMessage="No deals found."
+              <DataTable<CrmDealRow> data={filtered} columns={columns} onRowClick={canWrite ? openEdit : undefined} emptyMessage="No deals found."
             scrollMode="fill"
             size="comfortable"
             className="min-h-0 flex-1 border-0"
@@ -228,6 +234,7 @@ export default function CRMDealsPage() {
                   Cancel
                 </Button>
                 <Button
+                disabled={!canWrite}
                   onClick={async () => {
                     if (!form.accountId || !form.name.trim()) {
                       toast.error("Account and deal name are required.");

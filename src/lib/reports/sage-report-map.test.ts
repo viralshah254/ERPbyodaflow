@@ -11,13 +11,14 @@ describe("Sage menu coverage", () => {
   it("never links a missing page or exposes a runnable action for a planned report", () => {
     for (const entry of SAGE_REPORT_MAP) {
       if (!entry.href) { expect(["planned", "definition"]).toContain(entry.status); continue; }
-      const route = entry.href.startsWith("/reports/operations/") ? "reports/operations/[reportId]" : entry.status === "new-report" ? "reports/manufacturing/[reportId]" : entry.href.slice(1);
+      const route = entry.href.startsWith("/reports/operations/") ? "reports/operations/[reportId]" : entry.href.startsWith("/reports/manufacturing/") ? "reports/manufacturing/[reportId]" : entry.href.slice(1);
       expect(existsSync(join(process.cwd(), "src/app/(dashboard)", route, "page.tsx")), entry.href).toBe(true);
     }
   });
   it("keeps WIP values behind finance access and links implemented report contracts", () => {
     const reports = SAGE_REPORT_MAP.filter((entry) => entry.status === "new-report");
-    expect(new Set(reports.map((entry) => entry.href)).size).toBe(22);
+    expect(new Set(reports.map((entry) => entry.href)).size).toBe(23);
+    expect(reports.find((entry) => entry.name === "Project Profit and Loss")?.additionalPermissions).toEqual(expect.arrayContaining(["projects.read", "finance.read", "admin.settings", "reports.read"]));
     expect(reports.find((entry) => entry.name === "Work in Progress")?.additionalPermissions).toContain("finance.read");
     expect(reports.find((entry) => entry.name === "Manufacturing Reconciliation")?.additionalPermissions).toContain("finance.read");
   });

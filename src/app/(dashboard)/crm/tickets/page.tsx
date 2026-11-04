@@ -23,10 +23,12 @@ import {
   type CrmTicketCommentRow,
   type CrmTicketRow,
 } from "@/lib/api/crm";
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function CRMTicketsPage() {
+  const canWrite = useHasPermission("crm.tickets.write", "admin.customization");
   const [search, setSearch] = React.useState("");
   const [rows, setRows] = React.useState<CrmTicketRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -66,6 +68,7 @@ export default function CRMTicketsPage() {
   }, [rows, search]);
 
   const openCreate = () => {
+    if (!canWrite) return;
     setEditing(null);
     setAccountOption(null);
     setForm({ subject: "", accountId: "", status: "open", priority: "medium", description: "" });
@@ -109,10 +112,11 @@ export default function CRMTicketsPage() {
             <Button size="sm" variant="outline" onClick={() => openHistory(row)}>
               History
             </Button>
-            <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+            <Button disabled={!canWrite} size="sm" variant="outline" onClick={() => openEdit(row)}>
               Edit
             </Button>
             <Button
+                disabled={!canWrite}
               size="sm"
               variant="destructive"
               onClick={async () => {
@@ -131,7 +135,7 @@ export default function CRMTicketsPage() {
         ),
       },
     ],
-    [refresh]
+    [refresh, canWrite]
   );
 
   return (
@@ -141,7 +145,7 @@ export default function CRMTicketsPage() {
         description="Manage support tickets with status, priority, and history."
         breadcrumbs={[{ label: "CRM", href: "/crm" }, { label: "Tickets" }]}
         actions={
-          <Button onClick={openCreate}>
+          <Button disabled={!canWrite} onClick={openCreate}>
             <Icons.Plus className="mr-2 h-4 w-4" />
             Create Ticket
           </Button>
@@ -160,7 +164,7 @@ export default function CRMTicketsPage() {
                 <EmptyState icon="Ticket" title="No tickets" description="Customer support tickets will appear here." action={{ label: "Create Ticket", onClick: openCreate }} />
               </div>
             ) : (
-              <DataTable<CrmTicketRow> data={filtered} columns={columns} onRowClick={openEdit} emptyMessage="No tickets found."
+              <DataTable<CrmTicketRow> data={filtered} columns={columns} onRowClick={canWrite ? openEdit : undefined} emptyMessage="No tickets found."
             scrollMode="fill"
             size="comfortable"
             className="min-h-0 flex-1 border-0"
@@ -228,6 +232,7 @@ export default function CRMTicketsPage() {
                   Cancel
                 </Button>
                 <Button
+                disabled={!canWrite}
                   onClick={async () => {
                     if (!form.subject.trim()) {
                       toast.error("Ticket subject is required.");
@@ -286,6 +291,7 @@ export default function CRMTicketsPage() {
                 Close
               </Button>
               <Button
+                disabled={!canWrite}
                 onClick={async () => {
                   if (!newComment.trim()) return;
                   try {

@@ -194,7 +194,7 @@ export default function IntercompanyTransactionsPage() {
         <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Transactions</h3>
-            <p className="text-xs text-muted-foreground">Create IC invoices and bills, then post elimination journals from finance.</p>
+            <p className="text-xs text-muted-foreground">Create draft tracking entries with source references. This workflow does not post mirrored journals or consolidation eliminations.</p>
           </div>
           <DataTable<ICTransactionRow>
               data={filtered}
@@ -206,12 +206,12 @@ export default function IntercompanyTransactionsPage() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Consolidation snapshot</CardTitle>
-            <CardDescription>Live intercompany balances grouped by currency.</CardDescription>
+            <CardTitle className="text-base">Tracking totals by currency</CardTitle>
+            <CardDescription>Includes draft and legacy tracking records. These totals are not posted GL balances or consolidated accounts.</CardDescription>
           </CardHeader>
           <CardContent>
             {consolidation.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No consolidation balances yet.</p>
+              <p className="text-sm text-muted-foreground">No tracking totals yet.</p>
             ) : (
               <div className="space-y-2">
                 {consolidation.map((row) => (

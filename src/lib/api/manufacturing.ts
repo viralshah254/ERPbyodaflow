@@ -32,6 +32,9 @@ export type ManufacturingBom = {
   type: "bom" | "formula" | "disassembly";
   direction?: "STANDARD" | "REVERSE";
   isActive: boolean;
+  lifecycle?: "DRAFT" | "EFFECTIVE" | "RETIRED" | "LEGACY";
+  releaseChangeId?: string;
+  parentRevisionId?: string;
   routeId?: string;
   outputWarehouseId?: string;
   outputWarehouseName?: string;
@@ -85,7 +88,7 @@ export type ManufacturingWorkOrder = {
   preparationRevision?: number;
   preparationDefaults?: { inputWarehouseIds: string[]; outputWarehouseId?: string };
   bomSnapshot?: { name?: string; version?: string; yieldTolerancePercent?: number; quantity?: number; uom?: string };
-  routingSnapshot?: { name?: string; updatedAt?: string; operations?: Array<{ operationId?: string; name: string; order: number; workCenter?: string; setupMinutes?: number; runMinutesPerUnit?: number }> };
+  routingSnapshot?: { name?: string; updatedAt?: string; operations?: Array<{ operationId?: string; name: string; order: number; workCenter?: string; workCenterId?: string; durationMinutes?: number; setupMinutes?: number; runMinutesPerUnit?: number }> };
   dueDate?: string;
   plannedDate?: string;
   releasedAt?: string;
@@ -131,7 +134,7 @@ export type ManufacturingWorkOrder = {
   }>;
   productionLots?: Array<{ _id: string; productId: string; warehouseId: string; lotNumber: string; status: string; qcStatus: string; expiryDate?: string; remainingQuantity: number }>;
   operationExecution?: Array<{ operationId: string; name: string; order: number; critical: boolean; qcRequired: boolean; workCenter?: string; status: "PENDING" | "IN_PROGRESS" | "COMPLETED"; startedAt?: string; completedAt?: string; operatorId?: string; qcOutcome?: string }>;
-  completions: Array<{ idempotencyKey: string; quantity: number; postedAt: string; inputLines?: Array<{ productId: string; uom?: string; quantity: number; consumedQuantity?: number; returnedQuantity?: number; consumedLotSplits?: Array<{ lotId: string; quantity: number }>; lotSplits?: Array<{ lotId: string; quantity: number }> }> }>;
+  completions: Array<{ idempotencyKey: string; quantity: number; postedAt: string; measuredWeight?: number; measurementMode?: string; deviceReadingId?: string; inputLines?: Array<{ productId: string; uom?: string; quantity: number; consumedQuantity?: number; returnedQuantity?: number; consumedLotSplits?: Array<{ lotId: string; quantity: number }>; lotSplits?: Array<{ lotId: string; quantity: number }> }> }>;
   wipQuantity: number;
   reconciliation: {
     inputMass: number;
@@ -658,15 +661,16 @@ export async function explodeProductionPlan(lines: ProductionPlanLineInput[]): P
   });
 }
 
-export async function applyProductionPlan(lines: ProductionPlanLineInput[], requestId: string): Promise<{
+export async function applyProductionPlan(lines: ProductionPlanLineInput[], requestId: string, measurementMode: "COUNT_ONLY" | "MANUAL_SCALE" | "DEVICE_SCALE" | "WEIGHBRIDGE" = "COUNT_ONLY"): Promise<{
   applied: boolean;
   created: Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }>;
   explode: ExplodedProductionPlan;
 }> {
   requireLiveApi("Production plan");
+  await requireManufacturingCapability("productionPlan", "active-products-weighing-v1");
   return apiRequest("/api/manufacturing/production-plan/apply", {
     method: "POST",
-    body: { lines, requestId },
+    body: { lines, requestId, measurementMode },
   });
 }
 

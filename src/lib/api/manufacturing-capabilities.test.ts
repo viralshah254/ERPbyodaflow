@@ -17,4 +17,10 @@ describe("manufacturing capability preflight", () => {
     await expect(requireManufacturingCapability("reports", "manufacturing-reports-v1")).rejects.toThrow("does not expose manufacturing capabilities");
     expect(request).toHaveBeenCalledTimes(1);
   });
+  it("rejects an older backend that cannot enforce production-plan weighing policy", async () => {
+    request.mockResolvedValue({ version: "manufacturing-capabilities-v1", revision: "old" });
+    await expect(requireManufacturingCapability("productionPlan", "active-products-weighing-v1")).rejects.toThrow("productionPlan");
+    request.mockResolvedValue({ version: "manufacturing-capabilities-v1", revision: "new", productionPlan: "active-products-weighing-v1" });
+    await expect(requireManufacturingCapability("productionPlan", "active-products-weighing-v1")).resolves.toMatchObject({ revision: "new" });
+  });
 });

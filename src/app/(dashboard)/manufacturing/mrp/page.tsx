@@ -273,7 +273,8 @@ export default function MrpPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" asChild><Link href="/inventory/replenishment-policy">Store policies</Link></Button>
             {canWrite && (summary.workOrderSuggestions > 0 || summary.purchaseSuggestions > 0) ? (
               <Button size="sm" disabled={applying != null} onClick={() => void raiseWorkOrders()}>
                 {applying === "all" ? "Raising…" : "Raise drafts"}

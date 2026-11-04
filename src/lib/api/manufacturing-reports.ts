@@ -3,7 +3,7 @@ import { apiRequest, downloadFile, requireLiveApi } from "./client";
 export const MANUFACTURING_REPORT_IDS = ["bom-explosion", "bom-where-used", "manufacture-orders", "work-in-progress", "reconciliation"] as const;
 export type ManufacturingReportId = typeof MANUFACTURING_REPORT_IDS[number];
 export type ManufacturingReportParams = { bomId?: string; productId?: string; quantity?: string; dateFrom?: string; dateTo?: string };
-export type ManufacturingReport = { version: string; id: ManufacturingReportId; title: string; basis: string; generatedAt: string; columns: string[]; rows: Array<Record<string, string | number | boolean | null>>; warnings: string[]; totalWipValue?: number | null; requires?: "bomId" | "productId"; options?: Array<{ id: string; label: string }>; readOnlyPreview?: boolean };
+export type ManufacturingReport = { exportFormats?: string[]; snapshotSupport?: boolean; version: string; id: ManufacturingReportId; title: string; basis: string; generatedAt: string; columns: string[]; rows: Array<Record<string, string | number | boolean | null>>; warnings: string[]; totalWipValue?: number | null; requires?: "bomId" | "productId"; options?: Array<{ id: string; label: string }>; readOnlyPreview?: boolean };
 export async function fetchManufacturingReport(id: ManufacturingReportId, params: ManufacturingReportParams = {}) {
   requireLiveApi("Manufacturing report");
   await requireManufacturingCapability("reports", "manufacturing-reports-v1");
@@ -16,7 +16,7 @@ export async function fetchManufacturingReport(id: ManufacturingReportId, params
     throw error;
   }
 }
-export function downloadManufacturingReport(id: ManufacturingReportId, params: ManufacturingReportParams, onError: (message: string) => void) {
-  const search = new URLSearchParams({ ...Object.fromEntries(Object.entries(params).filter(([, value]) => value != null && value !== "")), format: "csv" });
-  void downloadFile(`/api/reports/manufacturing/${id}?${search}`, `${id}.csv`, onError);
+export function downloadManufacturingReport(id: ManufacturingReportId, params: ManufacturingReportParams, onError: (message: string) => void, format: "csv" | "pdf" | "xlsx" = "csv") {
+  const search = new URLSearchParams({ ...Object.fromEntries(Object.entries(params).filter(([, value]) => value != null && value !== "")), format });
+  void downloadFile(`/api/reports/manufacturing/${id}?${search}`, `${id}.${format}`, onError);
 }

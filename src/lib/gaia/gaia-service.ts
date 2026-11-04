@@ -29,6 +29,13 @@ type GaiaAuthResult = {
 let cachedGaiaToken: string | null = null;
 let cachedGaiaExpiry = 0;
 
+async function fetchGaia(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25_000);
+  try { return await fetch(url, { ...init, signal: controller.signal }); }
+  finally { clearTimeout(timeout); }
+}
+
 async function erpAuthHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -59,7 +66,7 @@ export async function exchangeGaiaToken(force = false): Promise<string> {
   if (!headers.Authorization && !headers["X-Dev-User-Id"]) {
     throw new Error("You are not signed in");
   }
-  const res = await fetch(`${GAIA_BASE}/auth/erp`, {
+  const res = await fetchGaia(`${GAIA_BASE}/auth/erp`, {
     method: "POST",
     headers,
     body: "{}",
@@ -74,7 +81,19 @@ export async function exchangeGaiaToken(force = false): Promise<string> {
   return cachedGaiaToken;
 }
 
-export async function sendGaiaMessage(message: string): Promise<string> {
+export async function sendGaiaMessage(message: string, context: { tutorialGuide?: string; route?: string } = {}): Promise<string> {
+  const { getTutorialGuidance } = await import("@/lib/tutorial/gaia-guidance");
+  const guidance = getTutorialGuidance(message, context);
+  if (context.tutorialGuide && !guidance.articles.length) return "That guide is not available in your current role or organisation. [Search available ERP guides](/tutorial).";
+  try {
+    return await sendGaiaRemoteMessage(guidance.providerMessage, guidance.articles.map((article) => ({ source: `[${article.label}](/tutorial/${encodeURIComponent(article.chapterId)}/${encodeURIComponent(article.key)})`, cutoff: "ERP handbook 2026-11-03 v1" })));
+  } catch (error) {
+    if (guidance.fallback) return guidance.fallback;
+    throw error;
+  }
+}
+
+async function sendGaiaRemoteMessage(message: string, handbookSources: Array<{ source: string; cutoff: string }> = []): Promise<string> {
   if (!GAIA_BASE) {
     throw new Error("Gaia is not configured (set NEXT_PUBLIC_GAIA_API_BASE_URL)");
   }
@@ -83,7 +102,7 @@ export async function sendGaiaMessage(message: string): Promise<string> {
   const erpBearer = erpHeaders.Authorization?.replace(/^Bearer\s+/i, "");
 
   const post = async (token: string) =>
-    fetch(`${GAIA_BASE}/chat`, {
+    fetchGaia(`${GAIA_BASE}/chat`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -107,7 +126,9 @@ export async function sendGaiaMessage(message: string): Promise<string> {
     citations?: Array<{ source?: string; cutoff?: string }>;
     proposedAction?: { status?: string } | null;
   };
-  return formatGaiaReply(data);
+  const providerCitations = data.citations?.some((citation) => citation.source?.trim() && citation.cutoff?.trim());
+  const reply = handbookSources.length && !providerCitations && !data.proposedAction ? data.reply?.trim() || "Gaia returned no explanation. Open the handbook guide below." : formatGaiaReply(data);
+  return handbookSources.length ? `${reply}\n\nERP handbook references\n${handbookSources.map((source) => `- ${source.source} · ${source.cutoff}`).join("\n")}\n\nThese references describe the workflow; they do not verify live balances, configuration or completed postings.` : reply;
 }
 
 export function formatGaiaReply(data: {

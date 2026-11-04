@@ -523,6 +523,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     tier: "primary",
     order: 15,
     items: [
+      { key: "finance-employee-expenses", label: "Employee Expenses", href: "/finance/employee-expenses", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-dashboard", label: "Finance Dashboard", href: "/finance", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-gl", label: "General Ledger", href: "/finance/gl", icon: "BookOpen", moduleKey: "finance", requiresPermissions: ["finance.gl.read"] },
       { key: "finance-chart-of-accounts", label: "Chart of Accounts", href: "/finance/chart-of-accounts", icon: "ListTree", moduleKey: "finance", requiresPermissions: ["finance.accounts.read"] },
@@ -544,6 +545,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "finance-kra-signing", label: "KRA signing monitor", href: "/finance/kra-signing", icon: "ShieldCheck", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-kra-cu", label: "KRA CU numbers", href: "/reports/kra-cu", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.read", "purchasing.bills.read", "sales.invoices.read"] },
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
+      { key: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.bank.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
       { key: "finance-mpesa-recon", label: "M-Pesa Till Reconciliation", href: "/finance/mpesa-recon", icon: "Smartphone", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-coolcatch-bs", label: "CoolCatch BS Inventory", href: "/finance/coolcatch-bs-inventory", icon: "Layers", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read", "inventory.read"] },
@@ -683,6 +685,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "treasury-ap-statements", label: "Supplier statements", href: "/ap/statements", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "treasury-bank-accounts", label: "Bank accounts", href: "/treasury/bank-accounts", icon: "Landmark", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "treasury-cashflow", label: "Cashflow", href: "/treasury/cashflow", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.read"] },
+      { key: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.bank.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
     ],
   },

@@ -199,7 +199,7 @@ export async function seedStandardRolesApi(): Promise<{
   roles: Array<{ key: string; id: string; created: boolean }>;
 }> {
   requireLiveApi("Provision standard roles");
-  return apiRequest("/api/settings/roles/seed-standard", { method: "POST" });
+  return apiRequest("/api/settings/roles/provision-missing", { method: "POST" });
 }
 
 export async function setUserPasswordApi(

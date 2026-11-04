@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import { usePathname } from "next/navigation";
-import { getTutorialForRoute } from "@/config/tutorial";
+import { getTutorialForRoute, TUTORIAL_CHAPTERS } from "@/config/tutorial";
 import { getTourForRoute } from "@/config/tutorial-tours";
-import { useCopilotStore } from "@/stores/copilot-store";
-import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { isGaiaConfigured } from "@/lib/gaia/gaia-service";
+import { useFilteredTutorialChapters } from "@/lib/tutorial/filter-by-access";
+import { tutorialArticles, tutorialGuideHref } from "@/lib/tutorial/knowledge";
 import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
 import { useSpotlightTour } from "@/components/tutorial/SpotlightTour";
 import { Button } from "@/components/ui/button";
@@ -17,12 +18,13 @@ const DEFAULT_PROMPT = "Explain this page and suggest next steps.";
 
 export function PageHelp({ compact = false }: { compact?: boolean }) {
   const pathname = usePathname();
-  const info = pathname ? getTutorialForRoute(pathname) : null;
+  const routeInfo = pathname ? getTutorialForRoute(pathname) : null;
   const tour = pathname ? getTourForRoute(pathname) : null;
   const [guideSheetOpen, setGuideSheetOpen] = React.useState(false);
-  const copilotEnabled = useCopilotFeatureEnabled();
-  const setContext = useCopilotStore((s) => s.setContext);
-  const openDrawerWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
+  const copilotEnabled = isGaiaConfigured();
+  const articles = tutorialArticles(useFilteredTutorialChapters(TUTORIAL_CHAPTERS));
+  const article = articles.filter((item) => pathname === tutorialGuideHref(item) || pathname === item.href || pathname?.startsWith(`${item.href}/`)).sort((a, b) => b.href.length - a.href.length)[0];
+  const info = article && pathname === tutorialGuideHref(article) ? getTutorialForRoute(article.href) : routeInfo;
   const isTourDismissed = useTutorialProgressStore((s) => s.isTourDismissed);
   const dismissTour = useTutorialProgressStore((s) => s.dismissTour);
   const { startTour } = useSpotlightTour(tour);
@@ -30,13 +32,9 @@ export function PageHelp({ compact = false }: { compact?: boolean }) {
   const showTour = tour && !isTourDismissed(tour.tourId);
 
   const handleAskCopilot = React.useCallback(() => {
-    const prompt = info?.copilotPrompt ?? DEFAULT_PROMPT;
-    setContext({
-      page: info?.itemLabel ?? info?.chapterTitle,
-      route: pathname ?? undefined,
-    });
-    openDrawerWithPrompt(prompt);
-  }, [info, pathname, setContext, openDrawerWithPrompt]);
+    const prompt = article ? `Explain how to use ${article.label}, step by step.` : DEFAULT_PROMPT;
+    window.dispatchEvent(new CustomEvent("gaia:ask", { detail: { message: prompt, tutorialGuide: article ? tutorialGuideHref(article) : undefined } }));
+  }, [article]);
 
   return (
     <>
@@ -81,11 +79,11 @@ export function PageHelp({ compact = false }: { compact?: boolean }) {
             size={compact ? "icon" : "sm"}
             className={compact ? "h-8 w-8" : "h-7 text-xs"}
             onClick={handleAskCopilot}
-            title={info ? "Ask Copilot about this page" : "Ask Copilot"}
+            title="Ask Gaia about this page"
           >
             <Sparkles className={cn("h-3.5 w-3.5", !compact && "mr-1")} />
-            {!compact ? (info ? "Ask Copilot about this page" : "Ask Copilot") : (
-              <span className="sr-only">Ask Copilot</span>
+            {!compact ? "Ask Gaia" : (
+              <span className="sr-only">Ask Gaia</span>
             )}
           </Button>
         ) : null}
@@ -94,6 +92,7 @@ export function PageHelp({ compact = false }: { compact?: boolean }) {
         open={guideSheetOpen}
         onOpenChange={setGuideSheetOpen}
         info={info}
+        guideHref={article ? tutorialGuideHref(article) : undefined}
         route={pathname ?? undefined}
         copilotAvailable={copilotEnabled}
         onAskCopilot={handleAskCopilot}

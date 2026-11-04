@@ -64,6 +64,7 @@ export function mapWarehouseRow(
     id: warehouse.id,
     code: warehouse.code ?? "",
     name: warehouse.name,
+    branchId: warehouse.branchId,
     branch: warehouse.branchId ? branchLabels?.get(warehouse.branchId) ?? warehouse.branchId : undefined,
     purpose: warehouse.purpose,
     capabilities: warehouse.capabilities ?? [],

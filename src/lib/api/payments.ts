@@ -25,6 +25,7 @@ export type OpenBillRow = {
 };
 
 type BackendPayment = {
+  currency?: string;
   id: string;
   number: string;
   date: string;
@@ -556,6 +557,7 @@ export async function fetchApPaymentsApi(): Promise<APPaymentRow[]> {
     releasedBy: item.releasedBy,
     releasedOn: item.releasedOn ? String(item.releasedOn).slice(0, 10) : undefined,
     amount: item.amount,
+    currency: item.currency,
     status: item.status,
     paymentMethod: item.paymentMethod,
     mpesaTransactionNo: item.mpesaTransactionNo,

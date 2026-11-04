@@ -45,6 +45,10 @@ export interface AnalyticsResult {
   total: number;
   /** Prior-period total if comparison requested */
   priorTotal?: number;
+  currency?: string;
+  basis?: string;
+  warnings?: string[];
+  totalGroups?: number;
 }
 
 /** Context when user drills into a row (opens DrillDrawer) */

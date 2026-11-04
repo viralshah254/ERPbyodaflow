@@ -1,4 +1,6 @@
 "use client";
+import { useAuthStore } from "@/stores/auth-store";
+import { FinancialStatementExport } from "@/components/reports/FinancialStatementExport";
 
 import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
@@ -28,17 +30,20 @@ import * as Icons from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Sections that are computed totals (no account lines to expand)
-const TOTAL_SECTIONS = new Set(["gross-profit", "net-income"]);
+const TOTAL_SECTIONS = new Set(["gross-profit", "operating-profit", "net-income"]);
 
 type DrilldownState = { sectionKey: string; accountId?: string; label: string };
 
 export default function ProfitAndLossPage() {
-  const baseCurrency = useBaseCurrency();
+  const scopeKey = useAuthStore((state) => `${state.org?.orgId}:${state.user?.userId}:${state.permissions.join(",")}`);
+  const configuredCurrency = useBaseCurrency();
+  const [currency, setCurrency] = React.useState("");
   const [periods, setPeriods] = React.useState<FinancePeriod[]>([]);
   const [periodsLoading, setPeriodsLoading] = React.useState(true);
   const [periodsError, setPeriodsError] = React.useState<string | null>(null);
   const [periodId, setPeriodId] = React.useState("");
   const [statement, setStatement] = React.useState<Awaited<ReturnType<typeof fetchFinancialStatementApi>> | null>(null);
+  const baseCurrency = statement?.currency ?? configuredCurrency;
   const [statementLoading, setStatementLoading] = React.useState(false);
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set(["revenue", "expense"]));
   const [drilldown, setDrilldown] = React.useState<DrilldownState | null>(null);
@@ -46,23 +51,28 @@ export default function ProfitAndLossPage() {
   const [drilldownLoading, setDrilldownLoading] = React.useState(false);
 
   React.useEffect(() => {
+    let current = true;
+    setPeriods([]); setStatement(null); setPeriodId("");
     setPeriodsLoading(true);
     setPeriodsError(null);
     fetchFinancePeriodsApi()
       .then((items) => {
+        if (!current) return;
         setPeriods(items);
         setPeriodId(items.find((item) => item.status === "OPEN")?.id ?? items[0]?.id ?? "");
       })
       .catch((error) => {
+        if (!current) return;
         const msg = formatFinancePeriodLoadError(error);
         setPeriodsError(msg);
         toast.error(msg);
       })
-      .finally(() => setPeriodsLoading(false));
-  }, []);
+      .finally(() => { if (current) setPeriodsLoading(false); });
+    return () => { current = false; };
+  }, [scopeKey]);
 
   React.useEffect(() => {
-    if (!periodId) {
+    if (!periodId || (currency && !/^[A-Z]{3}$/.test(currency))) {
       setStatement(null);
       setStatementLoading(false);
       return;
@@ -71,24 +81,29 @@ export default function ProfitAndLossPage() {
     setStatementLoading(true);
     setDrilldown(null);
     setDrilldownItems([]);
-    fetchFinancialStatementApi("pnl", periodId)
-      .then(setStatement)
+    let current = true;
+    fetchFinancialStatementApi("pnl", periodId, currency)
+      .then((data) => { if (current) setStatement(data); })
       .catch((error) => {
+        if (!current) return;
         setStatement(null);
         toast.error((error as Error).message || "Failed to load P&L.");
       })
-      .finally(() => setStatementLoading(false));
-  }, [periodId]);
+      .finally(() => { if (current) setStatementLoading(false); });
+    return () => { current = false; };
+  }, [periodId, currency, scopeKey]);
 
   React.useEffect(() => {
     if (!drilldown || !periodId) return;
     setDrilldownLoading(true);
     setDrilldownItems([]);
-    fetchFinancialStatementDrilldownApi("pnl", drilldown.sectionKey, periodId, drilldown.accountId)
-      .then(setDrilldownItems)
-      .catch((error) => toast.error((error as Error).message || "Failed to load drilldown."))
-      .finally(() => setDrilldownLoading(false));
-  }, [drilldown, periodId]);
+    let current = true;
+    fetchFinancialStatementDrilldownApi("pnl", drilldown.sectionKey, periodId, drilldown.accountId, currency)
+      .then((items) => { if (current) setDrilldownItems(items); })
+      .catch((error) => { if (current) toast.error((error as Error).message || "Failed to load drilldown."); })
+      .finally(() => { if (current) setDrilldownLoading(false); });
+    return () => { current = false; };
+  }, [drilldown, periodId, currency, scopeKey]);
 
   function toggleExpanded(key: string) {
     setExpanded((prev) => {
@@ -115,12 +130,10 @@ export default function ProfitAndLossPage() {
       title="Profit & Loss Statement"
       description="Income statement for the selected period"
       actions={
-        <Button variant="outline">
-          <Icons.Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
+<FinancialStatementExport completeExports={!!statement?.exportFormats?.includes("pdf")} type="pnl" periodId={periodId} currency={currency} disabled={!statement || statementLoading} />
       }
     >
+      <div className="flex items-center gap-3 print:hidden"><label htmlFor="statement-report-currency" className="text-sm font-medium">Currency</label><input id="statement-report-currency" className="h-10 w-44 rounded-md border bg-background px-3 text-sm" maxLength={3} placeholder="Auto (single currency)" value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} /></div>
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between gap-4">

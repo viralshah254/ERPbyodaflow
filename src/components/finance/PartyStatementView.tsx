@@ -18,6 +18,7 @@ export function PartyStatementView(props: {
   partyId?: string | null;
   from?: string | null;
   to?: string | null;
+  currency?: string | null;
   loadOptions: (search?: string) => Promise<PartyLookupOption[]>;
   selectedOption?: PartyLookupOption | null;
   canEmail: boolean;
@@ -83,6 +84,7 @@ export function PartyStatementView(props: {
             partyId={partyId}
             from={props.from}
             to={props.to}
+            currency={props.currency}
             canEmail={props.canEmail}
             syncUrl
           />

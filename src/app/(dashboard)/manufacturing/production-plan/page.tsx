@@ -1,4 +1,5 @@
 "use client";
+import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
 
 import * as React from "react";
 import Link from "next/link";
@@ -24,7 +25,8 @@ import {
   type ProductionPlanRow,
   type ProductionPlanTreeNode,
 } from "@/lib/api/manufacturing";
-import { printDailyProductionPacket } from "@/lib/manufacturing/production-sheet";
+import { printDailyProductionPacket, printProductionPlan } from "@/lib/manufacturing/production-sheet";
+import { matchesProductionSearch, totalFormulaIngredients } from "@/lib/manufacturing/production-plan-summary";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -100,13 +102,7 @@ function makeAction(row: ProductionPlanRow): string {
 }
 
 function packAction(row: ProductionPlanRow): string {
-  if (row.incomingQty > 0 && row.shortageQty <= 0) {
-    return `This is the finished pack, not something to buy. Complete existing work orders (${row.incomingQty} ${row.uom}).`;
-  }
-  if (row.shortageQty > 0) {
-    return `Create a pack work order for ${row.shortageQty} ${row.uom}.`;
-  }
-  return "Pack qty is covered.";
+  return `Create a draft for the entered production target: ${row.requiredQty} ${row.uom}. Existing finished stock does not reduce this target.`;
 }
 
 function buyAction(row: ProductionPlanRow): string {
@@ -154,6 +150,9 @@ export default function ProductionPlanPage() {
   const [calculating, setCalculating] = React.useState(false);
   const [applying, setApplying] = React.useState(false);
   const [plan, setPlan] = React.useState<ExplodedProductionPlan | null>(null);
+  const [calculatedAt, setCalculatedAt] = React.useState<Date | null>(null);
+  const [materialSearch, setMaterialSearch] = React.useState("");
+  const [measurementMode, setMeasurementMode] = React.useState<"COUNT_ONLY" | "MANUAL_SCALE" | "DEVICE_SCALE" | "WEIGHBRIDGE">("COUNT_ONLY");
   const [createdOrders, setCreatedOrders] = React.useState<
     Array<{ id: string; number: string; productId: string; quantity: number; reused?: boolean }> | null
   >(null);
@@ -235,15 +234,15 @@ export default function ProductionPlanPage() {
     [packLines, rowsById]
   );
 
-  const visibleDefaults = showAllSkus ? defaults : plannedRows;
+  const visibleDefaults = showAllSkus ? defaults : plannedRows.filter((row) => matchesProductionSearch(row, searchQuery));
 
   const pagedDefaults = React.useMemo(() => {
     if (showAllSkus) return visibleDefaults;
     return visibleDefaults.slice(pageOffset, pageOffset + pageSize);
   }, [pageOffset, pageSize, showAllSkus, visibleDefaults]);
 
-  const tableTotal = showAllSkus ? totalCount : plannedRows.length;
-  const tableHasMore = showAllSkus ? hasMore : pageOffset + pageSize < plannedRows.length;
+  const tableTotal = showAllSkus ? totalCount : visibleDefaults.length;
+  const tableHasMore = showAllSkus ? hasMore : pageOffset + pageSize < visibleDefaults.length;
   const searchPending = searchInput.trim() !== searchQuery;
   const tableBusy = fetching || searchPending;
 
@@ -261,6 +260,7 @@ export default function ProductionPlanPage() {
       setPlan(null);
       setCreatedOrders(null);
       setShowAllSkus(false);
+      setPageOffset(0);
       setSearchInput("");
       setSearchQuery("");
       if (!items.length) toast.info("No open sales shortages to prefill.");
@@ -280,7 +280,9 @@ export default function ProductionPlanPage() {
     try {
       const exploded = await explodeProductionPlan(packLines);
       setPlan(exploded);
+      setCalculatedAt(new Date());
       setShowAllSkus(false);
+      setPageOffset(0);
       const buyNeed = exploded.buy.filter((row) => warehouseShortfall(row) > 0).length;
       const makeNeed = exploded.make.filter((row) => row.shortageQty > 0 || warehouseShortfall(row) > 0).length;
       toast.success(
@@ -300,20 +302,22 @@ export default function ProductionPlanPage() {
 
   const handleApply = async () => {
     if (!canWrite) return;
-    if (!packLines.length) {
+    if (!plan || !packLines.length) {
       toast.error("Type a pack quantity on at least one finished product, then work backwards.");
       return;
     }
     setApplying(true);
     try {
-      const fingerprint = JSON.stringify(packLines);
+      const fingerprint = JSON.stringify({ packLines, measurementMode });
       const storageKey = "manufacturing-daily-plan-apply";
       const previous = JSON.parse(sessionStorage.getItem(storageKey) || "null") as { fingerprint: string; requestId: string } | null;
       const requestId = previous?.fingerprint === fingerprint ? previous.requestId : crypto.randomUUID();
       sessionStorage.setItem(storageKey, JSON.stringify({ fingerprint, requestId }));
-      const result = await applyProductionPlan(packLines, requestId);
+      const result = await applyProductionPlan(packLines, requestId, measurementMode);
       setPlan(result.explode);
+      setCalculatedAt(new Date());
       setShowAllSkus(false);
+      setPageOffset(0);
       setCreatedOrders(result.created);
       const componentShort = result.explode.make.filter(
         (row) => warehouseShortfall(row) > 0 || row.shortageQty > 0
@@ -398,11 +402,12 @@ export default function ProductionPlanPage() {
               setCreatedOrders(null);
             }}
             aria-label={`Pack quantity for ${r.productName}`}
+            disabled={calculating || applying}
           />
         ),
       },
     ],
-    [qtyById]
+    [qtyById, calculating, applying]
   );
 
   const makeColumns = React.useMemo(
@@ -544,6 +549,9 @@ export default function ProductionPlanPage() {
   const packResultRows = plan?.packLines ?? [];
   const buyShortRows = plan?.buy.filter((row) => warehouseShortfall(row) > 0) ?? [];
   const makeWork = componentRows.filter((row) => row.shortageQty > 0 || warehouseShortfall(row) > 0);
+  const formulaTotals = React.useMemo(() => totalFormulaIngredients(plan?.tree ?? []), [plan]);
+  const visibleFormula = formulaTotals.filter((row) => matchesProductionSearch(row, materialSearch));
+  const materialRows = (plan?.buy ?? []).filter((row) => matchesProductionSearch(row, materialSearch));
 
   return (
     <PageShell>
@@ -552,7 +560,7 @@ export default function ProductionPlanPage() {
         description={
           seafoodOrg
             ? "Enter pack quantities on the fish SKUs you will process today. Work backwards ignores empty pack qty."
-            : "Enter pack quantities on the SKUs you will make today. Work backwards ignores empty pack qty."
+            : "Plan finished output, calculate ingredients, then prepare and release batches to production."
         }
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
@@ -568,28 +576,44 @@ export default function ProductionPlanPage() {
       />
 
       <div className="flex flex-col gap-4 px-4 py-4 pb-12 sm:px-6 sm:py-6">
+        <OperationalFlowNav flow="manufacturing" current="Daily plan" />
+        <section aria-label="How production reaches stock" className="rounded-2xl border bg-card p-4 shadow-sm sm:p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 className="font-semibold">From today’s plan to verified stock</h2><p className="mt-1 text-sm text-muted-foreground">Calculate here. Release a prepared work order to hand the batch to your production team.</p></div><Badge variant="outline">{packLines.length} products planned</Badge></div>
+          <ol className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+            {[
+              ["Choose output", "Search products and enter quantities in the product’s unit."],
+              ["Work backwards", "Calculate total formula ingredients and material shortages."],
+              ["Prepare batches", "Create drafts, choose input and output stores, then save preparation."],
+              ["Release & start", "Release each ready batch. Production opens it in Work orders."],
+              ["Weigh & receive", "Record actual output, weight and material use. Receive under QC hold."],
+              ["Verify & release", "QC accepts the finished lot. It becomes available for allocation."],
+            ].map(([title, description], index) => <li key={title} className="rounded-xl border bg-muted/20 p-3"><span className="mb-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{index + 1}</span><p className="text-sm font-medium">{title}</p><p className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</p></li>)}
+          </ol>
+        </section>
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[16rem] flex-1">
             <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="pl-9 pr-9"
+              aria-label="Search finished products by SKU or name"
               value={searchInput}
               onChange={(event) => {
                 setSearchInput(event.target.value);
-                setShowAllSkus(true);
+                setPageOffset(0);
               }}
               placeholder="Search finished SKU or name…"
               spellCheck={false}
               autoComplete="off"
             />
+            {searchInput && <Button type="button" size="icon" variant="ghost" className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2" aria-label="Clear product search" onClick={() => { setSearchInput(""); setPageOffset(0); }}><Icons.X className="h-4 w-4" /></Button>}
           </div>
-          <Button variant="outline" size="sm" onClick={() => void prefillFromSales()} disabled={loading}>
+          <Button variant="outline" size="sm" onClick={() => void prefillFromSales()} disabled={loading || fetching || calculating || applying}>
             Prefill from sales
           </Button>
           <Button variant="outline" size="sm" onClick={() => { setShowAllSkus((v) => !v); setPageOffset(0); }}>
             {showAllSkus ? "Show planned SKUs only" : "Show all SKUs"}
           </Button>
-          <Button size="sm" onClick={() => void handleCalculate()} disabled={calculating || loading}>
+          <Button size="sm" onClick={() => void handleCalculate()} disabled={calculating || applying || loading || !packLines.length}>
             {calculating ? "Working backwards…" : plan ? "Recalculate" : "Work backwards"}
           </Button>
           {canWrite && (
@@ -597,16 +621,18 @@ export default function ProductionPlanPage() {
               size="sm"
               variant="secondary"
               onClick={() => void handleApply()}
-              disabled={applying || loading || createdOrders != null}
+              disabled={applying || calculating || loading || !plan || createdOrders != null}
             >
               {applying
                 ? "Creating…"
                 : createdOrders != null
                   ? "Work orders created"
-                  : "Create work orders"}
+                  : "Create draft work orders"}
             </Button>
           )}
         </div>
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"><label htmlFor="plan-measurement" className="text-sm font-medium">Verification for new batches</label><select id="plan-measurement" disabled={applying || createdOrders != null} className="h-9 rounded-md border bg-background px-3 text-sm" value={measurementMode} onChange={(event) => setMeasurementMode(event.target.value as typeof measurementMode)}><option value="COUNT_ONLY">Count output only</option><option value="MANUAL_SCALE">Require manually recorded weight</option><option value="DEVICE_SCALE">Require trusted scale reading</option><option value="WEIGHBRIDGE">Require trusted weighbridge reading</option></select><p className="text-xs text-muted-foreground">Applies to each new draft. A weight records mass; finished pack quantities remain in their own unit.</p></div>
+        <p className="text-xs text-muted-foreground">Search keeps quantities entered on other pages. Only active products with a recipe are listed. Calculate before creating drafts; drafts do not send instructions or add stock.</p>
 
         {loading ? (
           <SkeletonDataTable rows={8} columnWidths={["w-20", "w-48", "w-16", "w-16", "w-16", "w-24"]} />
@@ -654,6 +680,15 @@ export default function ProductionPlanPage() {
 
         {plan ? (
           <div ref={resultsRef} className="space-y-6">
+            <section className="space-y-4 rounded-2xl border bg-card p-4 shadow-sm sm:p-5" aria-label="Formula totals">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-semibold">Total formula & material requirements</h2><p className="mt-1 text-sm text-muted-foreground">Full formula quantities are separate from the materials still needed after using existing semi-finished stock.</p>{calculatedAt && <p className="mt-2 text-xs text-muted-foreground">Calculated {new Intl.DateTimeFormat("en-GB", { timeZone: "Africa/Nairobi", dateStyle: "medium", timeStyle: "short" }).format(calculatedAt)} EAT</p>}</div><Button variant="outline" onClick={() => { if (!calculatedAt) return; try { printProductionPlan(plan, calculatedAt); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not print plan"); } }}><Icons.Printer className="mr-2 h-4 w-4" />Print / save plan PDF</Button></div>
+              <div className="relative max-w-lg"><Icons.Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input aria-label="Search formula ingredients" placeholder="Search ingredient or material SKU…" className="pl-9" value={materialSearch} onChange={(event) => setMaterialSearch(event.target.value)} /></div>
+              <h3 className="text-sm font-semibold">Full formula · before using intermediate stock</h3>
+              <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/50"><tr><th className="p-3 text-left">Ingredient</th><th className="p-3 text-right">Total formula quantity</th><th className="p-3 text-left">Unit</th></tr></thead><tbody>{visibleFormula.map((row) => <tr key={JSON.stringify([row.productId, row.uom])} className="border-t"><td className="p-3">{row.productName}</td><td className="p-3 text-right font-medium tabular-nums">{row.quantity.toLocaleString("en-KE", { maximumFractionDigits: 3 })}</td><td className="p-3">{row.uom}</td></tr>)}{!visibleFormula.length && <tr><td colSpan={3} className="p-4 text-muted-foreground">{materialSearch ? "No matching ingredients." : "No purchased ingredients in this recipe."}</td></tr>}</tbody></table></div>
+              <h3 className="text-sm font-semibold">Purchased materials for new batches · includes materials already on hand</h3>
+              <div className="overflow-x-auto rounded-lg border"><table className="w-full text-sm"><thead className="bg-muted/50"><tr>{["Material", "Required", "On hand", "Short to buy", "Unit"].map((label) => <th key={label} className="p-3 text-left">{label}</th>)}</tr></thead><tbody>{materialRows.map((row) => <tr key={row.productId} className="border-t"><td className="p-3"><ProductStockLink row={row} /></td><td className="p-3 tabular-nums">{row.requiredQty}</td><td className="p-3 tabular-nums">{row.onHandQty}</td><td className={cn("p-3 tabular-nums", warehouseShortfall(row) > 0 && "font-semibold text-amber-600 dark:text-amber-400")}>{warehouseShortfall(row)}</td><td className="p-3">{row.uom}</td></tr>)}{!materialRows.length && <tr><td colSpan={5} className="p-4 text-muted-foreground">No matching purchased material requirements.</td></tr>}</tbody></table></div>
+              <p className="text-xs text-muted-foreground">Quantities stay separate by ingredient and unit. This PDF is a planning preview. After preparing the batches, print the saved production packet for the floor. In the print dialog, choose Save as PDF.</p>
+            </section>
             <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-sm">
               <p className="font-medium">
                 Worked backwards from {plannedNameList(rowsById, qtyById)}.
@@ -695,7 +730,7 @@ export default function ProductionPlanPage() {
                   {createdOrders.length ? (
                     <>
                       <span className="font-medium text-foreground">
-                        Draft work orders (Prepare → Print → Release → Start → Complete → QC):
+                        Open each draft: Prepare → Print → Release to production → Start → Record actuals → QC
                       </span>
                       <Button size="sm" variant="outline" onClick={() => {
                         const popup = window.open("", "_blank");
@@ -703,7 +738,7 @@ export default function ProductionPlanPage() {
                         void Promise.all(createdOrders.map((wo) => fetchManufacturingWorkOrder(wo.id))).then((orders) => {
                           printDailyProductionPacket(orders, popup);
                         }).catch((error) => { popup?.close(); toast.error(error instanceof Error ? error.message : "Packet could not load"); });
-                      }}>Preview / print prepared packet</Button>
+                      }}>Print / save prepared packet PDF</Button>
                       <Button size="sm" variant="ghost" onClick={() => { sessionStorage.removeItem("manufacturing-daily-plan-apply"); setCreatedOrders(null); toast.info("New planning request started. Applying again creates new batches."); }}>Start a new plan</Button>
                       {createdOrders.map((wo) => (
                         <Link
@@ -775,8 +810,7 @@ export default function ProductionPlanPage() {
                   <Badge variant="outline">{packResultRows.length}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Finished product you typed a pack qty for. Zero on the shelf is expected until you complete the pack
-                  work orders. Click a name for stock.
+                  The entered quantity is new output to produce. Existing finished stock does not reduce it. Prefill from sales instead suggests only the uncovered sales demand.
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                   <DataTable

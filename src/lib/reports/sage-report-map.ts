@@ -42,6 +42,7 @@ const operational: Record<string, { id: string; permissions: string[] }> = {
   "Post Dated Cheques": { id: "post-dated-cheques", permissions: ["finance.ar.read"] },
 };
 for (const entry of entries) {
+  if (["Project Budget vs Actual", "Project Profit and Loss"].includes(entry.name)) { entry.href = "/projects/financials"; entry.status = "new-report"; entry.additionalPermissions = ["projects.read", "finance.read", "admin.settings", "reports.read"]; }
   const report = entry.name === "Labels" && entry.group === "Accounts Receivable" ? { id: "customer-labels", permissions: ["finance.ar.read"] }
     : entry.name === "Labels" && entry.group === "Accounts Payable" ? { id: "supplier-labels", permissions: ["finance.ap.read"] }
     : entry.name === "Transactions" && entry.group === "Accounts Receivable" ? { id: "sales-register", permissions: ["sales.read", "finance.ar.read"] }

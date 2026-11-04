@@ -48,6 +48,7 @@ const PURIFY = {
 };
 
 function isSafeHttpUrl(url: string): boolean {
+  if (/^\/(?!\/)[^\\\u0000-\u0020]*$/.test(url)) return true;
   try {
     const u = new URL(url);
     return u.protocol === "http:" || u.protocol === "https:";

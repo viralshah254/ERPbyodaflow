@@ -22,6 +22,7 @@ type KraSigningPanelProps = {
   typeKey: string;
   documentId: string;
   documentStatus?: string;
+  fiscalState?: string;
   kraSigning?: KraSigningRecord | null;
   onUpdated?: (kraSigning: KraSigningRecord) => void;
   canRetry?: boolean;
@@ -31,6 +32,7 @@ export function KraSigningPanel({
   typeKey,
   documentId,
   documentStatus,
+  fiscalState,
   kraSigning,
   onUpdated,
   canRetry = false,
@@ -38,7 +40,10 @@ export function KraSigningPanel({
   const [retrying, setRetrying] = React.useState(false);
 
   if (!isIncotexSignableDocType(typeKey)) return null;
-  if (String(documentStatus ?? "").toUpperCase() !== "POSTED") return null;
+  const posted = String(documentStatus ?? "").toUpperCase() === "POSTED";
+  const unresolved = ["PREPARED", "DISPATCHING", "UNCERTAIN"].includes(fiscalState ?? "");
+  if (!posted && !kraSigning && !unresolved) return null;
+  const signedAwaitingPost = !posted && kraSigning?.status === "signed";
 
   const handleRetry = async () => {
     setRetrying(true);
@@ -64,7 +69,7 @@ export function KraSigningPanel({
     }
   };
 
-  const showRetry = canRetry && canRetryKraSigning(kraSigning);
+  const showRetry = !unresolved && posted && canRetry && canRetryKraSigning(kraSigning);
   const retryLabel = kraRetryButtonLabel(kraSigning);
 
   return (
@@ -80,6 +85,8 @@ export function KraSigningPanel({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 text-sm">
+        {unresolved && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"><p className="font-semibold">Fiscal outcome needs review</p><p className="mt-2 text-muted-foreground">The request and its values are frozen. Finance must reconcile the provider outcome before editing, posting or sending another request.</p><Button asChild variant="outline" className="mt-3"><Link href={`/finance/fiscal-recovery?documentId=${encodeURIComponent(documentId)}`}>Open fiscal recovery</Link></Button></div>}
+        {signedAwaitingPost && <div role="status" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4"><p className="font-semibold">Signed · ledger posting needs recovery</p><p className="mt-2 text-muted-foreground">The fiscal provider accepted this document, but ERP posting is incomplete. Keep its values frozen. Resolve the posting error, then use Recover posting above to reuse the existing signature. Do not create a replacement or cancel this signed document.</p></div>}
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-muted-foreground mb-1">Signing status</p>
@@ -141,7 +148,7 @@ export function KraSigningPanel({
             <p className="font-medium text-destructive mb-1">Decline reason</p>
             <p className="text-sm whitespace-pre-wrap break-words">{kraSigning.errorMessage}</p>
             <p className="text-xs text-muted-foreground mt-2">
-              Fix the document or pricing totals, then retry. Share this message with support if the issue persists.
+              Review the provider response before retrying. A timeout can leave acceptance uncertain; reconcile with the original provider before sending another fiscal request.
             </p>
           </div>
         ) : null}

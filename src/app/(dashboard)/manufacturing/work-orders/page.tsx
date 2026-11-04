@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
@@ -347,17 +348,18 @@ export default function WorkOrdersPage() {
         description="Open a work order to release, start, and complete it. Actions are not on the list so similar products are harder to mix up."
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/work-orders" }, { label: woLabel }]}
         sticky
-        actions={
+        actions={<><Button size="sm" variant="outline" asChild><Link href="/manufacturing/capacity">Capacity planner</Link></Button><Button size="sm" variant="outline" asChild><Link href="/manufacturing/trusted-devices">Trusted devices</Link></Button>{
           canWrite ? (
             <Button size="sm" onClick={() => setSheetOpen(true)}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               New work order
             </Button>
           ) : undefined
-        }
+        }</>}
       />
 
       <div className={LIST_PAGE_BODY_CLASS}>
+        <OperationalFlowNav flow="manufacturing" current="Work orders" />
         <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search number, product, BOM, or GRN…"
           searchValue={search}

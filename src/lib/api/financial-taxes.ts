@@ -7,6 +7,9 @@ type BackendTaxRow = {
   name: string;
   rate?: number;
   type?: string;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  used?: boolean;
 };
 
 function mapTaxRow(item: BackendTaxRow): TaxRow {
@@ -16,8 +19,9 @@ function mapTaxRow(item: BackendTaxRow): TaxRow {
     name: item.name,
     rate: item.rate ?? 0,
     inclusive: false,
-    effectiveFrom: "",
-    effectiveTo: null,
+    type: item.type, used: item.used,
+    effectiveFrom: item.effectiveFrom?.slice(0, 10) ?? "",
+    effectiveTo: item.effectiveTo?.slice(0, 10) ?? null,
   };
 }
 
@@ -32,6 +36,8 @@ export async function createFinancialTaxApi(payload: {
   name: string;
   rate: number;
   type?: string;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
 }): Promise<{ id: string }> {
   requireLiveApi("Create financial tax");
   return apiRequest<{ id: string }>("/api/settings/financial/taxes", {
@@ -42,7 +48,7 @@ export async function createFinancialTaxApi(payload: {
 
 export async function updateFinancialTaxApi(
   id: string,
-  payload: { code?: string; name?: string; rate?: number; type?: string }
+  payload: { code?: string; name?: string; rate?: number; type?: string; effectiveFrom?: string | null; effectiveTo?: string | null }
 ): Promise<{ id: string }> {
   requireLiveApi("Update financial tax");
   return apiRequest<{ id: string }>(`/api/settings/financial/taxes/${id}`, {

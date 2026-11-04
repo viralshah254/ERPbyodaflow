@@ -11,12 +11,11 @@ describe("FMCG setup source", () => {
     expect(await fetchFmcgSetup()).toBe(result);
     expect(api).toHaveBeenCalledTimes(1);
   });
-  it("marks the localhost fallback as read-only", async () => {
+  it("does not send an authenticated request to another backend when setup is unavailable", async () => {
     vi.stubGlobal("window", { location: { hostname: "localhost" } });
     api.mockRejectedValueOnce(Object.assign(new Error("Missing release"), { status: 404 }));
-    api.mockResolvedValueOnce({ version: "fmcg-setup-v1" });
-    expect((await fetchFmcgSetup()).readOnlyPreview).toBe(true);
-    expect(api).toHaveBeenLastCalledWith("/api/settings/fmcg-setup", { baseUrl: "http://localhost:4000" });
+    await expect(fetchFmcgSetup()).rejects.toThrow("matching backend");
+    expect(api).toHaveBeenCalledTimes(1);
   });
   it.each([401, 403, 500])("does not mask an authorization or backend error (%s)", async (status) => {
     vi.stubGlobal("window", { location: { hostname: "localhost" } });
@@ -27,7 +26,7 @@ describe("FMCG setup source", () => {
   it("never redirects a production page to a local backend", async () => {
     vi.stubGlobal("window", { location: { hostname: "erp.odaflow.com" } });
     api.mockRejectedValueOnce(Object.assign(new Error("Missing release"), { status: 404 }));
-    await expect(fetchFmcgSetup()).rejects.toThrow("Missing release");
+    await expect(fetchFmcgSetup()).rejects.toThrow("matching backend");
     expect(api).toHaveBeenCalledTimes(1);
   });
 });

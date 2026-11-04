@@ -15,7 +15,7 @@ import * as Icons from "lucide-react";
 
 const LINKS = [
   { href: "/settings/organization/entities", label: "Entities", desc: "Company A, B. Base currency, IC mapping", icon: "Building2" as const },
-  { href: "/intercompany/transactions", label: "IC Transactions", desc: "IC invoice, IC bill, elimination journal", icon: "ArrowLeftRight" as const },
+  { href: "/intercompany/transactions", label: "IC Transactions", desc: "Draft intercompany records and source references", icon: "ArrowLeftRight" as const },
 ];
 
 export default function IntercompanyOverviewPage() {
@@ -83,17 +83,17 @@ export default function IntercompanyOverviewPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{transactionsCount}</div>
-              <p className="text-xs text-muted-foreground">This period</p>
+              <p className="text-xs text-muted-foreground">Loaded register records</p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Consolidation</CardTitle>
+              <CardTitle className="text-sm font-medium">Financial consolidation</CardTitle>
               <Icons.PieChart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">—</div>
-              <p className="text-xs text-muted-foreground">P&L stub</p>
+              <p className="text-xs text-muted-foreground">Not available · tracking register only</p>
             </CardContent>
           </Card>
         </div>
