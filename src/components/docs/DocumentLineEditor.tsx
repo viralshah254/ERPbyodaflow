@@ -102,7 +102,7 @@ interface DocumentLineEditorProps {
   /** Filter products: purchasable (PO), sellable (SO), or all. */
   productFilter?: "purchasable" | "sellable" | "all";
   /**
-   * New sales order lists every numeric finished good with a blank quantity.
+   * New document lists every numeric finished good with a zero quantity.
    * Add products and search stay on that same list.
    */
   sheetFinishedGoods?: boolean;
@@ -358,7 +358,7 @@ export function DocumentLineEditor({
   >({});
 
   const lineQtyValue = (line: DocumentLine) =>
-    lineFieldDrafts[line.id]?.qty ?? (sheetFinishedGoods && line.qty === 0 ? "" : String(line.qty));
+    lineFieldDrafts[line.id]?.qty ?? String(line.qty);
 
   const linePriceValue = (line: DocumentLine) =>
     lineFieldDrafts[line.id]?.price ?? String(line.price);
@@ -1324,7 +1324,9 @@ export function DocumentLineEditor({
               Add products
             </Button>
             <p className="text-xs text-muted-foreground">
-              Select several products, set the quantity on each row, then add the lines.
+              {sheetFinishedGoods
+                ? "Update quantities for the products needed. Leave unused products at 0."
+                : "Select several products, set the quantity on each row, then add the lines."}
               <span className="mx-1.5">·</span>
               <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd>
             </p>
