@@ -1781,6 +1781,7 @@ export default function DocViewPage() {
                           priceListName={document.priceListName}
                           status={document.status}
                           lines={document.lines}
+                          linesAreTaxInclusive={document.linesAreTaxInclusive}
                           onApplied={() => refreshDocument(true)}
                         />
                       ),

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { DocTypeKey } from "@/config/documents/types";
 import { Button } from "@/components/ui/button";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { repriceDocumentLineTax } from "@/lib/pricing/document-price-tax";
 import { patchDocumentApi } from "@/lib/api/documents";
 import {
   fetchCatalogPricesApi,
@@ -24,6 +25,7 @@ type OrderLine = {
   discount?: number;
   tax?: number;
   taxCodeId?: string;
+  taxRate?: number;
   amount?: number;
   packing?: string;
   pricedUnitsPer?: number;
@@ -63,6 +65,7 @@ export function DocumentPriceTagControl({
   status,
   lines,
   onApplied,
+  linesAreTaxInclusive = false,
 }: {
   docType: DocTypeKey;
   docId: string;
@@ -70,6 +73,7 @@ export function DocumentPriceTagControl({
   priceListId?: string;
   priceListName?: string;
   status: string;
+  linesAreTaxInclusive?: boolean;
   lines: OrderLine[];
   onApplied: () => void | Promise<void>;
 }) {
@@ -142,12 +146,16 @@ export function DocumentPriceTagControl({
           }
           priced += 1;
           const qty = line.qty ?? 0;
+          if (line.taxCodeId && (line.taxRate == null || !Number.isFinite(line.taxRate))) throw new Error(`Cannot reprice ${line.description}: its VAT code is unavailable.`);
+          if (!line.taxCodeId && (line.tax ?? 0) > 0) throw new Error(`Choose a VAT code for ${line.description} before repricing.`);
+          const taxAmounts = repriceDocumentLineTax(quote.net, qty, line.taxCodeId ? line.taxRate! : 0, linesAreTaxInclusive);
           return {
             ...line,
             unitPrice: round2(quote.unitPrice),
             discount: quote.discount > 0 ? quote.discount : undefined,
             ...(quote.pricedUnitsPer ? { pricedUnitsPer: quote.pricedUnitsPer } : {}),
-            amount: round2(quote.net * qty),
+            amount: taxAmounts.amount,
+            tax: taxAmounts.tax,
           };
         });
         if (priced === 0) {
@@ -161,7 +169,8 @@ export function DocumentPriceTagControl({
         const total = round2(nextLines.reduce((sum, line) => sum + (line.amount ?? 0), 0));
         await patchDocumentApi(docType, docId, {
           priceListId: listId,
-          subtotal: total,
+          subtotal: round2(total - nextLines.reduce((sum, line) => sum + (line.tax ?? 0), 0)),
+          tax: round2(nextLines.reduce((sum, line) => sum + (line.tax ?? 0), 0)),
           total,
           lines: nextLines.map((line) => ({
             lineId: line.id,
@@ -193,7 +202,7 @@ export function DocumentPriceTagControl({
         setBusy(false);
       }
     },
-    [docId, docType, editable, lines, onApplied, options]
+    [docId, docType, editable, lines, linesAreTaxInclusive, onApplied, options]
   );
 
   React.useEffect(() => {
