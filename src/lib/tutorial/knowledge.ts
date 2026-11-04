@@ -1,6 +1,6 @@
 import type { TutorialChapter, TutorialItem } from "@/config/tutorial";
 
-export const TUTORIAL_REVISION = "erp-handbook-2026-11-04-v3";
+export const TUTORIAL_REVISION = "erp-handbook-2026-11-04-v4";
 export type TutorialArticle = TutorialItem & { chapterId: string; chapterTitle: string };
 export const tutorialGuideHref = (article: Pick<TutorialArticle, "chapterId" | "key">) => `/tutorial/${encodeURIComponent(article.chapterId)}/${encodeURIComponent(article.key)}`;
 export const tutorialArticles = (chapters: TutorialChapter[]): TutorialArticle[] => chapters.flatMap((chapter) => chapter.items.map((item) => ({ ...item, chapterId: chapter.id, chapterTitle: chapter.title })));

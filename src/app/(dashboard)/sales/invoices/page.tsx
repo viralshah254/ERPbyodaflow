@@ -1,4 +1,5 @@
 "use client";
+import { useAccountingOnly } from "@/lib/api/invoice-posting";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -50,6 +51,7 @@ function invoiceWhen(row: SalesDocRow): string {
 }
 
 export default function SalesInvoicesPage() {
+  const accountingOnly = useAccountingOnly();
   const canWrite = useCanWriteSales();
   const router = useRouter();
   const [search, setSearch] = React.useState("");
@@ -306,7 +308,7 @@ export default function SalesInvoicesPage() {
                     const postIds = filterIdsForBulkPost("invoice", selectedRows, selectedIds);
                     if (!postIds.length) {
                       toast.info(
-                        "None of the selected invoices can be signed and posted. Choose drafts or approved invoices that are not already posted or cancelled. Pending-approval invoices must be approved first."
+                        "None of the selected invoices can be posted. Choose drafts or approved invoices that are not already posted or cancelled. Pending-approval invoices must be approved first."
                       );
                       return;
                     }
@@ -315,7 +317,7 @@ export default function SalesInvoicesPage() {
                       const { succeeded, failed } = partitionBulkDocResults(results);
                       await refreshRows();
                       if (succeeded.length) {
-                        toast.success(`${succeeded.length} invoice(s) signed and posted.`);
+                        toast.success(`${succeeded.length} invoice(s) posted${accountingOnly ? " without KRA submission" : " and signed"}.`);
                       }
                       if (failed.length) {
                         toast.error(`${failed.length} failed: ${failed.map((f) => f.error).join("; ")}`);
@@ -326,7 +328,7 @@ export default function SalesInvoicesPage() {
                     }
                   }}
                 >
-                  Sign and post
+                  {accountingOnly ? "Post invoices" : "Sign and post"}
                 </Button>
                 <Button
                   variant="outline"

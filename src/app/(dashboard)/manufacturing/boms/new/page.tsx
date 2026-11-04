@@ -34,6 +34,8 @@ import { useCanWriteManufacturing, useSessionReady } from "@/lib/rbac/use-write-
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+import { BomPilotHelp } from "@/components/manufacturing/BomPilotHelp";
+
 function pickKgUomCode(codes: string[]): string | undefined {
   const norm = codes.map((c) => ({ raw: c, u: c.toUpperCase().replace(/\s+/g, "") }));
   const hit =
@@ -52,13 +54,18 @@ export default function NewBomPage() {
 
   const [uomCodes, setUomCodes] = React.useState<string[]>([]);
   const [hydrating, setHydrating] = React.useState(true);
+  const [loadError, setLoadError] = React.useState(false);
+  const [loadAttempt, setLoadAttempt] = React.useState(0);
 
   const [code, setCode] = React.useState("");
   const [name, setName] = React.useState("");
   const [finishedProductId, setFinishedProductId] = React.useState<string | undefined>(undefined);
   const [finishedProductOption, setFinishedProductOption] =
     React.useState<AsyncSearchableSelectOption | null>(null);
-  const [quantity, setQuantity] = React.useState(1);
+  const [quantity, setQuantity] = React.useState("1");
+  const [saving, setSaving] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState("");
+  const submitting = React.useRef(false);
   const [uom, setUom] = React.useState("EA");
   const [type, setType] = React.useState<BomType>("bom");
   const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
@@ -68,6 +75,7 @@ export default function NewBomPage() {
     let cancelled = false;
     (async () => {
       setHydrating(true);
+      setLoadError(false);
       try {
         await Promise.all([
           fetchUomsApi().then((rows) => {
@@ -82,7 +90,7 @@ export default function NewBomPage() {
           }),
         ]);
       } catch {
-        toast.error("Failed to load units or numbering. Retry from the BOM list.");
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setHydrating(false);
       }
@@ -90,7 +98,7 @@ export default function NewBomPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadAttempt]);
 
   const defaultsApplied = React.useRef(false);
 
@@ -126,15 +134,27 @@ export default function NewBomPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !finishedProductId) {
-      if (!finishedProductId) toast.error("Select a finished product.");
+    if (submitting.current || hydrating) return;
+    setSubmitError("");
+    if (loadError || !uomCodes.includes(uom)) {
+      setSubmitError("Load setup data and select an available output unit before creating the BOM.");
       return;
     }
+    if (!Number.isFinite(Number(quantity)) || Number(quantity) < 0.001) {
+      setSubmitError("Enter a batch output of at least 0.001.");
+      return;
+    }
+    if (!name.trim() || !finishedProductId) {
+      setSubmitError(!finishedProductId ? "Select a finished product." : "Enter a recipe name.");
+      return;
+    }
+    submitting.current = true;
+    setSaving(true);
     try {
       const bom = await createManufacturingBom({
         name: name.trim(),
         productId: finishedProductId,
-        quantity: Number(quantity) || 1,
+        quantity: Number(quantity),
         uom: uom || "EA",
         type,
         ...(outputWarehouseId ? { outputWarehouseId } : {}),
@@ -142,7 +162,10 @@ export default function NewBomPage() {
       toast.success(`BOM ${bom.code ?? bom.id} created.`);
       router.push(`/manufacturing/boms/${encodeURIComponent(bom.id)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to create BOM.");
+      setSubmitError(error instanceof Error ? error.message : "Failed to create BOM.");
+    } finally {
+      submitting.current = false;
+      setSaving(false);
     }
   };
 
@@ -150,7 +173,15 @@ export default function NewBomPage() {
     <PageShell>
       <PageHeader
         title="New BOM"
-        description="Create a bill of material or formula"
+        description="Step 1: define the product and batch output. Add components after creating the BOM."
+        help={<BomPilotHelp screen="new" steps={[
+          { id: "identity", target: "[data-bom-identity]", title: "Name this recipe", description: "Give the BOM a recognizable name. The code shown is a preview; the numbering sequence assigns the final code on save.", instruction: "Enter a recipe name.", complete: !!name.trim() },
+          { id: "product", target: "[data-bom-product]", title: "Choose the finished product", description: "Search the product catalogue and select the SKU this recipe describes. Components are added on the next screen, not in this picker.", instruction: "Select a finished product from the catalogue.", complete: !!finishedProductId },
+          { id: "output", target: "[data-bom-output]", title: "Define one batch", description: "Quantity and unit describe the batch output, not a component quantity. For example, 10 KG is a ten-kilogram batch. Check the unit before continuing.", instruction: "Confirm a positive output quantity and a loaded unit.", complete: Number.isFinite(Number(quantity)) && Number(quantity) >= 0.001 && uomCodes.includes(uom) },
+          { id: "type", target: "[data-bom-type]", title: "Choose the production method", description: isCoolCatchTemplate ? "This template defaults to Disassembly and kilograms when available. Check that this matches your reverse process." : "Use BOM for standard assembly, Formula for batch production, or Disassembly for a reverse process. Select the method that matches the production task." },
+          { id: "warehouse", target: "[data-bom-warehouse]", title: "Set the output destination", description: "Choose the warehouse where finished goods should be received, or leave the destination to the work order. Choosing a warehouse here does not move stock." },
+          { id: "review", target: "[data-bom-review]", title: "Review before creating", description: "Check the summary and any validation message. Create BOM saves a real recipe, then opens its record so you can add components and routing. Finish walkthrough only ends this guide; it does not submit the form." },
+        ]} />}
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
           { label: "BOMs", href: "/manufacturing/boms" },
@@ -163,18 +194,23 @@ export default function NewBomPage() {
           </Button>
         }
       />
-      <div className="p-6 max-w-2xl">
+      <div className="mx-auto grid w-full max-w-5xl gap-6 p-4 sm:p-6 lg:grid-cols-[minmax(0,1fr)_260px]">
         <Card>
           <CardHeader>
-            <CardTitle>BOM details</CardTitle>
-            <CardDescription>Code, name, finished product, quantity, and type.</CardDescription>
+            <CardTitle>Define your batch</CardTitle>
+            <CardDescription>Start with the output. You will add ingredient or component lines on the next screen.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            {loadError && <div role="alert" className="mb-4 rounded-lg border border-destructive/40 p-3 text-sm">
+              <p>Could not load units, numbering or warehouses. Retry before creating this BOM.</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => setLoadAttempt(n => n + 1)}>Retry setup data</Button>
+            </div>}
+            <form onSubmit={handleSubmit} className="space-y-4" aria-busy={saving || hydrating}>
+              <div className="grid gap-4 sm:grid-cols-2" data-bom-identity>
                 <div className="space-y-2">
-                  <Label>Code</Label>
+                  <Label htmlFor="bom-code">Code preview</Label>
                   <Input
+                    id="bom-code"
                     readOnly
                     aria-readonly="true"
                     value={hydrating ? "…" : code}
@@ -185,12 +221,12 @@ export default function NewBomPage() {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label>Name</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Widget A" required />
+                  <Label htmlFor="bom-name">Recipe name <span className="text-muted-foreground">*</span></Label>
+                  <Input id="bom-name" autoComplete="off" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} placeholder="Widget A" required />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Finished product</Label>
+              <div className="space-y-2" data-bom-product role="group" aria-labelledby="bom-product-label">
+                <Label id="bom-product-label">Finished product <span className="text-muted-foreground">*</span></Label>
                 <AsyncSearchableSelect
                   value={finishedProductId}
                   selectedOption={finishedProductOption}
@@ -204,25 +240,27 @@ export default function NewBomPage() {
                   showSelectedDescription
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-4 sm:grid-cols-2" data-bom-output>
                 <div className="space-y-2">
-                  <Label>Quantity</Label>
+                  <Label htmlFor="bom-quantity">Batch output <span className="text-muted-foreground">*</span></Label>
                   <Input
+                    id="bom-quantity"
+                    required
                     type="number"
                     min={0.001}
                     step={0.001}
                     value={quantity}
-                    onChange={(e) => setQuantity(Number((e.target as HTMLInputElement).value) || 1)}
+                    onChange={(e) => setQuantity(e.target.value)}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>UOM</Label>
+                  <Label htmlFor="bom-uom">Output unit</Label>
                   <Select
                     disabled={hydrating || uomCodes.length === 0}
                     value={uom}
                     onValueChange={setUom}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger id="bom-uom">
                       <SelectValue placeholder={uomCodes.length ? undefined : "Loading UOMs…"} />
                     </SelectTrigger>
                     <SelectContent>
@@ -235,10 +273,10 @@ export default function NewBomPage() {
                   </Select>
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Type</Label>
+              <div className="space-y-2" data-bom-type>
+                <Label htmlFor="bom-type">Production method</Label>
                 <Select value={type} onValueChange={(v) => setType(v as BomType)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="bom-type">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -248,10 +286,10 @@ export default function NewBomPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Output warehouse</Label>
+              <div className="space-y-2" data-bom-warehouse>
+                <Label htmlFor="bom-warehouse">Output warehouse <span className="text-muted-foreground">(optional)</span></Label>
                 <Select value={outputWarehouseId || "__none__"} onValueChange={(value) => setOutputWarehouseId(value === "__none__" ? "" : value)}>
-                  <SelectTrigger>
+                  <SelectTrigger id="bom-warehouse">
                     <SelectValue placeholder="Where finished goods are received" />
                   </SelectTrigger>
                   <SelectContent>
@@ -264,10 +302,11 @@ export default function NewBomPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex gap-2 pt-4">
-                <Button type="submit" disabled={hydrating}>
+              {submitError && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{submitError}</p>}
+              <div className="flex gap-2 border-t pt-4">
+                <Button type="submit" disabled={hydrating || loadError || saving || !uomCodes.includes(uom)}>
                   <Icons.Check className="mr-2 h-4 w-4" />
-                  Create BOM
+                  {saving ? "Creating BOM…" : "Create BOM"}
                 </Button>
                 <Button type="button" variant="outline" asChild>
                   <Link href="/manufacturing/boms">Cancel</Link>
@@ -276,6 +315,17 @@ export default function NewBomPage() {
             </form>
           </CardContent>
         </Card>
+        <aside className="self-start rounded-xl border bg-muted/30 p-5 space-y-4" data-bom-review>
+          <p className="text-xs font-semibold uppercase tracking-wider text-primary">Batch preview</p>
+          <h2 className="break-words text-lg font-semibold">{name.trim() || "Your new recipe"}</h2>
+          <dl className="space-y-3 text-sm">
+            <div><dt className="text-muted-foreground">Finished product</dt><dd className="break-words font-medium">{finishedProductOption?.label || "Select a product"}</dd></div>
+            <div><dt className="text-muted-foreground">Batch output</dt><dd className="font-medium">{quantity || "—"} {uom}</dd></div>
+            <div><dt className="text-muted-foreground">Method</dt><dd className="capitalize font-medium">{type}</dd></div>
+            <div><dt className="text-muted-foreground">Output destination</dt><dd>{warehouses.find(w => w.id === outputWarehouseId)?.name || "Choose on the work order"}</dd></div>
+          </dl>
+          <p className="border-t pt-4 text-xs leading-relaxed text-muted-foreground">Next: add components and quantities, then link a routing. Creating this recipe does not post inventory.</p>
+        </aside>
       </div>
     </PageShell>
   );

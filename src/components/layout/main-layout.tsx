@@ -4,7 +4,8 @@ import { AppSidebar } from "@/components/nav/AppSidebar";
 import { Header } from "./header";
 import { SandboxEnvironmentBanner } from "@/components/environment/sandbox-environment-banner";
 import { CommandPalette } from "@/components/command/CommandPalette";
-import { FirstVisitBanner } from "@/components/tutorial/FirstVisitBanner";
+import { DialogHelp } from "@/components/tutorial/DialogHelp";
+import { PageHelpFallback } from "@/components/tutorial/PageHelpFallback";
 import { TutorialProgressTracker } from "@/components/tutorial/TutorialProgressTracker";
 import { useUIStore } from "@/stores/ui-store";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -93,11 +94,12 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
       ) : null}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header />
+        <DialogHelp />
         <SandboxEnvironmentBanner />
         <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className="shrink-0">
             <TutorialProgressTracker />
-            <FirstVisitBanner />
+            <PageHelpFallback />
           </div>
           <div
             className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-6 pt-0 md:px-6"

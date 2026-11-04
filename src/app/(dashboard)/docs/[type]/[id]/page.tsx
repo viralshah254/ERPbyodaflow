@@ -1,5 +1,6 @@
 "use client";
 
+import { useAccountingOnly } from "@/lib/api/invoice-posting";
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
@@ -633,7 +634,8 @@ export default function DocViewPage() {
   const canApprove = availableActions.includes("approve");
   const fiscalUnresolved = ["PREPARED", "DISPATCHING", "UNCERTAIN"].includes(document?.fiscalState ?? "");
   const canPost = availableActions.includes("post") && !fiscalUnresolved;
-  const signAndPost = isIncotexSignableDocType(type);
+  const accountingOnly = useAccountingOnly();
+  const signAndPost = isIncotexSignableDocType(type) && !accountingOnly;
   const fiscallySigned = ["invoice", "credit-note", "debit-note"].includes(type) && document?.kraSigning?.status === "signed";
   const canCancel = availableActions.includes("cancel") && !fiscallySigned && !fiscalUnresolved;
   const canReverse = availableActions.includes("reverse");
@@ -1188,6 +1190,7 @@ export default function DocViewPage() {
   const rightSlot = (
     <DynamicNextStepsPanel
       type={type}
+      accountingOnly={accountingOnly}
       document={documentWithSalesFlow}
       convertTargets={effectiveConvertTargets}
       linkedDeliveryNote={linkedDeliveryNote}
@@ -1472,7 +1475,7 @@ export default function DocViewPage() {
                 onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
-                {fiscallySigned ? "Recover posting" : signAndPost ? "Sign and post" : "Post"}
+                {fiscallySigned ? "Recover posting" : signAndPost ? "Sign and post" : accountingOnly && isIncotexSignableDocType(type) ? "Post invoice" : "Post"}
               </Button>
               )}
             </>
@@ -2081,7 +2084,7 @@ export default function DocViewPage() {
             documentStatus={document.status}
             kraSigning={document.kraSigning}
             fiscalState={document.fiscalState}
-            canRetry={canWrite || canWriteFinance}
+            canRetry={!accountingOnly && (canWrite || canWriteFinance)}
             onUpdated={(kraSigning) =>
               setDocument((prev) => (prev ? { ...prev, kraSigning } : prev))
             }
@@ -3394,7 +3397,7 @@ export default function DocViewPage() {
                   }
                 }}
               >
-                {settleSaving ? "Saving…" : settleStep === "payment" && partyNeedsTerms ? "Continue" : signAndPost ? "Sign and post" : "Post"}
+                {settleSaving ? "Saving…" : settleStep === "payment" && partyNeedsTerms ? "Continue" : signAndPost ? "Sign and post" : accountingOnly && isIncotexSignableDocType(type) ? "Post invoice" : "Post"}
               </Button>
             </div>
           </div>
@@ -3530,6 +3533,7 @@ function SalesFlowStatusStrip({
 }
 
 function DynamicNextStepsPanel({
+  accountingOnly = false,
   type,
   document,
   convertTargets,
@@ -3552,6 +3556,7 @@ function DynamicNextStepsPanel({
   onStartPickPack,
   onGenerateInvoiceAndDeliveryNote,
 }: {
+  accountingOnly?: boolean;
   type: string;
   document: DocumentDetailRecord | null;
   convertTargets: DocTypeKey[];
@@ -3777,13 +3782,13 @@ function DynamicNextStepsPanel({
           });
         }
       } else {
-        steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Sign and post to finalize", action: () => void onAction("post"), actionLabel: "Sign and post", variant: "default" });
+        steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: accountingOnly ? "Post invoice — no KRA submission" : "Sign and post to finalize", action: () => void onAction("post"), actionLabel: accountingOnly ? "Post invoice" : "Sign and post", variant: "default" });
       }
     } else if (status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting credit approval — held due to credit policy breach" });
       steps.push({ icon: <Icons.CheckSquare className="h-4 w-4 text-blue-500" />, text: "Approve in Approvals Inbox", href: "/approvals/inbox", actionLabel: "Go to Inbox", variant: "default" });
     } else if (status === "APPROVED") {
-      steps.push({ icon: <Icons.Send className="h-4 w-4 text-emerald-500" />, text: "Credit override approved — sign and post to finalize", action: () => void onAction("post"), actionLabel: "Sign and post", variant: "default" });
+      steps.push({ icon: <Icons.Send className="h-4 w-4 text-emerald-500" />, text: accountingOnly ? "Credit override approved — post invoice" : "Credit override approved — sign and post to finalize", action: () => void onAction("post"), actionLabel: accountingOnly ? "Post invoice" : "Sign and post", variant: "default" });
     } else if (status === "POSTED") {
       if (paymentStatus === "PAID") {
         steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4 text-emerald-500" />, text: "Invoice fully settled ✓" });

@@ -28,7 +28,7 @@ export function KraSigningBadge({
   }
 
   const status = kraSigning?.status;
-  const label = kraSigningStatusLabel(status);
+  const label = status === "skipped" && kraSigning?.errorMessage?.startsWith("Accounting-only posting") ? "Not submitted to KRA" : kraSigningStatusLabel(status);
   const variant = kraSigningStatusVariant(status);
 
   return (

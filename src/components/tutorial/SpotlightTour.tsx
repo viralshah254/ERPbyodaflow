@@ -3,6 +3,7 @@
 import * as React from "react";
 import { driver, type DriveStep } from "driver.js";
 import "driver.js/dist/driver.css";
+import { resolveScreenGuide } from "@/lib/tutorial/screen-guides";
 import type { TourDef } from "@/config/tutorial-tours";
 import { useTutorialProgressStore } from "@/stores/tutorial-progress-store";
 import { emitTutorialEvent } from "@/lib/api/tutorial-events";
@@ -22,6 +23,10 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
   const hasCompletedTour = useTutorialProgressStore((s) => s.hasCompletedTour);
 
   const startTour = React.useCallback(() => {
+    if (resolveScreenGuide(window.location.pathname)) {
+      window.dispatchEvent(new Event("erp:guide:start"));
+      return;
+    }
     if (!tour || tour.steps.length === 0) return;
 
     const liveSteps = expandLiveTourSteps(tour);
@@ -34,6 +39,7 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
     }));
 
     let lastStepReached = false;
+    let finished = false;
     let moveQueued = false;
 
     const driverObj = driver({
@@ -48,7 +54,7 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
           moveQueued = false;
           if (!tourDriver.isActive()) return;
           if (tourDriver.hasNextStep()) tourDriver.moveNext();
-          else tourDriver.destroy();
+          else { finished = true; tourDriver.destroy(); }
         }, 0);
       },
       onPrevClick: (_element, _step, { driver: tourDriver }) => {
@@ -70,13 +76,13 @@ export function useSpotlightTour(tour: TourDef | null, onComplete?: () => void) 
         driverObj.destroy();
       },
       onDestroyed: () => {
-        markTourCompleted(tour.tourId);
+        if (finished && lastStepReached) markTourCompleted(tour.tourId);
         emitTutorialEvent({
-          event: lastStepReached ? "tour_completed" : "tour_skipped",
+          event: finished && lastStepReached ? "tour_completed" : "tour_skipped",
           tourId: tour.tourId,
           page: tour.route,
         });
-        onComplete?.();
+        if (finished) onComplete?.();
       },
     });
 

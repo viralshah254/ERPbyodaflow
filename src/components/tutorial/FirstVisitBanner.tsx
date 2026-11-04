@@ -84,7 +84,7 @@ export function FirstVisitBanner() {
     [markPageVisited, normalizedPath]
   );
 
-  if (!showBanner) return null;
+  if (!showBanner || normalizedPath === "/manufacturing/boms" || normalizedPath.startsWith("/manufacturing/boms/")) return null;
 
   return (
     <>

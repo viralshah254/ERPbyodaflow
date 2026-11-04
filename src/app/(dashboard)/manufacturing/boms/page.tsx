@@ -21,8 +21,9 @@ import { useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 import * as Icons from "lucide-react";
+
+import { BomPilotHelp } from "@/components/manufacturing/BomPilotHelp";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE = 25;
@@ -81,6 +82,8 @@ export default function BomsPage() {
   const [statusFilter, setStatusFilter] = React.useState("");
   const [rows, setRows] = React.useState<BomRow[]>([]);
   const [initialLoading, setInitialLoading] = React.useState(true);
+  const [loadError, setLoadError] = React.useState("");
+  const requestSequence = React.useRef(0);
   const [fetching, setFetching] = React.useState(false);
   const [pageOffset, setPageOffset] = React.useState(0);
   const [hasMore, setHasMore] = React.useState(false);
@@ -93,6 +96,8 @@ export default function BomsPage() {
 
   const loadPage = React.useCallback(
     async (offset: number) => {
+      const requestId = ++requestSequence.current;
+      setLoadError("");
       const isFirstLoad = !hasLoadedOnce.current;
       if (isFirstLoad) setInitialLoading(true);
       else setFetching(true);
@@ -104,24 +109,27 @@ export default function BomsPage() {
           type: typeFilter || undefined,
           status: (statusFilter as "" | "active" | "inactive") || undefined,
         });
+        if (requestId !== requestSequence.current) return;
         setRows(page.items.map(toRow));
         setPageOffset(page.offset);
         setHasMore(page.hasMore);
         hasLoadedOnce.current = true;
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Failed to load BOMs.");
+        if (requestId === requestSequence.current) setLoadError(error instanceof Error ? error.message : "Failed to load BOMs.");
       } finally {
-        setInitialLoading(false);
-        setFetching(false);
+        if (requestId === requestSequence.current) {
+          setInitialLoading(false);
+          setFetching(false);
+        }
       }
     },
     [debouncedSearch, typeFilter, statusFilter]
   );
 
   React.useEffect(() => {
-    hasLoadedOnce.current = false;
     setPageOffset(0);
     void loadPage(0);
+    return () => { requestSequence.current += 1; };
   }, [loadPage]);
 
   const handleRefresh = React.useCallback(() => {
@@ -195,14 +203,14 @@ export default function BomsPage() {
       },
       {
         id: "qty",
-        header: "Batch",
+        header: "Batch output",
         accessor: (r: BomRow) => (
           <span className="tabular-nums text-sm">
             {r.quantity} {r.uom}
           </span>
         ),
       },
-      { id: "version", header: "Ver.", accessor: "version" as keyof BomRow },
+      { id: "version", header: "Version", accessor: "version" as keyof BomRow },
       {
         id: "type",
         header: "Type",
@@ -233,13 +241,19 @@ export default function BomsPage() {
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
-        title={`Bills of Material (${bomLabel})`}
+        title={bomLabel}
+        help={<BomPilotHelp screen="list" steps={[
+          { id: "search", target: "[data-bom-search]", title: "Find the recipe you need", description: "Search by BOM code, recipe name or finished product. This only filters the library; it does not change a recipe.", instruction: "Enter a search term, then continue. Clear it later to see all recipes.", complete: search.trim().length > 0 && !initialLoading && !tableBusy && !loadError },
+          { id: "filters", target: "[data-bom-filters]", title: "Choose a recipe type or status", description: "BOM assembles components, Formula describes batch production, and Disassembly describes a reverse process. Active and inactive are availability filters, not revision approval states.", instruction: "Select a type or status. You can clear the filters afterwards.", complete: !!typeFilter || !!statusFilter },
+          { id: "records", target: "[data-bom-records]", title: rows.length ? "Compare output and version" : "No matching recipes", description: rows.length ? "Batch output is the quantity and unit this recipe defines. Check the finished product, version and active status before opening a code or row. Counts here reflect this page, not the entire library." : "Try clearing the search or changing the filters. An empty result does not mean the library has no recipes." },
+          { id: "next", target: "[data-bom-next]", title: canWrite ? "Open a record or create a BOM" : "Review an existing BOM", description: canWrite ? "New BOM defines the product and batch output first. Add components on the record after creating it. Recipe governance manages revisions; MRP is for material planning." : "Open a recipe code to inspect components and routing. Your current access does not allow creating or editing BOMs. Recipe governance and MRP are related workspaces." },
+        ]} />}
         description="Recipes define what goes into a batch and how much it makes. Link a routing to describe the production steps."
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "BOMs" }]}
         sticky
         showCommandHint
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2" data-bom-next>
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/recipe-governance">Recipe governance</Link>
             </Button>
@@ -256,11 +270,19 @@ export default function BomsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-sm">
+          <p className="text-muted-foreground">Recipe library <span className="mx-2 text-border">/</span> Define the output, then build its components.</p>
+          <span className="rounded-full border bg-card px-3 py-1 text-xs tabular-nums">{initialLoading ? "Loading recipes…" : loadError ? "Library unavailable" : `${rows.length} on this page${hasMore ? " · more available" : ""}`}</span>
+        </div>
+        <div data-bom-filters className="shrink-0 rounded-xl">
         <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
           searchPlaceholder="Search code, name, or product…"
           searchValue={search}
           onSearchChange={setSearch}
+          searchInputDataHint="bom-search"
           searchInputProps={{
+            "aria-label": "Search BOM recipes",
+            ...{ "data-bom-search": true },
             spellCheck: false,
             autoComplete: "off",
           }}
@@ -268,6 +290,7 @@ export default function BomsPage() {
             {
               id: "type",
               label: "Type",
+              triggerClassName: "w-[140px]",
               options: TYPE_OPTIONS,
               value: typeFilter,
               onChange: setTypeFilter,
@@ -275,6 +298,7 @@ export default function BomsPage() {
             {
               id: "status",
               label: "Status",
+              triggerClassName: "w-[140px]",
               options: STATUS_OPTIONS,
               value: statusFilter,
               onChange: setStatusFilter,
@@ -298,14 +322,19 @@ export default function BomsPage() {
             </Button>
           }
         />
+        </div>
 
+        {loadError && <div role="alert" className="flex shrink-0 flex-wrap items-center justify-between gap-2 rounded-lg border border-destructive/40 bg-card p-3 text-sm">
+          <p>{loadError} Any rows shown are from the last successful load.</p>
+          <Button variant="outline" size="sm" onClick={handleRefresh}>Retry loading BOMs</Button>
+        </div>}
         {initialLoading ? (
           <SkeletonDataTable
             rows={PAGE_SIZE}
             columnWidths={["w-28", "w-36", "w-44", "w-20", "w-12", "w-24", "w-20"]}
           />
         ) : (
-          <div className={LIST_TABLE_SURFACE_CLASS}>
+          <div className={LIST_TABLE_SURFACE_CLASS} data-bom-records>
             <TableLinearProgress active={tableBusy} />
             <div
               className={cn(
@@ -316,7 +345,7 @@ export default function BomsPage() {
               <DataTable<BomRow> dataScope="page"
                 data={rows}
                 columns={columns}
-                emptyMessage="No BOMs match your filters. Create one to get started."
+                emptyMessage={loadError ? "Unable to load BOMs. Use Retry loading BOMs above." : filterChips.length ? "No matching recipes. Clear search or filters to see more BOMs." : canWrite ? "No recipes yet. Choose New BOM to define your first product and batch output." : "No recipes yet. Ask a manufacturing editor to create a BOM."}
                 onRowClick={(r) => router.push(`/manufacturing/boms/${encodeURIComponent(r.id)}`)}
                 scrollMode="fill"
                 size="comfortable"
@@ -326,7 +355,7 @@ export default function BomsPage() {
           </div>
         )}
 
-        <TablePagination
+        {!loadError && <TablePagination
           sticky
           pageOffset={pageOffset}
           pageSize={PAGE_SIZE}
@@ -337,7 +366,7 @@ export default function BomsPage() {
           onPrevious={goToPreviousPage}
           onNext={goToNextPage}
           entityLabel="BOMs"
-        />
+        />}
       </div>
     </PageShell>
   );

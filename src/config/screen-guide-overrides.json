@@ -1,0 +1,540 @@
+{
+  "/ap/suppliers/[id]": {
+    "title": "Supplier account",
+    "summary": "Review this supplier's outstanding balance, open bills and payment profile.",
+    "tasks": [
+      "Check the supplier identity and account status before using its balance.",
+      "Open bills and compare unpaid amounts with supplier statements and recorded payments.",
+      "Review contact and payment details before preparing a payment; investigate discrepancies in the source bill."
+    ]
+  },
+  "/assets/register/[id]": {
+    "title": "Asset record",
+    "summary": "Inspect an asset's acquisition details and custody history.",
+    "tasks": [
+      "Review the asset identity, cost, acquisition date and assigned accounts.",
+      "Read Details and the Custody timeline to establish who holds the asset.",
+      "Use only the lifecycle actions offered for the asset's current state and your role; verify their audit entries afterwards."
+    ]
+  },
+  "/distribution/trips/[id]": {
+    "title": "Delivery trip",
+    "summary": "Review a delivery trip's stops, route legs, costs and activity.",
+    "tasks": [
+      "Confirm the trip identity, vehicle, route and current status in Trip Summary.",
+      "Inspect route legs and cost lines before recording operational progress.",
+      "Read Activity and Audit before retrying a dispatch or close action; verify the resulting state in this trip."
+    ]
+  },
+  "/docs/[type]/[id]/edit": {
+    "title": "Edit document",
+    "summary": "Edit the selected document using its available draft fields.",
+    "tasks": [
+      "Confirm the document number, type and state before editing.",
+      "Review parties, dates, warehouse and product or accounting lines in the editor.",
+      "Resolve validation messages, review totals and save deliberately; posted documents require the supported correction process."
+    ]
+  },
+  "/docs/[type]/[id]": {
+    "title": "Document record",
+    "summary": "Review the selected document's lines, status, linked records and audit evidence.",
+    "tasks": [
+      "Confirm the document type, number, party and current status.",
+      "Inspect product or accounting lines, taxes, attachments and linked source documents using the available tabs.",
+      "Use only the actions offered for this state; submission, approval, posting and fiscal signing have different effects.",
+      "Review history and source links before retrying a payment, posting or fiscal action."
+    ]
+  },
+  "/docs/[type]/new": {
+    "title": "Create document",
+    "summary": "Prepare the selected type of document without posting it through the tutorial.",
+    "tasks": [
+      "Choose the correct party and source references in the wizard.",
+      "Review the required dates, location and currency fields for this document type.",
+      "Add and verify product or accounting lines, units, quantities, prices and tax as applicable.",
+      "Review validation and totals, then use the offered save action deliberately; the guide never submits the document."
+    ]
+  },
+  "/docs/[type]": {
+    "title": "Document list",
+    "summary": "Find a document of the selected type and continue it in the correct state.",
+    "tasks": [
+      "Search by document number, party or reference and apply the available status and date filters.",
+      "Check the document type, total, currency and status before opening a row.",
+      "Open the intended document or use New to prepare one when your role allows it."
+    ]
+  },
+  "/docs/grn/[id]": {
+    "title": "Goods receipt record",
+    "summary": "Verify a goods receipt's source, received quantities, stock and audit evidence.",
+    "tasks": [
+      "Confirm supplier, source purchase order and receiving warehouse.",
+      "Inspect receipt lines, units, lot and quality evidence where required.",
+      "Review tax and activity before using the permitted receipt action; confirm posted stock in the linked inventory records."
+    ]
+  },
+  "/docs/grn/new": {
+    "title": "Create goods receipt",
+    "summary": "Prepare receipt quantities against the correct supplier and purchase order.",
+    "tasks": [
+      "Select the source purchase order or supplier using the receipt workflow.",
+      "Confirm the receiving warehouse, date, quantities and units actually received.",
+      "Complete lot, measurement and quality information required by this template.",
+      "Review discrepancies and validation before saving or posting deliberately."
+    ]
+  },
+  "/finance/fixed-assets": {
+    "title": "Fixed assets workspace",
+    "summary": "Review asset cost, depreciation runs and lifecycle actions from finance.",
+    "tasks": [
+      "Read asset count, active assets and total cost in the selected scope.",
+      "Inspect depreciation runs and compare the proposed charge with asset records and periods.",
+      "Use Lifecycle Actions for the supported accounting operation, then inspect its source journal."
+    ]
+  },
+  "/franchise/commission/runs/[id]": {
+    "title": "Commission run record",
+    "summary": "Review the period, outlet lines and state of a franchise commission run.",
+    "tasks": [
+      "Confirm the run identity, period and header state.",
+      "Inspect outlet lines and calculated commission evidence before accepting the run.",
+      "Use the actions offered for your role and verify the updated state; franchise SKU commissions are separate from employee payroll earnings."
+    ]
+  },
+  "/franchise/outlets/[id]": {
+    "title": "Franchise outlet record",
+    "summary": "Review an outlet's operational profile, location and product performance.",
+    "tasks": [
+      "Confirm the outlet identity, organisation and current operating state.",
+      "Inspect performance and Top products for the displayed period.",
+      "Review GPS coordinates and the available operational tabs; save changes only with the required outlet permission."
+    ]
+  },
+  "/inbox": {
+    "title": "Work inbox",
+    "summary": "Prioritise pending approvals, operational alerts and assigned tasks.",
+    "tasks": [
+      "Review Pending approvals for decisions waiting on your role.",
+      "Open an alert's source record before attempting a corrective action.",
+      "Inspect assigned Tasks and update a task only when the underlying work is complete."
+    ]
+  },
+  "/inventory/receipts/[id]": {
+    "title": "Inventory receipt record",
+    "summary": "Inspect a receipt's supplier, stock lines, tax and posting history.",
+    "tasks": [
+      "Confirm the receipt identity, supplier, warehouse and current state.",
+      "Review Receipt Lines for actual received quantities, units and traceability evidence.",
+      "Compare Tax and Activity and Audit with the source purchase before performing the allowed posting action."
+    ]
+  },
+  "/inventory/stock": {
+    "title": "Stock workspace",
+    "summary": "Review stock at the current product and warehouse scope.",
+    "tasks": [
+      "Search for the product and select the relevant warehouse or location.",
+      "Compare on-hand, reserved and available quantities using the units shown.",
+      "Open movements or a source receipt to investigate a difference before preparing an adjustment."
+    ]
+  },
+  "/inventory/stock-levels/[id]": {
+    "title": "Stock location record",
+    "summary": "Inspect a product's stock at one location and compare other locations.",
+    "tasks": [
+      "Confirm the selected SKU, location and unit before reading the stock balance.",
+      "Review Stock at this location, including reserved and available quantities.",
+      "Compare Same SKU at other locations; use the transfer workflow for a physical move rather than editing the balance."
+    ]
+  },
+  "/manufacturing/boms/[id]": {
+    "title": "BOM record",
+    "summary": "Review output, components and routing for the selected BOM revision.",
+    "tasks": [
+      "Check the finished product, batch output, version and lifecycle.",
+      "Review component products, quantities, units, stores and scrap in Components.",
+      "Inspect Routing; route changes save immediately, so change it only deliberately.",
+      "Use revision governance for controlled production changes."
+    ]
+  },
+  "/manufacturing/boms/new": {
+    "title": "New BOM",
+    "summary": "Define a BOM's product and batch output, then add components on its record.",
+    "tasks": [
+      "Enter a name and select the correct product from the catalogue.",
+      "Set the batch quantity and output unit, then review the production method.",
+      "Choose an output warehouse or leave it to the work order.",
+      "Review the batch preview and create deliberately; this does not post stock."
+    ]
+  },
+  "/manufacturing/subcontracting/orders/[id]": {
+    "title": "Subcontract order record",
+    "summary": "Trace a subcontract order through inputs, outputs, transport and cost evidence.",
+    "tasks": [
+      "Confirm the processor, product, quantities and current order state.",
+      "Inspect Outbound trip and Lines for stock sent out and output expected back.",
+      "Review the Batch cost chain, fee-to-COGS variance and Yield batches before settlement.",
+      "Use the permitted receipt or completion action only after matching the physical and cost evidence."
+    ]
+  },
+  "/manufacturing/subcontracting/orders": {
+    "title": "Subcontract orders",
+    "summary": "Locate subcontract production orders and inspect processor, progress and material linkage.",
+    "tasks": [
+      "Filter or search for the intended subcontract order.",
+      "Compare processor, product and status before opening its record.",
+      "Create a new order only when stock, processing terms and your permissions support the task."
+    ]
+  },
+  "/manufacturing/work-orders/[id]": {
+    "title": "Production work order",
+    "summary": "Prepare and execute this production order using its saved recipe and measurement controls.",
+    "tasks": [
+      "Confirm the product, warehouse, recipe snapshot and lifecycle before releasing or starting.",
+      "Review Production steps and Materials in the warehouse; investigate shortages before consumption.",
+      "Record actual production and trusted measurement evidence where required; complete only when the physical batch is ready.",
+      "Review Production reconciliation for immutable material, yield and cost evidence after completion."
+    ]
+  },
+  "/manufacturing/yield/[id]": {
+    "title": "Yield record",
+    "summary": "Inspect a production yield record's source batch, output lines and history.",
+    "tasks": [
+      "Confirm source batch, processor or work order and the units in Yield Record Summary.",
+      "Compare Output lines with measured input and the expected production basis.",
+      "Review Activity and Audit and linked inventory evidence before using any correction workflow."
+    ]
+  },
+  "/master/products/[id]/attributes": {
+    "title": "Product attributes",
+    "summary": "Review attribute definitions and variants for the selected product.",
+    "tasks": [
+      "Confirm the base product and its existing attribute definitions.",
+      "Inspect Variants using attributes before changing a shared attribute.",
+      "Save only the allowed catalogue change and check the affected variants afterwards."
+    ]
+  },
+  "/master/products/[id]/packaging": {
+    "title": "Product packaging",
+    "summary": "Inspect unit conversions and packaging for this product.",
+    "tasks": [
+      "Confirm the base SKU and base unit.",
+      "Review each UOM conversion and its factor; distinguish packs, sale units and measured quantities.",
+      "Save an authorised conversion change and verify the resulting quantities in a representative draft document."
+    ]
+  },
+  "/master/products/[id]": {
+    "title": "Product record",
+    "summary": "Review a product's identity, classification, pricing and validations.",
+    "tasks": [
+      "Confirm product code, name, base unit and current status.",
+      "Inspect Classification and Pricing along with the product's price-tag assignments.",
+      "Resolve Validations and open the relevant variants, attributes or packaging workspace before changing shared catalogue data."
+    ]
+  },
+  "/master/products/[id]/pricing": {
+    "title": "Product pricing",
+    "summary": "Review a product's prices, tiers and validation across price lists.",
+    "tasks": [
+      "Confirm SKU, unit, currency and the effective price basis.",
+      "Inspect Validations and Compare price lists before reviewing quantity tiers.",
+      "Save only authorised prices or assignments; verify the effective price in the relevant customer draft."
+    ]
+  },
+  "/master/products/[id]/variants": {
+    "title": "Product variants",
+    "summary": "Inspect variants associated with the selected base product.",
+    "tasks": [
+      "Confirm the base product and variant attribute combinations.",
+      "Open the intended variant and compare its code, unit and status.",
+      "Create or edit variants only through the available catalogue actions and check for duplicate combinations."
+    ]
+  },
+  "/onboarding": {
+    "title": "Organisation setup",
+    "summary": "Complete the ERP setup checklist in dependency order.",
+    "tasks": [
+      "Confirm the active organisation and the setup checklist's remaining work.",
+      "Complete master data, financial mappings and access setup using the linked screens.",
+      "Return to the checklist to verify completion and test a representative operational draft before go-live."
+    ]
+  },
+  "/payroll/employees/[id]": {
+    "title": "Employee record",
+    "summary": "Review an employee's employment, statutory and payout readiness.",
+    "tasks": [
+      "Confirm the employee identity and employment state.",
+      "Inspect Employment profile and Statutory context using the organisation's approved HR information.",
+      "Review Bank and payout readiness before a pay run; save sensitive changes only with the required role."
+    ]
+  },
+  "/payroll/leave/balances": {
+    "title": "Leave balances",
+    "summary": "Review employees' available leave by policy and period.",
+    "tasks": [
+      "Select the applicable employee or scope offered by the page.",
+      "Compare entitlement, taken leave and remaining balance under the relevant policy.",
+      "Investigate approved leave requests and policy settings before adjusting a balance."
+    ]
+  },
+  "/payroll/leave/calendar": {
+    "title": "Leave calendar",
+    "summary": "Review approved leave and staffing impact for the selected month.",
+    "tasks": [
+      "Choose the relevant calendar month and team scope.",
+      "Inspect approved leaves on the calendar and All leaves this month.",
+      "Open a source request for details; a calendar review does not approve or cancel leave."
+    ]
+  },
+  "/payroll/leave/policies": {
+    "title": "Leave policies",
+    "summary": "Configure leave entitlement and approval policy using approved HR rules.",
+    "tasks": [
+      "Review the existing leave types and entitlement policy.",
+      "Inspect the fields and effective scope before editing a policy.",
+      "Save an authorised change and verify its effect on a representative employee's balance and request."
+    ]
+  },
+  "/payroll/leave/requests": {
+    "title": "Leave requests",
+    "summary": "Review employee leave requests and their approval state.",
+    "tasks": [
+      "Filter Requests to the employee, period or status relevant to your role.",
+      "Open a request and compare dates, leave type, balance and supporting details.",
+      "Approve or reject only through the offered workflow and verify the employee's resulting leave state."
+    ]
+  },
+  "/payroll/pay-runs/[id]": {
+    "title": "Payroll run record",
+    "summary": "Inspect a pay run's period, employee lines and payroll totals.",
+    "tasks": [
+      "Confirm the run period, scope and current state in Summary.",
+      "Review employee Lines and investigate unexpected earnings, deductions or payout readiness.",
+      "Use calculation, approval or posting only as permitted by the current state; inspect resulting payroll and accounting evidence."
+    ]
+  },
+  "/pricing/price-lists/[id]": {
+    "title": "Price list record",
+    "summary": "Review prices and the supported pricing engine for this list.",
+    "tasks": [
+      "Confirm list identity, currency and applicable customer or zone scope.",
+      "Inspect product prices, units, effective dates and available engine settings.",
+      "Review changes before saving; verify the effective price on a representative customer draft."
+    ]
+  },
+  "/pricing/workspace/packs": {
+    "title": "Product pack configuration",
+    "summary": "Review product units and packaging in the catalogue workspace.",
+    "tasks": [
+      "Open the intended product and review its base unit.",
+      "Inspect Packaging and UOM conversions before changing pack factors.",
+      "Verify the resulting quantities in an operational draft before relying on a new conversion."
+    ]
+  },
+  "/projects/[id]": {
+    "title": "Project record",
+    "summary": "Review a project's budget, time and linked source costs.",
+    "tasks": [
+      "Confirm the project identity, state and Budget.",
+      "Compare Timesheet hours, Linked source value and Recorded labor estimate.",
+      "Use Planning estimate vs budget to investigate differences; estimates and linked posted values have different bases."
+    ]
+  },
+  "/purchasing/cash-weight-audit/override/[id]": {
+    "title": "Weight correction request",
+    "summary": "Review a requested weight correction against its original measurement evidence.",
+    "tasks": [
+      "Confirm the source receipt or batch and the requester's reason.",
+      "Compare the values in Weight comparison with retained physical and measurement evidence.",
+      "Use Decision only with the authorised review role; verify the resulting record and audit entry."
+    ]
+  },
+  "/purchasing/goods-receipt": {
+    "title": "Goods receipts",
+    "summary": "Find goods receipts and verify purchase linkage before receiving stock.",
+    "tasks": [
+      "Search Goods Receipt Notes by supplier, source reference or document number.",
+      "Check receipt status, warehouse, quantities and related purchase order.",
+      "Open the intended receipt or prepare one using the offered receiving workflow."
+    ]
+  },
+  "/purchasing/orders/[id]": {
+    "title": "Purchase order record",
+    "summary": "Trace a purchase order's requested quantities, receipts, bills and additional costs.",
+    "tasks": [
+      "Confirm supplier, currency, amounts and current state in Purchase Order Summary.",
+      "Compare Goods receipts, Linked supplier bills and Purchase vs received quantities.",
+      "Inspect Additional costs before deciding whether to receive, match, amend or close through the permitted action."
+    ]
+  },
+  "/purchasing/purchase-orders": {
+    "title": "Purchase orders workspace",
+    "summary": "Find and inspect supplier purchase orders.",
+    "tasks": [
+      "Search or filter the relevant supplier orders.",
+      "Compare quantities, amounts and status before opening a record.",
+      "Review receipt and supplier-bill linkage in the selected order before continuing procurement."
+    ]
+  },
+  "/purchasing/supplier-invoices": {
+    "title": "Supplier invoices",
+    "summary": "Find supplier bills and review their purchase and receipt linkage.",
+    "tasks": [
+      "Search Supplier Invoices for the supplier reference or bill number.",
+      "Check amount, currency, matching state and posting status.",
+      "Open the intended bill, resolve match exceptions and continue only with the permitted posting or payment action."
+    ]
+  },
+  "/reports/batch-costing": {
+    "title": "Batch costing report",
+    "summary": "Review production costs by batch without combining unlike units.",
+    "tasks": [
+      "Choose the Filters for period and the production scope offered by the page.",
+      "Run the report deliberately and inspect Cost breakdown by batch.",
+      "Compare material, processing and other cost components with source batches; export only after checking the report basis."
+    ]
+  },
+  "/reports/commission-reconciliation": {
+    "title": "Commission reconciliation",
+    "summary": "Compare commission calculations with their run and source evidence.",
+    "tasks": [
+      "Select the relevant run and scope in Run reconciliation.",
+      "Load the comparison deliberately and inspect differences.",
+      "Investigate source pricing, outlet assignments and run state before correcting a discrepancy."
+    ]
+  },
+  "/reports/manufacturing/[reportId]": {
+    "title": "Manufacturing report",
+    "summary": "Review this manufacturing report's filters, basis, units and production evidence.",
+    "tasks": [
+      "Select the period and required recipe, work order or warehouse scope offered for this report.",
+      "Run the report deliberately and read its basis and warnings.",
+      "Inspect source quantities and costs without combining different units; export only after checking applied filters."
+    ]
+  },
+  "/reports/operations/[reportId]": {
+    "title": "Operations report",
+    "summary": "Review this operational report using its declared source basis and filters.",
+    "tasks": [
+      "Choose the period and operational scope offered by this report.",
+      "Load the result deliberately and inspect warnings and missing source evidence.",
+      "Open source records for differences before exporting or saving a report snapshot."
+    ]
+  },
+  "/sales/customers/[id]": {
+    "title": "Customer account",
+    "summary": "Review the selected customer's credit, invoices, payments and account details.",
+    "tasks": [
+      "Confirm the customer identity, credit limit, available credit and payment terms.",
+      "Open Orders, Invoices, Payments, Credit or Ledger to investigate the account using the available tabs.",
+      "Review the account profile before creating a new order; check existing payments before recording a collection."
+    ]
+  },
+  "/sales/orders/franchise-inbound/[outletOrgId]/[prId]": {
+    "title": "Franchise inbound order",
+    "summary": "Review an outlet purchase request before accepting it as a franchise sales order.",
+    "tasks": [
+      "Confirm the requesting outlet, source request and status in Summary.",
+      "Read Notes and compare requested product Lines, units and prices.",
+      "Use the supported order action only after resolving matching or availability issues; verify linkage to the source request."
+    ]
+  },
+  "/sales/orders/franchise-inbound/new": {
+    "title": "Create franchise order",
+    "summary": "Prepare an order for the correct franchise outlet and product scope.",
+    "tasks": [
+      "Choose the Franchise outlet and confirm the intended destination.",
+      "Select Products and review quantities, units and effective prices.",
+      "Check Order summary and validation before saving or submitting deliberately."
+    ]
+  },
+  "/settings/customization": {
+    "title": "ERP customisation",
+    "summary": "Open the available customisation workspace for modules, workflows or dashboards.",
+    "tasks": [
+      "Choose the configuration area relevant to the requested change.",
+      "Review the current configuration and its organisation scope.",
+      "Save authorised changes and verify the affected workspace without changing role permissions through navigation."
+    ]
+  },
+  "/settings/products/packaging-defaults": {
+    "title": "Packaging setup",
+    "summary": "Maintain product packaging through the supported product catalogue workspace.",
+    "tasks": [
+      "Open the intended product from the catalogue.",
+      "Review base unit and Packaging conversions before editing pack factors.",
+      "Verify a representative draft after saving an authorised conversion change."
+    ]
+  },
+  "/treasury/payment-runs/[id]": {
+    "title": "Payment run record",
+    "summary": "Inspect a payment run's header, bills and settlement state.",
+    "tasks": [
+      "Confirm bank account, currency, period and current state in Header.",
+      "Review Run lines for duplicate bills, due amounts and payment references.",
+      "Use the permitted export or posting action deliberately; generating a file or recording a payment does not itself confirm a bank transfer."
+    ]
+  },
+  "/tutorial/[chapterId]/[guideId]": {
+    "title": "ERP task guide",
+    "summary": "Read a task's prerequisites, instructions and related working screen.",
+    "tasks": [
+      "Review the guide title, objective and numbered instructions.",
+      "Follow the working-screen link for this task and launch its interactive Help.",
+      "Use related guides for the next workflow and confirm your role has the required access."
+    ]
+  },
+  "/tutorial/[chapterId]": {
+    "title": "ERP module guides",
+    "summary": "Find the task guide for this ERP module.",
+    "tasks": [
+      "Search or browse the module's available tasks.",
+      "Read the task outcome and open the relevant guide.",
+      "Open its working ERP screen and use Help for a walkthrough of its visible controls."
+    ]
+  },
+  "/warehouse/cycle-counts/[id]": {
+    "title": "Cycle count record",
+    "summary": "Review and reconcile a warehouse count's expected and measured quantities.",
+    "tasks": [
+      "Confirm warehouse, count scope and current state.",
+      "Inspect Count lines, units and recorded quantities; investigate differences against physical stock.",
+      "Submit or post adjustments only through the supported count workflow and verify resulting inventory movements."
+    ]
+  },
+  "/warehouse/dispatch-returns/[id]": {
+    "title": "Dispatch return record",
+    "summary": "Verify returned delivery quantities before receiving them back into stock.",
+    "tasks": [
+      "Confirm the source dispatch, returning party and receiving store in Receipt.",
+      "Inspect Lines and enter only the quantities and units physically returned.",
+      "Review Confirm quantity and post to stock; posting is a real inventory action that requires your explicit confirmation."
+    ]
+  },
+  "/warehouse/pick-pack/[id]": {
+    "title": "Pick and pack task",
+    "summary": "Fulfil the assigned order from the correct warehouse and preserve shortage evidence.",
+    "tasks": [
+      "Confirm Fulfilment warehouse and inspect the Picklist quantities and units.",
+      "If Stock is in another site, follow a transfer or authorised source change rather than treating it as local stock.",
+      "Review Pack details and the Dispatch handoff; record actual quantities before completing the permitted task."
+    ]
+  },
+  "/warehouse/putaway/[id]": {
+    "title": "Putaway task",
+    "summary": "Allocate received inventory to the correct warehouse bins.",
+    "tasks": [
+      "Confirm the task's source receipt, product, warehouse and remaining quantity.",
+      "Review Allocate to bins and the permitted destination locations.",
+      "Confirm actual allocation deliberately and verify the task balance and inventory location afterwards."
+    ]
+  },
+  "/warehouse/transfers/[id]": {
+    "title": "Stock transfer record",
+    "summary": "Review a stock move between its source and destination warehouses.",
+    "tasks": [
+      "Confirm source, destination, date and state in Header.",
+      "Inspect Lines for products, quantities and units before moving stock.",
+      "Read Activity before dispatching or receiving through the permitted transfer workflow; verify both location balances."
+    ]
+  }
+}

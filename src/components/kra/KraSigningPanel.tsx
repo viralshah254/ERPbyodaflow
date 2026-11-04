@@ -143,6 +143,8 @@ export function KraSigningPanel({
           </dl>
         ) : null}
 
+        {kraSigning?.status === "skipped" && kraSigning.errorMessage ? <p className="rounded-md border p-3 text-sm">{kraSigning.errorMessage}</p> : null}
+
         {kraSigning?.status === "failed" && kraSigning.errorMessage ? (
           <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3">
             <p className="font-medium text-destructive mb-1">Decline reason</p>

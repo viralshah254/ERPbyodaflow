@@ -3,6 +3,7 @@
  * Used by the Tutorial page and PageHelp for route-based help.
  */
 
+import SCREEN_GUIDE_ADDITIONS from "./screen-guide-overrides.json";
 import { NAV_SECTIONS_CONFIG } from "@/config/navigation/sections";
 import type { NavItemConfig } from "@/config/navigation/types";
 import { SETTINGS_HUB_GROUPS } from "@/lib/settings/settings-hub-links";
@@ -355,8 +356,10 @@ const CHAPTER_META: Record<
 
 export function writtenGuide(key: string, href: string) {
   const alias = GUIDE_ALIASES[key];
-  return ROUTE_GUIDES[href] ?? COMPLETION_GUIDES[key] ?? ITEM_GUIDES[key] ??
+  const base = ROUTE_GUIDES[href] ?? COMPLETION_GUIDES[key] ?? ITEM_GUIDES[key] ??
     (alias ? COMPLETION_GUIDES[alias] ?? ITEM_GUIDES[alias] : undefined) ?? ORPHAN_ROUTE_GUIDES[href];
+  const addition = (SCREEN_GUIDE_ADDITIONS as Record<string, { summary: string; tasks: string[] }>)[href];
+  return addition ? { ...base, guideSummary: addition.summary, guideSteps: addition.tasks } : base;
 }
 
 function flattenNavItems(items: NavItemConfig[]): TutorialItem[] {
@@ -429,6 +432,16 @@ for (const entry of REPORT_SUITE_CATALOG) {
     guideTips: ["A report or tutorial does not post transactions or prove that a period has been reconciled. Follow the source workflow for corrections."],
   });
 }
+// Publish additional real workspace guides; parameter patterns are resolved by contextual Help,
+// never offered as invalid navigation links in the library.
+for (const [href, guide] of Object.entries(SCREEN_GUIDE_ADDITIONS)) {
+  if (href.includes("[") || href.endsWith("/new") || TUTORIAL_CHAPTERS.some(ch => ch.items.some(item => item.href === href))) continue;
+  const segment = href.split("/")[1];
+  const chapter = TUTORIAL_CHAPTERS.find(ch => ch.id === (segment === "manufacturing" ? "processing" : segment)) ?? TUTORIAL_CHAPTERS.find(ch => ch.items.some(item => item.href.startsWith(`/${segment}/`)));
+  if (!chapter) continue;
+  const related = chapter.items.find(item => href.startsWith(`${item.href}/`));
+  chapter.items.push({ key: `screen-${href.slice(1).replaceAll("/", "-")}`, href, label: guide.title, guideSummary: guide.summary, guideSteps: guide.tasks, requiresPermissions: related?.requiresPermissions ?? [segment === "manufacturing" ? "manufacturing.read" : segment === "settings" ? "admin.settings" : `${segment}.read`] });
+}
 TUTORIAL_CHAPTERS.unshift({ id: "workflows", title: "Complete workflows", description: "Follow work across teams: sales to cash, purchasing to payment, production to verified stock, returns, reconciliation and close.", copilotPrompt: "Explain an end-to-end ERP workflow using the saved handbook.", items: WORKFLOW_GUIDES });
 TUTORIAL_CHAPTERS.push({ id: "help", title: "Using ERP help", description: "Search, read guides, follow screen links and ask Gaia for explanations.", copilotPrompt: "Explain how to find and use ERP tutorials.", items: [{ key: "help-centre", label: "Search tutorials and ask Gaia", href: "/tutorial", guideSummary: "Find instructions across the ERP and share links to the exact guide a colleague needs.", guideSteps: ["Search a task or abbreviation in the ERP help centre. Use the module filter to narrow the results.", "Open Read guide for numbered instructions, tips and the related ERP screen link.", "Choose Explain with Gaia to ask about that exact guide. Gaia uses the handbook as reference and offers saved steps if its AI service is unavailable.", "Use Copy guide link to share the tutorial address. Access to screens and actions still follows the recipient's ERP role."] }] });
 
@@ -497,7 +510,7 @@ export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
   let best: { chapter: TutorialChapter; item?: TutorialItem; score: number } | null =
     null;
 
-  for (const chapter of TUTORIAL_CHAPTERS) {
+  for (const chapter of TUTORIAL_CHAPTERS.filter(chapter => chapter.id !== "workflows")) {
     for (const item of chapter.items) {
       const itemPath = item.href.replace(/\/$/, "") || "/";
       if (normalized === itemPath) {

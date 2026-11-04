@@ -78,9 +78,10 @@ export function DataTableToolbar({
   children,
 }: DataTableToolbarProps) {
   return (
-    <div className={cn("space-y-2", className)}>
+    <div className={cn("space-y-3 rounded-xl border bg-card p-3 shadow-sm", className)}>
       <div className="flex flex-wrap items-center gap-2">
         <FiltersBar
+          className="min-w-0 flex-1 border-0 bg-transparent p-0"
           searchPlaceholder={searchPlaceholder}
           searchValue={searchValue}
           onSearchChange={onSearchChange}

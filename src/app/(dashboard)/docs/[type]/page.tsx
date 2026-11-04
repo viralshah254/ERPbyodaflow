@@ -1,4 +1,5 @@
 "use client";
+import { useAccountingOnly } from "@/lib/api/invoice-posting";
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -223,6 +224,7 @@ function buildColumns(
 }
 
 export default function DocTypeListPage() {
+  const accountingOnly = useAccountingOnly();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -463,7 +465,7 @@ export default function DocTypeListPage() {
     if (!approveIds.length) {
       if (type === "invoice") {
         toast.info(
-          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use Sign and post.",
+          "Approve only applies to items pending approval (e.g. credit policy). For draft invoices, use the posting action.",
         );
       } else {
         toast.info(
@@ -529,7 +531,7 @@ export default function DocTypeListPage() {
       await loadPage(pageOffset);
       if (succeeded.length) {
         toast.success(
-          isIncotexSignableDocType(type)
+          isIncotexSignableDocType(type) && !accountingOnly
             ? `${succeeded.length} ${label.toLowerCase()} record(s) signed and posted.`
             : `${succeeded.length} ${label.toLowerCase()} record(s) posted.`,
         );
@@ -725,7 +727,7 @@ export default function DocTypeListPage() {
                 ) : null}
                 {showBulkPost ? (
                   <Button variant="outline" size="sm" onClick={handleBulkPost}>
-                    {isIncotexSignableDocType(type) ? "Sign and post" : "Post"}
+                    {isIncotexSignableDocType(type) && !accountingOnly ? "Sign and post" : "Post"}
                   </Button>
                 ) : null}
                 <Button variant="outline" size="sm" onClick={handleExport}>

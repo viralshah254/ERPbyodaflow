@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchInvoicePostingMode, saveInvoicePostingMode, type InvoicePostingMode } from "@/lib/api/invoice-posting";
 import * as React from "react";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
@@ -47,6 +48,10 @@ export default function KraIntegrationSettingsPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
   const canSave = hasRuntimePermission(permissions, "admin.settings");
 
+  const [postingMode, setPostingMode] = React.useState<InvoicePostingMode>("KRA_REQUIRED");
+  const [modeLoaded, setModeLoaded] = React.useState(false);
+  const [modeSaving, setModeSaving] = React.useState(false);
+  React.useEffect(() => { void fetchInvoicePostingMode().then(data => { setPostingMode(data.mode); setModeLoaded(true); }).catch(() => toast.error("Failed to load invoice posting mode.")); }, []);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
@@ -178,6 +183,16 @@ export default function KraIntegrationSettingsPage() {
 
         {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
 
+        <Card>
+          <CardHeader><CardTitle>Invoice posting mode</CardTitle><CardDescription>Accounting-only posts real sales to the ledger without sending invoices or adjustment notes to KRA. They remain not submitted to KRA. Enabling signing later applies to future posting attempts; it does not automatically sign earlier invoices.</CardDescription></CardHeader>
+          <CardContent className="space-y-4">
+            <Select value={postingMode} onValueChange={value => setPostingMode(value as InvoicePostingMode)} disabled={!canSave || !modeLoaded || modeSaving}>
+              <SelectTrigger aria-label="Invoice posting mode"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="ACCOUNTING_ONLY">Accounting only — no KRA submission</SelectItem><SelectItem value="KRA_REQUIRED">KRA signing required</SelectItem></SelectContent>
+            </Select>
+            <Button disabled={!canSave || !modeLoaded || modeSaving} onClick={async () => { setModeSaving(true); try { await saveInvoicePostingMode(postingMode); toast.success("Invoice posting mode saved."); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not save posting mode."); } finally { setModeSaving(false); } }}>Save posting mode</Button>
+          </CardContent>
+        </Card>
         {incotexLocked ? (
           <Card>
             <CardHeader>

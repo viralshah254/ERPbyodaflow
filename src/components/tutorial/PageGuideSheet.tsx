@@ -63,6 +63,7 @@ export function PageGuideSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
+        data-guide-reference
         side="right"
         className="w-full flex flex-col overflow-hidden"
       >
