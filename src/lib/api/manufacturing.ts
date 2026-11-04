@@ -466,6 +466,7 @@ export async function fetchManufacturingWorkOrder(id: string): Promise<Manufactu
 }
 
 export async function createManufacturingWorkOrder(payload: {
+  reviewSignature?: string;
   requestId?: string;
   productId?: string;
   bomId?: string;
@@ -739,4 +740,9 @@ export async function postWorkOrderMaterials(id: string, body: { action: "issue"
 export async function postWorkOrderOperation(id: string, operationId: string, body: { status: "IN_PROGRESS" | "COMPLETED"; qcOutcome?: string; qcReason?: string }) {
   await requireManufacturingCapability("operations", "critical-operation-gates-v1");
   return apiRequest<ManufacturingWorkOrder>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/operations/${encodeURIComponent(operationId)}`, { method: "POST", body });
+}
+
+export type ProductionOutputPreview = Pick<ManufacturingWorkOrder, "materialLines" | "outputLines"> & { inputWarehouseIds: string[]; outputWarehouseId: string; shortages: string[]; reviewSignature: string };
+export async function previewProductionOutput(productId: string, quantity: number): Promise<ProductionOutputPreview> {
+  return apiRequest("/api/manufacturing/production-output/preview", { method: "POST", body: { productId, quantity } });
 }

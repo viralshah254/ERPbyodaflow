@@ -7,17 +7,18 @@ import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses";
 import {
-  fetchProductionPlanDefaults, createManufacturingWorkOrder, fetchManufacturingWorkOrder,
+  previewProductionOutput, type ProductionOutputPreview, fetchProductionPlanDefaults, createManufacturingWorkOrder, fetchManufacturingWorkOrder,
   runManufacturingWorkOrderAction, type ManufacturingWorkOrder, type ProductionPlanRow,
 } from "@/lib/api/manufacturing";
 import { toast } from "sonner";
 
-type Entry = { requestId: string; productId: string; quantity: string; weight: string; inputStore: string; outputStore: string; orderId?: string };
+type Entry = { requestId: string; productId: string; quantity: string; weight: string; inputStore: string; outputStore: string; orderId?: string; pendingPreview?: ProductionOutputPreview };
 const blankEntry = (): Entry => ({ requestId: crypto.randomUUID(), productId: "", quantity: "", weight: "", inputStore: "", outputStore: "" });
 
 /** Output-first recording. Frozen recipe materials and normal posting/QC remain authoritative. */
@@ -28,7 +29,7 @@ export function ProductionOutputEntry() {
   const [entry, setEntry] = React.useState<Entry | null>(null);
   const [products, setProducts] = React.useState<ProductionPlanRow[]>([]);
   const [stores, setStores] = React.useState<BackendWarehouse[]>([]);
-  const [search, setSearch] = React.useState("");
+
   const [busy, setBusy] = React.useState(false);
   const [order, setOrder] = React.useState<ManufacturingWorkOrder | null>(null);
   const [error, setError] = React.useState("");
@@ -44,13 +45,19 @@ export function ProductionOutputEntry() {
   }, [storageKey]);
   React.useEffect(() => {
     let active = true;
-    const timer = setTimeout(() => {
-      void fetchProductionPlanDefaults({ search: search.trim() || undefined, limit: 100 }).then((result) => {
-        if (active) setProducts(result.items);
-      }).catch((e) => { if (active) setError(e.message); });
-    }, 300);
-    return () => { active = false; clearTimeout(timer); };
-  }, [search]);
+    void (async () => {
+      const rows: ProductionPlanRow[] = [];
+      let cursor: string | undefined;
+      do {
+        const result = await fetchProductionPlanDefaults({ limit: 50, cursor, scope: "makeable" });
+        rows.push(...result.items);
+        if (!result.hasMore || !result.items.length) break;
+        cursor = String(rows.length);
+      } while (active);
+      if (active) setProducts(rows);
+    })().catch((e) => { if (active) setError(e.message); });
+    return () => { active = false; };
+  }, []);
   React.useEffect(() => {
     if (!entry?.orderId) return;
     void fetchManufacturingWorkOrder(entry.orderId).then(setOrder).catch((e) => setError(e.message));
@@ -59,88 +66,88 @@ export function ProductionOutputEntry() {
   const persist = (next: Entry) => { sessionStorage.setItem(storageKey, JSON.stringify(next)); setEntry(next); };
   const update = (patch: Partial<Entry>) => { if (entry) persist({ ...entry, ...patch }); };
   const product = products.find((p) => p.productId === entry?.productId);
-  const locked = busy || Boolean(entry?.orderId) || pendingCreate.current;
+  const locked = busy || Boolean(entry?.orderId || entry?.pendingPreview) || pendingCreate.current;
   const completed = order?.status === "COMPLETED";
-  const valid = entry && entry.productId && Number.isFinite(Number(entry.quantity)) && Number(entry.quantity) > 0
-    && Number.isFinite(Number(entry.weight)) && Number(entry.weight) > 0 && entry.inputStore && entry.outputStore;
-
-  const calculate = async () => {
-    if (!entry || !valid || !canWrite || busy) return;
-    setBusy(true); setError("");
-    // Keep the same request and values if the server responds late or the connection drops.
-    pendingCreate.current = true;
-    try {
-      persist(entry);
-      const result = await createManufacturingWorkOrder({ requestId: entry.requestId, productId: entry.productId,
-        quantity: Number(entry.quantity), inputWarehouseIds: [entry.inputStore], outputWarehouseId: entry.outputStore,
-        measurementMode: "MANUAL_SCALE", weighingRequired: true, notes: "Recorded from weighed finished production" });
-      persist({ ...entry, orderId: result.id });
-      setOrder(await fetchManufacturingWorkOrder(result.id));
-      pendingCreate.current = false;
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not calculate ingredients. Retry with the same entry."); }
-    finally { setBusy(false); }
-  };
+  const [preview, setPreview] = React.useState<ProductionOutputPreview | null>(null);
+  const [previewing, setPreviewing] = React.useState(false);
+  const [previewRevision, setPreviewRevision] = React.useState(0);
+  React.useEffect(() => {
+    setPreview(null);
+    if (entry?.pendingPreview) { setPreview(entry.pendingPreview); setPreviewing(false); return; }
+    if (!entry?.productId || !(Number(entry.quantity) > 0) || entry.orderId) { setPreviewing(false); return; }
+    let active = true;
+    setPreviewing(true);
+    const timer = setTimeout(() => {
+      void previewProductionOutput(entry.productId, Number(entry.quantity)).then((result) => {
+        if (active) { setPreview(result); setError(""); }
+      }).catch((e) => { if (active) setError(e.message); }).finally(() => { if (active) setPreviewing(false); });
+    }, 350);
+    return () => { active = false; clearTimeout(timer); };
+  }, [entry?.productId, entry?.quantity, entry?.orderId, entry?.pendingPreview, previewRevision]);
 
   const record = async () => {
-    if (!entry?.orderId || !canWrite || busy) return;
+    if (!entry || !canWrite || busy || (!entry.orderId && !preview)) return;
     setBusy(true); setError("");
     try {
-      // Refresh status on every retry; never repeat a successful transition or completion.
-      let current = await fetchManufacturingWorkOrder(entry.orderId);
+      let id = entry.orderId;
+      if (!id && preview) {
+        pendingCreate.current = true;
+        persist({ ...entry, pendingPreview: preview });
+        const result = await createManufacturingWorkOrder({ requestId: entry.requestId, productId: entry.productId,
+          quantity: Number(entry.quantity), inputWarehouseIds: preview.inputWarehouseIds, outputWarehouseId: preview.outputWarehouseId,
+          reviewSignature: preview.reviewSignature, measurementMode: "COUNT_ONLY", weighingRequired: false, notes: "Approved from quantity-only production entry" });
+        id = result.id;
+        persist({ ...entry, orderId: id, pendingPreview: undefined });
+        pendingCreate.current = false;
+      }
+      if (!id) return;
+      let current = await fetchManufacturingWorkOrder(id);
       if (current.status === "DRAFT") current = await runManufacturingWorkOrderAction(current.id, { action: "release" });
       if (current.status === "RELEASED") current = await runManufacturingWorkOrderAction(current.id, { action: "start" });
       if (current.status === "IN_PROGRESS") current = await runManufacturingWorkOrderAction(current.id, {
-        action: "complete", producedQuantity: Number(entry.quantity), measuredWeight: Number(entry.weight),
-        idempotencyKey: entry.requestId,
+        action: "complete", producedQuantity: Number(entry.quantity), idempotencyKey: entry.requestId,
+        ...(current.measurementMode !== "COUNT_ONLY" && Number(entry.weight) > 0 ? { measuredWeight: Number(entry.weight) } : {}),
       });
       setOrder(current);
-      if (current.status === "COMPLETED") toast.success("Production recorded. Finished goods are awaiting QC release.");
+      if (current.status === "COMPLETED") toast.success("Production posted. Finished goods are awaiting QC release.");
       else setError("This entry needs attention. Open its production record below.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not record production. You can safely retry."); }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "Could not post production. Retry this entry safely.";
+      if (!entry.orderId && (e as { status?: number })?.status === 400) {
+        pendingCreate.current = false; persist({ ...entry, pendingPreview: undefined, requestId: crypto.randomUUID() });
+      }
+      setError(message);
+    }
     finally { setBusy(false); }
   };
 
   if (!entry) return <PageShell><p>Loading production entry…</p></PageShell>;
+  const lines = order?.materialLines || preview?.materialLines || [];
+  const outputs = order?.outputLines || preview?.outputLines || [];
   return <PageShell>
-    <PageHeader title="Record production" description="Enter what Joy Bakers has produced. The recipe calculates ingredient usage backwards from the finished quantity."
+    <PageHeader title="Record production" description="Select a product and quantity. Review its formulation, then approve and post."
       actions={<Button variant="outline" asChild><Link href="/manufacturing/work-orders">Production records</Link></Button>} />
-    <div className="space-y-5">
-      <div className="rounded-xl border bg-card p-4 text-sm">Weigh finished output → enter quantity → review ingredients → record production</div>
+    <section className="space-y-5 rounded-xl border bg-card p-5">
       {error && <p role="alert" className="rounded-lg border border-destructive p-3 text-sm text-destructive">{error}</p>}
-      <section className="space-y-4 rounded-xl border bg-card p-5" aria-label="Finished production">
-        <h2 className="font-semibold">Finished production</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-2 text-sm">Search product<Input value={search} disabled={locked} onChange={(e) => setSearch(e.target.value)} placeholder="SKU or product name" /></label>
-          <label className="space-y-2 text-sm">Finished product<select className="block h-10 w-full rounded-md border bg-background px-3" value={entry.productId} disabled={locked} onChange={(e) => update({ productId: e.target.value, quantity: "", weight: "" })}>
-            <option value="">Choose a product</option>{!product && entry.productId && <option value={entry.productId}>{order?.productName || entry.productId}</option>}
-            {products.map((p) => <option key={p.productId} value={p.productId}>{p.productSku} · {p.productName} ({p.uom})</option>)}
-          </select><span className="text-xs text-muted-foreground">Search to find more products. Only products with recipes appear.</span></label>
-          <label className="space-y-2 text-sm">Finished quantity ({product?.uom || order?.outputLines[0]?.uom || "product unit"})<Input type="number" min="0.001" step="0.001" value={entry.quantity} disabled={locked} onChange={(e) => update({ quantity: e.target.value, ...(product?.uom?.toUpperCase() === "KG" ? { weight: e.target.value } : {}) })} /></label>
-          <label className="space-y-2 text-sm">Measured finished weight (kg)<Input type="number" min="0.001" step="0.001" value={entry.weight} disabled={locked} onChange={(e) => update({ weight: e.target.value, ...(product?.uom?.toUpperCase() === "KG" ? { quantity: e.target.value } : {}) })} /></label>
-          {([['inputStore', 'Ingredient store'], ['outputStore', 'Finished goods store']] as const).map(([field, label]) => <label key={field} className="space-y-2 text-sm">{label}<select className="block h-10 w-full rounded-md border bg-background px-3" value={entry[field]} disabled={locked} onChange={(e) => update({ [field]: e.target.value })}><option value="">Choose a store</option>{stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>)}
-        </div>
-        <p className="text-xs text-muted-foreground">For products stocked in kg, enter the weighed quantity. For products stocked in pieces or packs, enter their count and the measured weight separately. Ingredient usage is calculated from the recipe’s output unit.</p>
-        {!entry.orderId && canWrite && <div className="flex gap-3"><Button disabled={!valid || busy || !ready} onClick={() => void calculate()}>{busy ? "Calculating…" : "Calculate ingredients"}</Button>{error && !busy && <Button variant="outline" onClick={() => { pendingCreate.current = false; persist({ ...entry, requestId: crypto.randomUUID() }); setError(""); }}>Edit entry</Button>}</div>}
-        {!canWrite && <p className="text-sm text-muted-foreground">Production write permission is required to record output.</p>}
-      </section>
-      {entry.orderId && !order && <Button disabled={busy} onClick={() => void fetchManufacturingWorkOrder(entry.orderId!).then(setOrder).catch((e) => setError(e.message))}>Reload ingredient preview</Button>}
-      {order && <section className="space-y-4 rounded-xl border bg-card p-5" aria-label="Calculated ingredient usage">
-        <h2 className="font-semibold">{completed ? "Production recorded" : "Review calculated ingredient usage"}</h2>
-        <p className="text-sm text-muted-foreground">{completed ? "Finished goods are received under QC hold. Release them through Production QC." : "Review the recipe quantities below. Recording deducts these ingredients and receives the finished output under QC hold."}</p>
-        <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Ingredient</th><th className="p-2">Quantity</th><th className="p-2">Unit</th><th className="p-2">Store</th></tr></thead><tbody>{order.materialLines.map((line) => <tr key={line.lineId} className="border-b"><td className="p-2">{line.productName || line.productId}</td><td className="p-2 tabular-nums">{line.plannedQuantity}</td><td className="p-2">{line.uom}</td><td className="p-2">{line.warehouseName || stores.find((s) => s.id === line.warehouseId)?.name || line.warehouseId}</td></tr>)}</tbody></InteractiveTable></div>
-        <div className="flex flex-wrap gap-3">
-          {!completed && canWrite && <Button disabled={busy} onClick={() => void record()}>{busy ? "Recording…" : "Record production"}</Button>}
-          {order.status === "DRAFT" && canWrite && <Button variant="outline" disabled={busy} onClick={() => {
-            setBusy(true); setError("");
-            void runManufacturingWorkOrderAction(order.id, { action: "cancel" }).then(() => {
-              persist({ ...entry, orderId: undefined, requestId: crypto.randomUUID() }); setOrder(null);
-            }).catch((e) => setError(e.message)).finally(() => setBusy(false));
-          }}>Change entry</Button>}
-          {completed && <Button onClick={() => { persist({ ...blankEntry(), inputStore: entry.inputStore, outputStore: entry.outputStore }); setOrder(null); setError(""); setSearch(""); }}>Record next product</Button>}
-          <Button variant="outline" asChild><Link href={`/manufacturing/work-orders/${encodeURIComponent(order.id)}`}>Open record {order.number}</Link></Button>
-          {completed && <Button variant="outline" asChild><Link href="/manufacturing/quality">Production QC</Link></Button>}
-        </div>
-      </section>}
-    </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2 text-sm"><p>Finished product</p><Combobox value={entry.productId} disabled={locked} onChange={(productId) => update({ productId, quantity: "" })}
+          options={products.map((p) => ({ value: p.productId, label: `${p.productSku || ""} · ${p.productName} (${p.uom})` }))} placeholder="Choose a product" searchPlaceholder="Search products…" /></div>
+        <label className="space-y-2 text-sm">Quantity ({product?.uom || outputs[0]?.uom || "product unit"})<Input type="number" min="0.001" step="0.001" value={entry.quantity} disabled={locked} onChange={(e) => update({ quantity: e.target.value })} /></label>
+      </div>
+      {previewing && !order && <p role="status" className="text-sm text-muted-foreground">Calculating formulation and selecting stores…</p>}
+      {lines.length > 0 && <>
+        <h2 className="font-semibold">{completed ? "Production posted" : "Formulation"}</h2>
+        <p className="text-sm text-muted-foreground">Ingredient stores are selected automatically from usable stock. Finished goods: {outputs[0]?.warehouseName || outputs[0]?.warehouseId}. Finished output remains subject to QC release.</p>
+        <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Ingredient</th><th className="p-2">Quantity</th><th className="p-2">Unit</th><th className="p-2">Warehouse</th></tr></thead><tbody>{lines.map((line) => <tr key={line.lineId} className="border-b"><td className="p-2">{line.productName || line.productId}</td><td className="p-2 tabular-nums">{line.plannedQuantity}</td><td className="p-2">{line.uom}</td><td className="p-2">{line.warehouseName || stores.find((s) => s.id === line.warehouseId)?.name || line.warehouseId}</td></tr>)}</tbody></InteractiveTable></div>
+        {!order && preview?.shortages.map((message) => <p key={message} role="alert" className="text-sm text-destructive">{message}</p>)}
+      </>}
+      {!locked && (preview?.shortages.length || error) ? <Button variant="outline" disabled={previewing} onClick={() => setPreviewRevision((v) => v + 1)}>Refresh formulation</Button> : null}
+      <div className="flex flex-wrap gap-3">
+        {!completed && canWrite && <Button disabled={busy || !ready || (!entry.orderId && (!preview || previewing || preview.shortages.length > 0))} onClick={() => void record()}>{busy ? "Posting…" : "Approve and post"}</Button>}
+        {completed && <Button onClick={() => { persist(blankEntry()); setOrder(null); setError(""); }}>Record next product</Button>}
+        {entry.orderId && <Button variant="outline" asChild><Link href={`/manufacturing/work-orders/${encodeURIComponent(entry.orderId)}`}>Open production record</Link></Button>}
+      </div>
+      {!canWrite && <p className="text-sm text-muted-foreground">Production write permission is required.</p>}
+    </section>
   </PageShell>;
 }
