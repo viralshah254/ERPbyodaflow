@@ -15,8 +15,8 @@ import { AppFrame } from "@/components/marketing/app-frame";
 import { LoginHeroPreview } from "@/components/marketing/login-hero-preview";
 import { useAuthStore } from "@/stores/auth-store";
 import * as Icons from "lucide-react";
-import { isFirebaseConfigured, signInAndGetIdToken, setRememberMeUntil, clearRememberMeUntil } from "@/lib/firebase";
-import { isApiConfigured, setApiAuth } from "@/lib/api/client";
+import { isFirebaseConfigured, signInAndGetIdToken, signInWithCustomTokenAndGetIdToken, setRememberMeUntil, clearRememberMeUntil } from "@/lib/firebase";
+import { isApiConfigured, setApiAuth, apiRequest } from "@/lib/api/client";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isDevAuthEnabled } from "@/lib/runtime-flags";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -25,7 +25,7 @@ import { SsoContinuityScreen } from "@/components/auth/sso-continuity-screen";
 import { clearErpScreenLock } from "@/lib/auth/screen-lock";
 
 const loginSchema = z.object({
-  email: z.string().email("Invalid email address"),
+  email: z.string().trim().refine(value => z.string().email().safeParse(value).success || /^[+\d\s().-]+$/.test(value) && /^(?:\+?2540?|0)?[17]\d{8}$/.test(value.replace(/[\s().-]/g, "")), "Enter a valid email or Kenyan mobile number"),
   password: z.string().min(6, "Password must be at least 6 characters"),
   rememberMe: z.boolean().optional(),
 });
@@ -115,7 +115,12 @@ function LoginContent() {
       } else {
         clearRememberMeUntil();
       }
-      const token = await signInAndGetIdToken(data.email, data.password, data.rememberMe);
+      const token = data.email.includes("@")
+        ? await signInAndGetIdToken(data.email, data.password, data.rememberMe)
+        : await (async () => {
+            const { customToken } = await apiRequest<{ customToken: string }>("/api/auth/phone-login", { method: "POST", body: { phone: data.email, password: data.password } });
+            return signInWithCustomTokenAndGetIdToken(customToken, data.rememberMe ?? false);
+          })();
       setApiAuth({ bearerToken: token });
       const session = await fetchRuntimeSession();
       const { setSession } = useAuthStore.getState();
@@ -181,7 +186,7 @@ function LoginContent() {
           message: "Account not found. Contact your administrator.",
         });
       else if (code === "auth/invalid-credential" || code === "auth/user-not-found")
-        setError("root", { message: "Invalid email or password." });
+        setError("root", { message: "Invalid email, phone number or password." });
       else if (code === "auth/too-many-requests")
         setError("root", { message: "Too many attempts. Try again later." });
       else {
@@ -243,12 +248,12 @@ function LoginContent() {
                   <p className="text-sm text-destructive">{errors.root.message}</p>
                 )}
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">Email or phone number</Label>
                   <Input
                     id="email"
-                    type="email"
-                    placeholder="you@example.com"
-                    autoComplete="email"
+                    type="text"
+                    placeholder="you@example.com or 07xxxxxxxx"
+                    autoComplete="username"
                     {...register("email")}
                   />
                   {errors.email && (

@@ -624,7 +624,7 @@ export default function UsersRolesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Email</TableHead>
+                      <TableHead>Email / phone</TableHead>
                       <TableHead>Status</TableHead>
                       {copilotProductEnabled ? (
                         <TableHead>Copilot</TableHead>
@@ -669,7 +669,7 @@ export default function UsersRolesPage() {
                             ) : null}
                           </div>
                         </TableCell>
-                        <TableCell>{u.email}</TableCell>
+                        <TableCell>{u.email.startsWith("phone+") && u.email.endsWith("@users.odaflow.com") ? u.phoneNumber || "Phone account" : u.email}</TableCell>
                         <TableCell>{u.status ?? "ACTIVE"}</TableCell>
                         {copilotProductEnabled ? (
                           <TableCell>
