@@ -12,15 +12,22 @@ const preview = { digest: "frozen-ledger", baseCurrency: "KES", historicalBase: 
 beforeEach(() => { vi.clearAllMocks(); state.userId = "maker"; state.permissions = ["finance.read", "finance.bank.read", "finance.write", "finance.approve"]; state.api.mockImplementation(async (url, options) => url.endsWith("/preview") ? { preview } : options?.method ? { ok: true } : { hasMore: false, items: [{ id: "invoice", number: "INV-1", type: "invoice", currency: "USD", openAmount: 100, records: [], legacyBatchIds: [], reviews: [{ _id: "case", kind: "FX_REVALUATION", state: "PENDING", digest: "case-digest", proposedBy: "maker", reason: "Prior application evidence", evidenceReference: "Original ledger", payload: preview }] }] }); });
 afterEach(cleanup);
 describe("FX valuation workspace", () => {
-  it("shows accounting evidence, requires it before saving, and invalidates a changed preview", async () => {
+  it("requires evidence and invalidates a changed posting date independently of today's date", async () => {
     render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /INV-1/ }));
+    const postingDate = screen.getByLabelText("Posting date in an open period");
+    fireEvent.change(postingDate, { target: { value: "2026-11-04" } });
     expect(screen.queryByRole("button", { name: "Send for independent approval" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Preview accounting" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Send for independent approval" })).toBeInTheDocument());
     expect(screen.getAllByText("KES 13,000.00").length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByLabelText("Posting date in an open period"), { target: { value: "2026-11-05" } });
+    expect(screen.getByRole("button", { name: "Send for independent approval" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Evidence reference"), { target: { value: "Closing schedule" } });
+    fireEvent.change(screen.getByLabelText("Preparation / review reason"), { target: { value: "Reconciled closing value" } });
+    expect(screen.getByRole("button", { name: "Send for independent approval" })).toBeEnabled();
+    fireEvent.change(postingDate, { target: { value: "2026-11-05" } });
     expect(screen.queryByRole("button", { name: "Send for independent approval" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Approve and post shown journals" })).not.toBeInTheDocument();
+    expect(state.api).not.toHaveBeenCalledWith("/api/finance/fx-revaluations/prepare", expect.anything());
   });
   it("requires an independent review reason and sends the frozen case digest", async () => {
     state.userId = "checker"; render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /INV-1/ }));
