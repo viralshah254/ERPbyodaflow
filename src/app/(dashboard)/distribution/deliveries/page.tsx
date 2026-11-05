@@ -24,6 +24,9 @@ export default function DistributionDeliveriesPage() {
   const terminology = useTerminology();
   const canWrite = useCanWriteDistribution();
   const deliveryLabel = t("delivery", terminology);
+  const deliveriesLabel = /[^aeiou]y$/i.test(deliveryLabel)
+    ? `${deliveryLabel.slice(0, -1)}ies`
+    : `${deliveryLabel}s`;
 
   const columns = [
     { id: "number", header: "Number", accessor: (r: (typeof MOCK)[0]) => <span className="font-medium">{r.number}</span>, sticky: true },
@@ -35,7 +38,7 @@ export default function DistributionDeliveriesPage() {
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
-        title={`${deliveryLabel}s`}
+        title={deliveriesLabel}
         description="Deliveries list and status"
         sticky
         showCommandHint
