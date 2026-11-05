@@ -18,7 +18,7 @@ describe("legacy FX review workspace", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Save for independent approval" })).toBeInTheDocument());
     expect(screen.getAllByText("KES 7,200.00").length).toBeGreaterThan(0);
     fireEvent.change(screen.getByLabelText("Adjustment posting date"), { target: { value: "2026-11-05" } });
-    expect(screen.queryByRole("button", { name: "Save for independent approval" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save for independent approval" })).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Approve and post shown correction" })).not.toBeInTheDocument();
   });
   it("requires an independent review reason and sends the frozen case digest", async () => {
