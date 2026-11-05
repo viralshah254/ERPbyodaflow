@@ -536,5 +536,14 @@
       "Inspect Lines for products, quantities and units before moving stock.",
       "Read Activity before dispatching or receiving through the permitted transfer workflow; verify both location balances."
     ]
+  },
+  "/reports": {
+    "title": "Report Library",
+    "summary": "Find available reports, review their scope and open saved views, schedules or export history.",
+    "tasks": [
+      "Search the report library by report name or topic to find the report you need. Clear the search to restore the available reports.",
+      "Review the report description and category before opening it. Set dates and filters on the report screen before relying on its results.",
+      "Use Saved Views to reopen saved report configurations. Open Scheduled and Exports to review existing report schedules and export history."
+    ]
   }
 }

@@ -82,7 +82,7 @@ export function DashboardGuidanceCard({ pendingApprovals = 0 }: DashboardGuidanc
       <Card className="border-primary/20">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Getting started</CardTitle>
-          <CardDescription>Checking your workspace…</CardDescription>
+          <CardDescription>Review setup progress and the suggested next steps for your workspace.</CardDescription>
         </CardHeader>
       </Card>
     );

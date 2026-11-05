@@ -1935,9 +1935,9 @@
       "sample": "/reports",
       "route": "/reports",
       "identity": "/reports",
-      "title": "Report library / WIP",
+      "title": "Report Library",
       "kind": "workspace",
-      "tasks": 2,
+      "tasks": 3,
       "hasSummary": true
     },
     {
