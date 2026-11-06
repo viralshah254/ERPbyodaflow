@@ -1045,7 +1045,9 @@ export default function PickPackDetailPage() {
       return fmcg
         ? needsInvoiceAndDeliveryNote
           ? "Packed. Generate the invoice and delivery note next. Dispatch opens after those exist."
-          : "Invoice and delivery note are ready. Open Dispatch to send this load."
+          : invoiceId
+            ? "Invoice and delivery note are ready. Open Dispatch to send this load."
+            : "Packing saved. Open Dispatch to prepare this load."
         : "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
       return "Dispatched — use Complete to close this warehouse task. The delivery note stays in transit until proof of delivery is recorded on the document.";
