@@ -3,6 +3,8 @@ import {
   buildTaskStockSnapshot,
   effectiveAvailForProduct,
   formatKg,
+  parsePickedQtyInput,
+  parsePickPackPickedQty,
   lineStockView,
   linesWithHeldByOtherTasks,
   sharedPoolShortfalls,
@@ -115,5 +117,23 @@ describe("stock pool sharing", () => {
       excludeLineId: "l1",
     });
     expect(excludingPickerLine.remaining).toBe(40);
+  });
+});
+
+
+describe("manual packed quantities", () => {
+  it("treats an explicitly cleared quantity as zero instead of the order", () => {
+    expect(parsePickedQtyInput("", 10)).toBe(0);
+    expect(parsePickedQtyInput("  ", 10)).toBe(0);
+    expect(parsePickedQtyInput(undefined, 10)).toBe(10);
+    expect(parsePickedQtyInput("4", 10)).toBe(4);
+  });
+
+  it("releases a cleared line's claim from the shared stock pool", () => {
+    const lines = [line("a", "p1", "JOY", 10, 15), line("b", "p1", "JOY", 10, 15)];
+    const draft = { a: "", b: "10" };
+    expect(parsePickPackPickedQty(lines[0], draft, "PENDING")).toBe(0);
+    const snapshot = buildTaskStockSnapshot(lines, draft, "PENDING");
+    expect(snapshot.claimedByPool.get(stockPoolKey(lines[0]))).toBe(10);
   });
 });

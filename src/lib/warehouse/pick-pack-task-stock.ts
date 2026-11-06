@@ -50,6 +50,14 @@ export function linesShareStockPool(
   return stockPoolKey(a) === stockPoolKey(b);
 }
 
+export function parsePickedQtyInput(raw: string | undefined, fallback: number): number {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed) return raw === undefined ? fallback : 0;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n < 0) return fallback;
+  return n;
+}
+
 export function parsePickPackPickedQty(
   line: PickPackLine,
   linePickedDraft: Record<string, string>,
@@ -58,11 +66,7 @@ export function parsePickPackPickedQty(
   if (taskStatusUpper === "PENDING") {
     const raw = linePickedDraft[line.id];
     if (raw !== undefined) {
-      const trimmed = raw.trim();
-      if (trimmed) {
-        const n = Number(trimmed);
-        if (Number.isFinite(n) && n >= 0) return n;
-      }
+      return parsePickedQtyInput(raw, 0);
     }
     const avail = typeof line.onHandWarehouse === "number" ? line.onHandWarehouse : line.quantity;
     const initial =

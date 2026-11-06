@@ -50,6 +50,7 @@ import { FranchiseOutletsPanel } from "@/components/pricing/franchise-outlets-pa
 import { ZonePriceCascadeDialog } from "@/components/pricing/zone-price-cascade-dialog";
 import { isFranchiseList } from "@/lib/pricing/franchise-zone-master";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { canonicalPathId } from "@/lib/api/path-id";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 
 function todayIso(): string {
@@ -272,7 +273,7 @@ function PricingEnginePanel({ priceListId, currency }: { priceListId: string; cu
 export default function PriceListViewPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const priceListId = params.id;
+  const priceListId = canonicalPathId(params.id);
   const today = todayIso();
   const templateId = useOrgContextStore((s) => s.templateId);
   const fmcgOrg = isFmcgOrg(templateId);
