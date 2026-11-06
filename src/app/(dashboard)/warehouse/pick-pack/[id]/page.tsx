@@ -1054,9 +1054,10 @@ export default function PickPackDetailPage() {
     return null;
   })();
 
-  const packedLineCount = task.lines.filter((line) =>
-    (canConfirmPick ? parsePickedQtyInput(linePickedDraft[line.id], 0) : line.pickedQty ?? 0) >= line.quantity
-  ).length;
+  const packedLineCount = task.lines.filter((line) => {
+    const packed = canConfirmPick ? parsePickedQtyInput(linePickedDraft[line.id], 0) : line.pickedQty ?? 0;
+    return Math.abs(packed - line.quantity) < 1e-9;
+  }).length;
   const packingFieldsDisabled = !canWrite || pickPackLoading || !(canConfirmPick || canConfirmPackOnly);
 
   const packCountInvalid = !Number.isInteger(Number(cartons)) || Number(cartons) < 0;
@@ -1542,7 +1543,9 @@ export default function PickPackDetailPage() {
                       </TableCell>
                       {fmcg ? (
                         <TableCell className="tabular-nums font-medium">
-                          {scannedSafe >= line.quantity ? (
+                          {scannedSafe > line.quantity ? (
+                            <span role="alert" className="text-destructive">Over by {formatPackQty(scannedSafe - line.quantity, line)}</span>
+                          ) : scannedSafe >= line.quantity ? (
                             <span className="text-emerald-600">Packed</span>
                           ) : (
                             <div className="space-y-2">
@@ -1914,7 +1917,7 @@ export default function PickPackDetailPage() {
               disabled={!canConfirmPickAndPackStockOk || pickPackLoading}
               title={
                 pickedDraftInvalid
-                  ? "Enter a picked quantity greater than zero on at least one line."
+                  ? "Check packed quantities: enter at least one positive quantity and keep pieces within the order."
                   : partialPickSummary.missingWarehouse
                     ? "Select a fulfilment warehouse first."
                     : undefined
