@@ -425,8 +425,8 @@ export default function MigrationConsolePage() {
                 <div className="flex items-end gap-3 rounded-lg border p-3">
                   <Checkbox id="dry-run" checked={dryRun} onCheckedChange={(checked) => setDryRun(checked === true)} />
                   <div className="space-y-1">
-                    <Label htmlFor="dry-run">Dry-run only</Label>
-                    <p className="text-xs text-muted-foreground">Preview staging, matching, and conflicts without writing canonical masters.</p>
+                    <Label htmlFor="dry-run">Provider JSON: dry-run only</Label>
+                    <p className="text-xs text-muted-foreground">Preview provider JSON staging, matching, and conflicts without writing canonical masters. This setting does not apply to the separate CSV import below.</p>
                   </div>
                 </div>
               </div>
@@ -947,7 +947,7 @@ export default function MigrationConsolePage() {
                   <CardTitle>Import from CSV</CardTitle>
                   <CardDescription>
                     Add customers, suppliers, products, price tags, opening stock, AR/AP balances,
-                    packaging, or variants via CSV. Download a template for required fields.
+                    packaging, or variants via CSV. Download a template for required fields. CSV import commits immediately; the provider JSON dry-run setting does not apply. FMCG opening balances and stock require the reviewed cutover workflow.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">

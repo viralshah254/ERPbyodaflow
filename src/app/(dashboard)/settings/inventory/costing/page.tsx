@@ -65,6 +65,7 @@ function slugFromName(name: string) {
 
 export default function InventoryCostingSettingsPage() {
   const [method, setMethod] = React.useState<(typeof COSTING_METHODS)[number]>("FIFO");
+  const [activeValuationMethod, setActiveValuationMethod] = React.useState<string>();
   const [valuationAccount, setValuationAccount] = React.useState("");
   const [templateSheetOpen, setTemplateSheetOpen] = React.useState(false);
   const [editingTemplateId, setEditingTemplateId] = React.useState<string | null>(null);
@@ -85,6 +86,7 @@ export default function InventoryCostingSettingsPage() {
       fetchFinanceAccountsApi(),
     ]);
     setMethod(settings.method);
+    setActiveValuationMethod(settings.activeValuationMethod);
     setValuationAccount(settings.valuationAccountCode ?? "");
     setTemplates(templateItems);
     setAccounts(accountItems);
@@ -204,12 +206,17 @@ export default function InventoryCostingSettingsPage() {
       <div className="p-6 space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Costing method</CardTitle>
-            <CardDescription>Default method for inventory valuation and live costing runs.</CardDescription>
+            <CardTitle>Inventory valuation</CardTitle>
+            <CardDescription>
+              {activeValuationMethod === "COMPANY_AVERAGE"
+                ? "Live FMCG postings use company-wide average cost. The legacy method below does not change that valuation policy."
+                : "Legacy costing preferences. Confirm the active valuation policy before changing financial setup."}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label>Method</Label>
+              {activeValuationMethod ? <p className="text-sm font-medium">Active valuation: {activeValuationMethod.replaceAll("_", " ")}</p> : null}
+              <Label>Legacy costing method</Label>
               <Select value={method} onValueChange={(v) => setMethod(v as (typeof COSTING_METHODS)[number])}>
                 <SelectTrigger className="w-48">
                   <SelectValue />

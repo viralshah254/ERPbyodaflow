@@ -37,6 +37,7 @@ import {
   buildTaskStockSnapshot,
   effectiveAvailForProduct,
   formatKg,
+  parsePickedQtyInput,
   lineStockView,
   linesWithHeldByOtherTasks,
   sharedPoolShortfalls,
@@ -158,14 +159,6 @@ function pickPackStockHintMessage(hint: string | undefined): string | null {
     default:
       return null;
   }
-}
-
-function parsePickedQtyInput(raw: string | undefined, fallback: number): number {
-  const trimmed = (raw ?? "").trim();
-  if (!trimmed) return fallback;
-  const n = Number(trimmed);
-  if (!Number.isFinite(n) || n < 0) return fallback;
-  return n;
 }
 
 function LineCanPickCell({ stock }: { stock: LineStockView }) {
@@ -488,7 +481,7 @@ export default function PickPackDetailPage() {
   applyPackScanRef.current = applyPackScan;
 
   React.useEffect(() => {
-    if (!fmcg || !canWrite || (task?.status ?? "").trim().toUpperCase() !== "PENDING") return;
+    if (!fmcg || !canWrite || pickPackLoading || (task?.status ?? "").trim().toUpperCase() !== "PENDING") return;
     let buffer = createScannerBuffer();
     const onKeyDown = (event: KeyboardEvent) => {
       const scanFieldFocused = document.activeElement === scanInputRef.current;
@@ -527,7 +520,7 @@ export default function PickPackDetailPage() {
       window.removeEventListener("keydown", onKeyDown, true);
       window.removeEventListener("pointerdown", onPointerDown, true);
     };
-  }, [fmcg, canWrite, task?.status]);
+  }, [fmcg, canWrite, pickPackLoading, task?.status]);
 
   React.useEffect(() => {
     void fetchWarehouseOptions()
@@ -923,19 +916,24 @@ export default function PickPackDetailPage() {
     if (!task) return [];
     return task.lines.map((line) => ({
       lineId: line.id,
-      pickedQty: parsePickedQtyInput(linePickedDraft[line.id], line.quantity),
+      pickedQty: parsePickedQtyInput(linePickedDraft[line.id], fmcg ? 0 : line.quantity),
       locationId: line.locationId,
     }));
-  }, [task, linePickedDraft]);
+  }, [task, linePickedDraft, fmcg]);
 
   const pickedDraftInvalid = React.useMemo(() => {
     if (!task || (task.status ?? "").trim().toUpperCase() !== "PENDING") return false;
     const hasAnyPick = task.lines.some((line) => {
-      const pq = parsePickedQtyInput(linePickedDraft[line.id], line.quantity);
+      const pq = parsePickedQtyInput(linePickedDraft[line.id], fmcg ? 0 : line.quantity);
       return pq > 1e-9;
     });
-    return !hasAnyPick;
-  }, [task, linePickedDraft]);
+    const invalidInput = task.lines.some((line) => {
+      const raw = linePickedDraft[line.id];
+      const value = Number(raw ?? 0);
+      return !Number.isFinite(value) || value < 0 || (fmcg && value > line.quantity);
+    });
+    return !hasAnyPick || invalidInput;
+  }, [task, linePickedDraft, fmcg]);
 
   const shipmentPackUom = React.useMemo(
     () => (fmcg && task ? resolveShipmentPackUom(task.lines) : "CARTON"),
@@ -1047,7 +1045,9 @@ export default function PickPackDetailPage() {
       return fmcg
         ? needsInvoiceAndDeliveryNote
           ? "Packed. Generate the invoice and delivery note next. Dispatch opens after those exist."
-          : "Invoice and delivery note are ready. Open Dispatch to send this load."
+          : invoiceId
+            ? "Invoice and delivery note are ready. Open Dispatch to send this load."
+            : "Packing saved. Open Dispatch to prepare this load."
         : "Packed — add courier/tracking and mark dispatched to issue stock from the fulfilment warehouse.";
     if (taskStatusUpper === "DISPATCHED")
       return "Dispatched — use Complete to close this warehouse task. The delivery note stays in transit until proof of delivery is recorded on the document.";
@@ -1056,9 +1056,17 @@ export default function PickPackDetailPage() {
     return null;
   })();
 
+  const packedLineCount = task.lines.filter((line) => {
+    const packed = canConfirmPick ? parsePickedQtyInput(linePickedDraft[line.id], 0) : line.pickedQty ?? 0;
+    return Math.abs(packed - line.quantity) < 1e-9;
+  }).length;
+  const packingFieldsDisabled = !canWrite || pickPackLoading || !(canConfirmPick || canConfirmPackOnly);
+
+  const packCountInvalid = !Number.isInteger(Number(cartons)) || Number(cartons) < 0;
+
   const canConfirmPickAndPackStockOk =
-    canConfirmPick && !pickedDraftInvalid && !partialPickSummary.missingWarehouse;
-  const canConfirmPackOnlyStockOk = canConfirmPackOnly && !partialPickSummary.missingWarehouse;
+    canConfirmPick && !pickedDraftInvalid && !packCountInvalid && !partialPickSummary.missingWarehouse;
+  const canConfirmPackOnlyStockOk = canConfirmPackOnly && !packCountInvalid && !partialPickSummary.missingWarehouse;
 
   return (
     <PageShell>
@@ -1269,7 +1277,7 @@ export default function PickPackDetailPage() {
             <CardDescription>
               {fmcg ? (
                 <>
-                  <strong>In this warehouse</strong> is stock you can pack from the fulfilment warehouse above. Scan a packed box. You do not click the product first. The barcode finds that line and updates scanned and still to pack on its own. Pack labels use EAN-13 then the piece count after a tab or space (for example <strong>6162005202071 → 6</strong>). A product barcode alone adds one pack when packaging is set, otherwise one piece.
+                  Scan each pack, or enter the packed pieces beside each product. Use <strong>Pack remaining</strong> after physically checking the remaining quantity. Then check the shipment cartons and confirm.
                 </>
               ) : (
                 <>
@@ -1291,19 +1299,26 @@ export default function PickPackDetailPage() {
           </CardHeader>
           {fmcg && canConfirmPick && canWrite ? (
             <div className="space-y-2 border-b px-6 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2" role="status" aria-live="polite">
+                <span className="font-medium">{packedLineCount} of {task.lines.length} products packed</span>
+                <span className={packedLineCount === task.lines.length ? "text-emerald-600" : "text-muted-foreground"}>
+                  {packedLineCount === task.lines.length ? "All quantities packed — ready to confirm" : "Pack the remaining quantities below"}
+                </span>
+              </div>
               <Label htmlFor="pack-scan">Scan pack</Label>
               <Input
                 id="pack-scan"
                 ref={scanInputRef}
                 value={scanValue}
                 autoComplete="off"
+                disabled={pickPackLoading}
                 placeholder="Scan a pack — the matching product updates on its own"
                 onChange={(e) => setScanValue(e.target.value)}
               />
               <div className="flex flex-wrap items-center gap-2">
                 {scanError ? <p className="text-sm text-destructive">{scanError}</p> : null}
                 {lastScan ? (
-                  <Button type="button" variant="outline" size="sm" onClick={undoLastScan}>
+                  <Button type="button" variant="outline" size="sm" disabled={pickPackLoading} onClick={undoLastScan}>
                     Undo last scan
                   </Button>
                 ) : null}
@@ -1314,7 +1329,7 @@ export default function PickPackDetailPage() {
             <Table searchable={false} dataScope="page">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="min-w-[12rem]">Product (substitute)</TableHead>
+                  <TableHead className="min-w-[12rem]">{fmcg ? "Product / substitute" : "Product (substitute)"}</TableHead>
                   <TableHead>SKU</TableHead>
                   <TableHead>{fmcg ? "Ordered" : "Qty"}</TableHead>
                   <TableHead className="text-right">{fmcg ? "In this warehouse" : "Can pick"}</TableHead>
@@ -1326,7 +1341,7 @@ export default function PickPackDetailPage() {
                       <TableHead>Suggested bin</TableHead>
                     </>
                   )}
-                  <TableHead>{fmcg ? "Scanned" : qtyColumnLabel}</TableHead>
+                  <TableHead>{fmcg ? "Packed quantity" : qtyColumnLabel}</TableHead>
                   {fmcg ? <TableHead>Still to pack</TableHead> : null}
                   {canConfirmPick && canWrite ? <TableHead className="w-10" aria-label="Remove line" /> : null}
                 </TableRow>
@@ -1342,7 +1357,7 @@ export default function PickPackDetailPage() {
                       ? lineStockView(line, task.lines, taskStockSnapshot, linePickedDraft, taskStatusUpper)
                       : null;
                   const pickedForDelta = lineStock?.thisLinePick ?? 0;
-                  const canEditPicked = canConfirmPick;
+                  const canEditPicked = canConfirmPick && canWrite && !pickPackLoading;
                   const binShort =
                     typeof atBin === "number" &&
                     Number.isFinite(atBin) &&
@@ -1350,7 +1365,7 @@ export default function PickPackDetailPage() {
                     atBin < line.quantity;
                   const lineTaskStock = makeGetTaskStockForProduct(line.id);
                   const lineStockForSelected = lineTaskStock(line.productId, line.sku);
-                  const scannedPieces = canEditPicked
+                  const scannedPieces = canConfirmPick
                     ? Number(linePickedDraft[line.id] ?? (fmcg ? 0 : line.quantity))
                     : (line.pickedQty ?? 0);
                   const scannedSafe = Number.isFinite(scannedPieces) ? Math.max(0, scannedPieces) : 0;
@@ -1367,7 +1382,7 @@ export default function PickPackDetailPage() {
                         {canEditPicked ? (
                           <WarehouseProductPicker
                             value={line.productId}
-                            disabled={lineEditSaving === line.id}
+                            disabled={!canWrite || pickPackLoading || lineEditSaving === line.id}
                             warehouseId={task.warehouseId}
                             allowZeroStockProductId={line.productId}
                             getTaskStockForProduct={lineTaskStock}
@@ -1478,8 +1493,9 @@ export default function PickPackDetailPage() {
                                 min={0}
                                 step="any"
                                 className="h-8 tabular-nums"
+                                max={line.quantity}
                                 data-pack-qty=""
-                                aria-label={`Scanned pieces for ${line.productName ?? line.sku ?? line.productId}`}
+                                aria-label={`Packed pieces for ${line.productName ?? line.sku ?? line.productId}`}
                                 value={linePickedDraft[line.id] ?? "0"}
                                 onFocus={(e) => {
                                   if (e.currentTarget.value === "0") e.currentTarget.select();
@@ -1529,7 +1545,25 @@ export default function PickPackDetailPage() {
                       </TableCell>
                       {fmcg ? (
                         <TableCell className="tabular-nums font-medium">
-                          {formatPackQty(Math.max(0, line.quantity - scannedSafe), line)}
+                          {scannedSafe > line.quantity ? (
+                            <span role="alert" className="text-destructive">Over by {formatPackQty(scannedSafe - line.quantity, line)}</span>
+                          ) : scannedSafe >= line.quantity ? (
+                            <span className="text-emerald-600">Packed</span>
+                          ) : (
+                            <div className="space-y-2">
+                              <div>{formatPackQty(Math.max(0, line.quantity - scannedSafe), line)}</div>
+                              {canEditPicked ? (
+                                <Button type="button" variant="outline" size="sm"
+                                  disabled={lineStock != null && lineStock.remainingForLine < line.quantity}
+                                  aria-label={`Pack remaining ${line.productName ?? line.sku ?? line.productId}`}
+                                  onClick={() => {
+                                    setLinePickedDraft((prev) => ({ ...prev, [line.id]: String(line.quantity) }));
+                                    setLastScan(null);
+                                  }}
+                                >Pack remaining</Button>
+                              ) : null}
+                            </div>
+                          )}
                         </TableCell>
                       ) : null}
                       {canConfirmPick && canWrite ? (
@@ -1540,7 +1574,7 @@ export default function PickPackDetailPage() {
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              disabled={lineEditSaving === line.id}
+                              disabled={!canWrite || pickPackLoading || lineEditSaving === line.id}
                               aria-label={`Remove ${line.productName ?? line.sku ?? "line"}`}
                               title="Remove extra line"
                               onClick={() =>
@@ -1632,8 +1666,14 @@ export default function PickPackDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>{fmcg ? packCountUi.countLabel : "Cartons count"}</Label>
+                <Label htmlFor="shipment-pack-count">{fmcg ? packCountUi.countLabel : "Cartons count"}</Label>
                 <Input
+                  id="shipment-pack-count"
+                  aria-label={fmcg ? packCountUi.countLabel : "Cartons count"}
+                  type="number"
+                  min={0}
+                  step={1}
+                  disabled={packingFieldsDisabled}
                   value={cartons}
                   onChange={(e) => {
                     setCartonsEdited(true);
@@ -1659,9 +1699,10 @@ export default function PickPackDetailPage() {
                   )}
                 </p>
               </div>
+              {packCountInvalid ? <p role="alert" className="text-sm text-destructive">Enter a whole number of shipment packs, zero or greater.</p> : null}
               <div className="space-y-2">
                 <Label>Packing note</Label>
-                <Input value={packingNote} onChange={(e) => setPackingNote(e.target.value)} />
+                <Input aria-label="Packing note" disabled={packingFieldsDisabled} value={packingNote} onChange={(e) => setPackingNote(e.target.value)} />
               </div>
             </CardContent>
           </Card>
@@ -1801,7 +1842,7 @@ export default function PickPackDetailPage() {
           {workflowHint ? <p className="text-xs text-muted-foreground">{workflowHint}</p> : null}
           {pickedDraftInvalid && canConfirmPick ? (
             <p className="text-sm rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-              At least one line needs a picked quantity greater than zero. Set out-of-stock lines to 0 to ship the rest, or substitute another product.
+              Enter a valid packed quantity on at least one product. Quantities must be zero or greater.{fmcg ? " Packed pieces cannot exceed the order." : ""} Leave unavailable products at 0 for a partial delivery.
             </p>
           ) : null}
           {partialPickSummary.missingWarehouse && canConfirmPick ? (
@@ -1872,13 +1913,13 @@ export default function PickPackDetailPage() {
               ) : null}
             </div>
           ) : null}
-          <div className="flex flex-wrap gap-2">
+          <div className="sticky bottom-0 z-10 flex flex-wrap gap-2 border-t bg-background p-3 shadow-sm">
           {canWrite && canConfirmPick ? (
             <Button
               disabled={!canConfirmPickAndPackStockOk || pickPackLoading}
               title={
                 pickedDraftInvalid
-                  ? "Enter a picked quantity greater than zero on at least one line."
+                  ? "Check packed quantities: enter at least one positive quantity and keep pieces within the order."
                   : partialPickSummary.missingWarehouse
                     ? "Select a fulfilment warehouse first."
                     : undefined
@@ -2040,9 +2081,9 @@ export default function PickPackDetailPage() {
               <Link href="/warehouse/dispatch">Open dispatch</Link>
             </Button>
           ) : null}
-          {canWrite && <Button
+          {canWrite && canComplete && <Button
             variant="outline"
-            disabled={!canComplete}
+            disabled={pickPackLoading}
             title={!canComplete ? "Mark dispatched first." : undefined}
             onClick={() =>
               void runWarehouseAction("Task completed.", async () => {

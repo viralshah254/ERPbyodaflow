@@ -6,7 +6,7 @@ import { createBatchApPaymentApi, fetchApReceiptItemsApi, previewApSettlementApi
 vi.mock("@/lib/org/useBaseCurrency", () => ({ useBaseCurrency: () => "KES" }));
 vi.mock("@/lib/api/treasury-ops", () => ({ fetchBankAccountsApi: vi.fn().mockResolvedValue([{ id: "bank", name: "Bank" }]) }));
 vi.mock("@/components/ui/searchable-select", () => ({ SearchableSelect: ({ value, onValueChange }: any) => <select aria-label="Bank" value={value} onChange={e => onValueChange(e.target.value)}><option value="" /><option value="bank">Bank</option></select> }));
-vi.mock("@/components/ui/async-searchable-select", () => ({ AsyncSearchableSelect: ({ value, onValueChange }: any) => <select aria-label="Supplier" value={value} onChange={e => onValueChange(e.target.value)}><option value="" /><option value="supplier">Supplier</option></select> }));
+vi.mock("@/components/ui/async-searchable-select", () => ({ AsyncSearchableSelect: ({ value, onValueChange, emptyMessage }: any) => <><select aria-label="Supplier" value={value} onChange={e => onValueChange(e.target.value)}><option value="" /><option value="supplier">Supplier</option></select><span>{emptyMessage}</span></> }));
 vi.mock("@/lib/api/payments", () => ({
   createArPaymentApi: vi.fn(), fetchArOpenItemsApi: vi.fn(), previewArSettlementApi: vi.fn(), searchArCustomerOptionsApi: vi.fn(),
   createBatchApPaymentApi: vi.fn(), fetchApReceiptItemsApi: vi.fn(), previewApSettlementApi: vi.fn(), searchApSupplierOptionsApi: vi.fn(),
@@ -30,6 +30,8 @@ async function fillLine() {
 describe("batch payouts", () => {
   it("posts an unrelated reference with the reviewed invoice allocation", async () => {
     render(<ReceiptCollectionGrid payout />);
+    expect(screen.getAllByText("No suppliers found.").length).toBeGreaterThan(0);
+    expect(screen.queryByText("No customers found.")).not.toBeInTheDocument();
     await fillLine();
     fireEvent.click(screen.getByRole("button", { name: "Post payouts" }));
     await waitFor(() => expect(createBatchApPaymentApi).toHaveBeenCalledWith(expect.objectContaining({ customerId: "supplier", amount: 100, bankAccountId: "bank", reference: "UNRELATED-BANK-REF", allocations: [{ documentId: "bill", amount: 100 }] })));
@@ -43,5 +45,8 @@ describe("batch payouts", () => {
     expect(screen.getByLabelText("Amount 1")).toHaveValue(100);
     fireEvent.click(screen.getByRole("button", { name: "Post payouts" }));
     await waitFor(() => expect(createBatchApPaymentApi).toHaveBeenCalledTimes(2));
+    const attempts = vi.mocked(createBatchApPaymentApi).mock.calls;
+    expect(attempts[0][0].clientRequestId).toBeTruthy();
+    expect(attempts[1][0].clientRequestId).toBe(attempts[0][0].clientRequestId);
   });
 });

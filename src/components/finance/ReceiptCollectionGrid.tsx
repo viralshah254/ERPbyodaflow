@@ -262,7 +262,7 @@ function ReceiptLine({
             selectedOption={row.customer}
             placeholder={payout ? "Supplier" : "Customer"}
             searchPlaceholder="Type name, code, phone, or email"
-            emptyMessage="No customers found."
+            emptyMessage={payout ? "No suppliers found." : "No customers found."}
             recentStorageKey={payout ? "lookup:recent-suppliers" : "lookup:recent-customers"}
             triggerClassName="h-9 min-h-9 py-1"
             openSignal={openCustomer ? row.id : undefined}
@@ -496,6 +496,7 @@ export function ReceiptCollectionGrid({ payout = false }: { payout?: boolean }) 
         const reference = row.reference.trim();
         await (payout ? createBatchApPaymentApi : createArPaymentApi)({
           ...(payout ? { payeeName: row.customer?.label ?? "" } : {}),
+          clientRequestId: row.id,
           customerId: row.customerId,
           amount: Number(row.amount),
           date: depositDate,
@@ -521,7 +522,7 @@ export function ReceiptCollectionGrid({ payout = false }: { payout?: boolean }) 
         failed = true;
         remaining.push({
           ...row,
-          error: (error as Error).message || "This receipt was not posted.",
+          error: (error as Error).message || "Could not confirm this receipt. Retry this same row to recover its result.",
           expanded: true,
         });
       }

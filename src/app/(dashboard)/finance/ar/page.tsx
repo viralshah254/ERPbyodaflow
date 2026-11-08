@@ -36,22 +36,45 @@ export default function AccountsReceivablePage() {
   const baseCurrency = useBaseCurrency();
   const [invoices, setInvoices] = React.useState<Awaited<ReturnType<typeof fetchArOpenPageApi>>["items"]>([]);
   const [outstandingTotal, setOutstandingTotal] = React.useState(0);
+  const [currencyTotals, setCurrencyTotals] = React.useState<Array<{ currency: string; total: number; count: number }> | undefined>();
   const [openCount, setOpenCount] = React.useState(0);
   const [payments, setPayments] = React.useState<Awaited<ReturnType<typeof fetchArPaymentsApi>>>([]);
 
+  const [offset, setOffset] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [loadError, setLoadError] = React.useState(false);
+  const pageSize = 50;
+
   React.useEffect(() => {
-    Promise.all([fetchArOpenPageApi(), fetchArPaymentsApi()])
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
+    Promise.all([fetchArOpenPageApi(undefined, { offset, limit: pageSize }), fetchArPaymentsApi()])
       .then(([openInvoices, arPayments]) => {
+        if (!active) return;
+        setHasMore(openInvoices.hasMore);
         setInvoices(openInvoices.items);
         setOutstandingTotal(openInvoices.outstandingTotal);
+        setCurrencyTotals(openInvoices.outstandingByCurrency);
         setOpenCount(openInvoices.openCount);
         setPayments(arPayments);
       })
-      .catch((error) => toast.error((error as Error).message || "Failed to load receivables."));
-  }, []);
+      .catch((error) => {
+        if (!active) return;
+        setLoadError(true);
+        toast.error((error as Error).message || "Failed to load balances.");
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [offset]);
 
   const overdue = invoices.filter((item) => duePresentation(item.dueDate).overdue);
-  const overdueTotal = overdue.reduce((sum, item) => sum + item.outstanding, 0);
+  const overdueTotals = overdue.reduce<Record<string, number>>((totals, item) => {
+    const currency = item.currency ?? baseCurrency;
+    totals[currency] = (totals[currency] ?? 0) + item.outstanding;
+    return totals;
+  }, {});
   const mpesaReceipts = payments.filter((item) => item.paymentMethod === "MPESA").length;
 
   return (
@@ -85,7 +108,7 @@ export default function AccountsReceivablePage() {
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Open invoices</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Open receivable items</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-semibold tabular-nums">{openCount}</CardContent>
           </Card>
@@ -94,21 +117,21 @@ export default function AccountsReceivablePage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Outstanding</CardTitle>
             </CardHeader>
             <CardContent className="text-2xl font-semibold tabular-nums">
-              {formatMoney(outstandingTotal, baseCurrency)}
+              {currencyTotals?.length ? currencyTotals.map((item) => <div key={item.currency}>{formatMoney(item.total, item.currency)}</div>) : formatMoney(outstandingTotal, baseCurrency)}
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Overdue</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Overdue on this page</CardTitle>
             </CardHeader>
             <CardContent>
               <p className={cn("text-2xl font-semibold tabular-nums", overdue.length > 0 && "text-amber-600 dark:text-amber-300")}>
                 {overdue.length}
               </p>
               {overdue.length > 0 ? (
-                <p className="mt-1 text-xs text-muted-foreground tabular-nums">{formatMoney(overdueTotal, baseCurrency)} still unpaid</p>
+                <p className="mt-1 text-xs text-muted-foreground tabular-nums">{Object.entries(overdueTotals).map(([currency, total]) => formatMoney(total, currency)).join(" · ")} still unpaid</p>
               ) : (
-                <p className="mt-1 text-xs text-muted-foreground">Nothing past its due date</p>
+                <p className="mt-1 text-xs text-muted-foreground">No overdue items on this page</p>
               )}
             </CardContent>
           </Card>
@@ -132,6 +155,7 @@ export default function AccountsReceivablePage() {
             <CardTitle>Open receivables</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
+            {loadError ? <p role="alert" className="p-4 text-destructive">Could not load this page. Previously loaded rows may be out of date.</p> : null}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -183,6 +207,13 @@ export default function AccountsReceivablePage() {
                 ) : null}
               </TableBody>
             </Table>
+            <div className="flex items-center justify-between gap-3 border-t p-4">
+              <span className="text-sm text-muted-foreground" aria-live="polite">{loading ? "Loading…" : `Page ${Math.floor(offset / pageSize) + 1} · invoices shown: ${invoices.length}`}</span>
+              <div className="flex gap-2">
+                <Button variant="outline" disabled={loading || offset === 0} onClick={() => setOffset(Math.max(0, offset - pageSize))}>Previous</Button>
+                <Button variant="outline" disabled={loading || loadError || !hasMore} onClick={() => setOffset(offset + pageSize)}>Next</Button>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -557,6 +557,7 @@ export function DocumentCreateWizard({
   const baseCurrency = financialSettings.baseCurrency;
   const currentOrgId = useAuthStore((s) => s.org?.orgId);
   const config = getDocTypeConfig(type);
+  const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
 
   const isHqDoc = orgRole === "FRANCHISEE" && (type === "purchase-order" || type === "purchase-request");
@@ -1642,6 +1643,11 @@ export function DocumentCreateWizard({
             toast.error("Header fields are still loading. Please wait a moment.");
             return;
           }
+          if (requiredPartyLabel && !String(form.getValues("party") ?? "").trim()) {
+            form.setError("party", { type: "required", message: `${requiredPartyLabel} is required` });
+            toast.error(`Select the ${requiredPartyLabel.toLowerCase()}.`);
+            return;
+          }
           const valid = await form.trigger(["date", "party", "branch", "warehouse", "dueDate", "poRef", "reference"]);
           if (!valid) return;
           if (type === "grn" && !String(form.getValues("warehouse") ?? "").trim()) {
@@ -1675,6 +1681,7 @@ export function DocumentCreateWizard({
     },
     [
       form,
+      requiredPartyLabel,
       fmcgOrg,
       linkedSupplierBillId,
       headerStepReady,
@@ -1735,15 +1742,11 @@ export function DocumentCreateWizard({
         (type === "sales-order" || type === "quote") &&
         (payload.total ?? 0) > 0
       ) {
-        try {
-          const invoiceLines = await previewDocumentPostingApi("invoice", payload);
-          items = invoiceLines.map((row) => ({
-            ...row,
-            memo: row.memo.replace(/^Invoice PREVIEW/, "Posts on invoice"),
-          }));
-        } catch {
-          items = [];
-        }
+        const invoiceLines = await previewDocumentPostingApi("invoice", payload);
+        items = invoiceLines.map((row) => ({
+          ...row,
+          memo: row.memo.replace(/^Invoice PREVIEW/, "Posts on invoice"),
+        }));
       }
       setPostingPreview(items);
     } catch (error) {
@@ -1767,6 +1770,11 @@ export function DocumentCreateWizard({
     if (step === 1) {
       if (!headerStepReady) {
         toast.error("Header fields are still loading. Please wait a moment.");
+        return;
+      }
+      if (requiredPartyLabel && !String(form.getValues("party") ?? "").trim()) {
+        form.setError("party", { type: "required", message: `${requiredPartyLabel} is required` });
+        toast.error(`Select the ${requiredPartyLabel.toLowerCase()}.`);
         return;
       }
       const valid = await form.trigger(["date", "party", "branch", "warehouse", "dueDate", "poRef", "reference"]);
@@ -2934,9 +2942,10 @@ export function DocumentCreateWizard({
                       qtyHeader: "Received qty",
                       qtyTooltip:
                         "The quantity physically received — enter the actual amount from your weigh slip, count sheet, or delivery note.",
-                      baseQtyHeader: "PO qty",
+                      baseQtyHeader: "Stock qty",
+                      baseQtyBasis: "stock",
                       baseQtyTooltip:
-                        "The open quantity on the purchase order line when this row was loaded. Use this as your reference; adjust Received qty to reflect what actually arrived.",
+                        "Received quantity converted to the product’s inventory unit. This is not the outstanding purchase order quantity.",
                     }
                   : undefined
               }
@@ -3116,7 +3125,11 @@ export function DocumentCreateWizard({
                       ? "No ledger lines on this document. Entries are created when the linked goods receipt or supplier bill is posted."
                       : type === "delivery-note"
                         ? "Delivery notes do not post to the ledger. Revenue and receivables post when you invoice."
-                        : "No GL lines to preview — the document total is zero."}
+                        : (buildDraftPayload().total ?? 0) > 0
+                          ? type === "grn"
+                            ? "Ledger preview is unavailable here. Authorized receipt posting calculates inventory and supplier entries using the receipt quantities, costs and configured accounts."
+                            : "Ledger preview is unavailable for this non-zero document. Review posting configuration before posting."
+                          : "No GL lines to preview — the document total is zero."}
                   </div>
                 )}
                 {selectedCurrency !== baseCurrency && (
