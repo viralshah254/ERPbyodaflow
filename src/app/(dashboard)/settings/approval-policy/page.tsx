@@ -18,15 +18,22 @@ export default function ApprovalPolicyPage() {
   const [users, setUsers] = React.useState<UserRow[]>([]);
   const [saving, setSaving] = React.useState(false);
 
-  React.useEffect(() => {
-    Promise.all([fetchApprovalPolicyApi(), fetchUsersApi().catch(() => [])])
-      .then(([payload, nextUsers]) => {
-        setRules(payload.rules ?? []);
-        setVersion(payload.version);
-        setUsers(nextUsers.filter((user) => user.status === "ACTIVE"));
-      })
-      .catch((error) => toast.error((error as Error).message || "Failed to load approval policy."));
+  const [ready, setReady] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const load = React.useCallback(async () => {
+    setReady(false);
+    setLoadError(null);
+    try {
+      const [payload, nextUsers] = await Promise.all([fetchApprovalPolicyApi(), fetchUsersApi()]);
+      setRules(payload.rules ?? []);
+      setVersion(payload.version);
+      setUsers(nextUsers.filter((user) => user.status === "ACTIVE"));
+      setReady(true);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Failed to load approval policy.");
+    }
   }, []);
+  React.useEffect(() => { void load(); }, [load]);
 
   return (
     <PageShell>
@@ -38,9 +45,10 @@ export default function ApprovalPolicyPage() {
         showCommandHint
         actions={
           <Button
-            disabled={saving}
+            disabled={saving || !ready}
             data-tutorial-hint="approval-policy-save"
             onClick={async () => {
+              if (!ready) return;
               try {
                 setSaving(true);
                 const saved = await saveApprovalPolicyApi(version, rules);
@@ -63,6 +71,12 @@ export default function ApprovalPolicyPage() {
         }
       />
       <div className="p-6">
+        {loadError ? <div role="alert" className="mb-4 rounded border border-destructive p-3">
+          <p>Approval policy is unavailable. Changes cannot be saved.</p>
+          <p className="text-sm">{loadError}</p>
+          <Button variant="outline" onClick={() => void load()}>Retry loading policy</Button>
+        </div> : !ready ? <p role="status" className="mb-4">Loading approval policy…</p> : null}
+        <fieldset disabled={!ready || saving}>
         <Card data-tutorial-hint="approval-policy-rules">
           <CardHeader>
             <CardTitle>Rules · version {version}</CardTitle>
@@ -171,6 +185,7 @@ export default function ApprovalPolicyPage() {
             </Button>
           </CardContent>
         </Card>
+        </fieldset>
       </div>
     </PageShell>
   );
