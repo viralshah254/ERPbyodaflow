@@ -52,7 +52,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 function blankRow(): ChequeRow {
   return {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
     payeeName: "",
     supplierId: "",
     supplier: null,
@@ -383,6 +383,7 @@ export function ApChequeBoxSheet({
       }
       try {
         await createApChequeApi({
+          clientRequestId: row.id,
           payeeName: row.payeeName.trim(),
           partyId: row.useAccount || row.cancel ? undefined : row.supplierId || undefined,
           amount: Number(row.amount),
@@ -414,19 +415,22 @@ export function ApChequeBoxSheet({
         posted += 1;
       } catch (error) {
         failed = true;
-        remaining.push({ ...row, error: (error as Error).message || "This cheque was not posted.", expanded: true });
+        remaining.push({ ...row, error: (error as Error).message || "Could not confirm this cheque. Retry this same row to recover its result.", expanded: true });
       }
     }
+    // Remove confirmed rows before refreshing: a failed refresh must not leave
+    // already-posted cheques in the entry grid or keep the sheet locked.
+    setRows(remaining.length ? remaining : [blankRow()]);
+    setPosting(false);
     if (posted) {
       toast.success(posted === 1 ? "1 cheque recorded." : `${posted} cheques recorded.`);
-      await onPosted();
+      try {
+        await onPosted();
+      } catch {
+        toast.error("Cheques were recorded, but the payment list could not refresh. Refresh the list before entering them again.");
+      }
     }
-    if (failed) {
-      setRows(remaining.length ? remaining : [blankRow()]);
-    } else {
-      onOpenChange(false);
-    }
-    setPosting(false);
+    if (!failed) onOpenChange(false);
   };
 
   return (

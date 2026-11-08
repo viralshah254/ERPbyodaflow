@@ -490,6 +490,7 @@ export function ReceiptCollectionGrid() {
       try {
         const reference = row.reference.trim();
         await createArPaymentApi({
+          clientRequestId: row.id,
           customerId: row.customerId,
           amount: Number(row.amount),
           date: depositDate,
@@ -515,7 +516,7 @@ export function ReceiptCollectionGrid() {
         failed = true;
         remaining.push({
           ...row,
-          error: (error as Error).message || "This receipt was not posted.",
+          error: (error as Error).message || "Could not confirm this receipt. Retry this same row to recover its result.",
           expanded: true,
         });
       }

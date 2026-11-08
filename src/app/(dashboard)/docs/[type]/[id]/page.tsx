@@ -2554,7 +2554,7 @@ export default function DocViewPage() {
                         <div className="min-w-0">
                           <p className={`truncate ${CAPS_ON_PRODUCT_CLASS}`}>{line.description}</p>
                           <p className="text-xs text-muted-foreground">
-                            {open > 0 ? `${open} still open` : "Already credited"}
+                            {open > 0 ? `${open} still open` : "No quantity available (credits or linked drafts)"}
                             {line.unit ? ` ${line.unit}` : ""}
                           </p>
                         </div>
@@ -3593,8 +3593,11 @@ function DynamicNextStepsPanel({
 
   if (type === "sales-order") {
     if (status === "DRAFT") {
-      steps.push({ icon: <Icons.ListPlus className="h-4 w-4" />, text: "Add line items to this order" });
-      steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4" />, text: "Submit for approval", action: () => void onAction("submit"), actionLabel: "Submit", variant: "default" });
+      if (document?.lines?.some((line) => Number(line.qty) > 0)) {
+        steps.push({ icon: <Icons.CheckCircle2 className="h-4 w-4" />, text: "Review this order and submit for approval", action: () => void onAction("submit"), actionLabel: "Submit", variant: "default" });
+      } else {
+        steps.push({ icon: <Icons.ListPlus className="h-4 w-4" />, text: "Add line items to this order before submitting" });
+      }
     } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
     } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
@@ -3797,8 +3800,12 @@ function DynamicNextStepsPanel({
         steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email invoice to customer", action: onSendEmail, actionLabel: "Send Email", variant: "outline" });
       }
     }
-  } else if (type === "credit-note") {
-    if (status === "POSTED") {
+  } else if (type === "credit-note" || type === "purchase-credit-note") {
+    if (status === "DRAFT") {
+      steps.push({ icon: <Icons.ListPlus className="h-4 w-4" />, text: "Review credited quantities and amounts, choose the stock effect, then use the authorized posting action. A draft has no accounting or inventory effect." });
+    } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
+      steps.push({ icon: <Icons.Clock className="h-4 w-4" />, text: "Awaiting approval before posting this credit note." });
+    } else if (status === "POSTED" && type === "credit-note") {
       steps.push({ icon: <Icons.Link className="h-4 w-4" />, text: "Apply to an open invoice directly from this page" });
     }
   } else if (type === "purchase-request") {

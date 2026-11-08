@@ -415,22 +415,30 @@ function mapOpenInvoice(item: BackendOpenInvoice): OpenInvoiceRow {
   };
 }
 
-export async function fetchArOpenPageApi(customerId?: string): Promise<{
+export async function fetchArOpenPageApi(customerId?: string, page?: { offset?: number; limit?: number }): Promise<{
   items: OpenInvoiceRow[];
   outstandingTotal: number;
   openCount: number;
+  hasMore: boolean;
+  outstandingByCurrency?: Array<{ currency: string; total: number; count: number }>;
 }> {
   requireLiveApi("Open invoices");
   const params = new URLSearchParams();
   if (customerId) params.set("partyId", customerId);
+  if (page?.offset != null) params.set("offset", String(page.offset));
+  if (page?.limit != null) params.set("limit", String(page.limit));
   const payload = await apiRequest<{
     items: BackendOpenInvoice[];
     outstandingTotal?: number;
     openCount?: number;
+    hasMore?: boolean;
+    outstandingByCurrency?: Array<{ currency: string; total: number; count: number }>;
   }>("/api/ar/open-invoices", { params });
   const items = (payload.items ?? []).map(mapOpenInvoice);
   return {
     items,
+    hasMore: payload.hasMore ?? false,
+    outstandingByCurrency: payload.outstandingByCurrency,
     outstandingTotal: payload.outstandingTotal ?? items.reduce((sum, item) => sum + item.outstanding, 0),
     openCount: payload.openCount ?? items.length,
   };
@@ -486,6 +494,7 @@ export async function previewArSettlementApi(body: {
 }
 
 export async function createArPaymentApi(body: {
+  clientRequestId?: string;
   customerId: string;
   amount: number;
   date?: string;
@@ -502,6 +511,7 @@ export async function createArPaymentApi(body: {
   return apiRequest<{ id: string; number: string }>("/api/ar/payments", {
     method: "POST",
     body: {
+      clientRequestId: body.clientRequestId,
       partyId: body.customerId,
       amount: body.amount,
       date: body.date ?? new Date().toISOString().slice(0, 10),
@@ -708,22 +718,30 @@ export async function fetchApSupplierSummariesApi(search?: string): Promise<ApSu
   return all;
 }
 
-export async function fetchApOpenPageApi(supplierId?: string): Promise<{
+export async function fetchApOpenPageApi(supplierId?: string, page?: { offset?: number; limit?: number }): Promise<{
   items: OpenBillRow[];
   outstandingTotal: number;
   openCount: number;
+  hasMore: boolean;
+  outstandingByCurrency?: Array<{ currency: string; total: number; count: number }>;
 }> {
   requireLiveApi("Open bills");
   const params = new URLSearchParams();
   if (supplierId) params.set("partyId", supplierId);
+  if (page?.offset != null) params.set("offset", String(page.offset));
+  if (page?.limit != null) params.set("limit", String(page.limit));
   const payload = await apiRequest<{
     items: BackendOpenBill[];
     outstandingTotal?: number;
     openCount?: number;
+    hasMore?: boolean;
+    outstandingByCurrency?: Array<{ currency: string; total: number; count: number }>;
   }>("/api/ap/open-bills", { params });
   const items = (payload.items ?? []).map(mapOpenBill);
   return {
     items,
+    hasMore: payload.hasMore ?? false,
+    outstandingByCurrency: payload.outstandingByCurrency,
     outstandingTotal: payload.outstandingTotal ?? items.reduce((sum, item) => sum + item.outstanding, 0),
     openCount: payload.openCount ?? items.length,
   };
@@ -778,6 +796,7 @@ export async function previewApSettlementApi(body: {
 }
 
 export async function createApChequeApi(body: {
+  clientRequestId?: string;
   payeeName: string;
   partyId?: string;
   amount: number;

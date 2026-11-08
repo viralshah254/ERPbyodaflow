@@ -3,6 +3,7 @@ import { apiRequest, requireLiveApi } from "@/lib/api/client";
 export type InventoryCostingSettings = {
   method: "FIFO" | "WEIGHTED_AVERAGE" | "STANDARD_COST";
   allowNegative: boolean;
+  activeValuationMethod?: "COMPANY_AVERAGE" | "WAREHOUSE_AVERAGE";
   valuationAccountCode?: string;
 };
 

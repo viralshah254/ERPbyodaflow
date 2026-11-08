@@ -126,6 +126,7 @@ interface DocumentLineEditorProps {
     qtyHeader: string;
     qtyTooltip: string;
     baseQtyHeader: string;
+    baseQtyBasis?: "stock" | "ordered";
     baseQtyTooltip: string;
   };
   /**
@@ -1489,7 +1490,7 @@ export function DocumentLineEditor({
           {lines.map((l) => {
             const product = products.find((p) => p.id === l.productId);
             const taxCode = taxCodes.find((t) => t.id === l.taxCodeId);
-            const baseQtyShown = l.poQty != null ? l.poQty : l.baseQty;
+            const baseQtyShown = lineColumnLabels?.baseQtyBasis === "stock" ? l.baseQty : (l.poQty ?? l.baseQty);
             const baseUnitPrice = computeBaseUnitPrice(l);
             const lineVariants = variantsByProductId[l.productId] ?? [];
             const expanded = Boolean(expandedLineIds[l.id]);

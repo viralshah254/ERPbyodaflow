@@ -1303,12 +1303,12 @@ export default function ReceiptDetailPage() {
               title="Receipt Timeline"
               steps={[
                 { id: "po", label: "Purchase order approved", status: grn.poRef ? "completed" : "upcoming", detail: grn.poRef ?? "No purchase order" },
-                { id: "arrive", label: "Stock arrived at facility", status: "completed", timestamp: grn.date ? `${grn.date.slice(0, 10)}T08:00:00Z` : undefined },
+                { id: "arrive", label: "Receipt recorded", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming", detail: "Document date is not proof of physical arrival." },
                 {
                   id: "verify",
                   label: "Weight / QA verification",
-                  status: hasCashWeightAudit ? "current" : "completed",
-                  detail: hasCashWeightAudit ? "Compare paid vs received weight" : "Verification complete",
+                  status: hasCashWeightAudit ? "current" : grn.lines.length > 0 && grn.lines.every((line) => line.qcStatus === "ACCEPTED" || line.qcStatus === "REJECTED") ? "completed" : "upcoming",
+                  detail: hasCashWeightAudit ? "Compare paid vs received weight" : grn.lines.length > 0 && grn.lines.every((line) => line.qcStatus === "ACCEPTED" || line.qcStatus === "REJECTED") ? "QC decisions recorded. Review accepted and rejected quantities below." : "Confirm lot and QC decisions separately; receipt status does not certify verification.",
                   href: hasCashWeightAudit
                     ? (grn.sourceDocumentId
                         ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(grn.sourceDocumentId)}`
