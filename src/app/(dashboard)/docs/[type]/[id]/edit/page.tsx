@@ -15,6 +15,8 @@ import { DeliveryNoteWarehousePanel } from "@/components/docs/DeliveryNoteWareho
 import { OdaflowSourceCard } from "@/components/integrations/OdaflowSourceCard";
 import { odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { useCanWriteDocType, useSessionReady } from "@/lib/rbac/use-write-guard";
+import { useAuthStore } from "@/stores/auth-store";
+import { usesInlineQuantitySheet } from "@/lib/docs/inline-quantity-sheet";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -27,6 +29,8 @@ export default function DocEditPage() {
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
+  const orgId = useAuthStore((state) => state.org?.orgId);
+  const explicitSheetEdit = usesInlineQuantitySheet({ type, orgId, editing: true });
   const sessionReady = useSessionReady();
 
   const [loading, setLoading] = React.useState(true);
@@ -104,7 +108,7 @@ export default function DocEditPage() {
     <PageShell>
       <PageHeader
         title={document ? `Edit ${label} ${document.number}` : `Edit ${label}`}
-        description="Modify header and line items. Use the numbered steps to go back; changes autosave as you work."
+        description={explicitSheetEdit ? "Update quantities in the full product sheet, review totals, then choose Save changes." : "Modify header and line items. Use the numbered steps to go back; changes autosave as you work."}
         breadcrumbs={[
           { label: "Documents", href: "/docs" },
           { label, href: `/docs/${type}` },

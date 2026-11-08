@@ -78,6 +78,8 @@ export interface DocumentLine {
   variantSku?: string;
   /** When this line originates from a PO line, the PO line id for consumption tracking. */
   sourceLineId?: string;
+  /** Local UI revision only; never included in document payloads. */
+  appliedPricingRevision?: number;
   /**
    * Original quantity from the purchase order line (frozen at prefill time).
    * Used on GRN to show the user what was ordered, independent of received qty or UOM changes.
@@ -107,6 +109,8 @@ interface DocumentLineEditorProps {
    * Users enter quantities directly; no add-products dialog is needed.
    */
   sheetFinishedGoods?: boolean;
+  /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
+  repriceExistingRevision?: number;
   /** Available tax codes for the tax column select. */
   taxCodes?: Array<{ id: string; code: string; name: string; rate: number }>;
   /**
@@ -298,6 +302,7 @@ export function DocumentLineEditor({
   pricingByProductId,
   productFilter,
   sheetFinishedGoods = false,
+  repriceExistingRevision = 0,
   taxCodes = [],
   defaultLineTaxCodeId,
   linesAreTaxInclusive = false,
@@ -747,7 +752,7 @@ export function DocumentLineEditor({
           next.price = 0;
           next.priceReason = "Manual";
           next.discount = undefined;
-        } else if (!useCostPricing && patch.price == null) {
+        } else if (!useCostPricing && patch.price == null && !isPreservedCommercialLine(next)) {
           // Only auto-resolve when caller did not already set a pack-aware price.
           const { price, reason, discount } = resolvePrice(
             productId,
@@ -798,6 +803,19 @@ export function DocumentLineEditor({
     onProductsAdded?.(lineProductIdsKey.split(","));
   }, [lineProductIdsKey, onProductsAdded]);
 
+  React.useEffect(() => {
+    if (!repriceExistingRevision) return;
+    onLinesChangeRef.current((prev) => {
+      let changed = false;
+      const next = prev.map((line) => {
+        if (line.appliedPricingRevision === repriceExistingRevision) return line;
+        changed = true;
+        return { ...line, priceReason: "Customer price tag", discount: undefined, appliedPricingRevision: repriceExistingRevision };
+      });
+      return changed ? next : prev;
+    });
+  }, [repriceExistingRevision, lineProductIdsKey]);
+
   /** Re-apply prices when daily / catalog / tier / packaging finish loading (avoids stuck KES 0.00). */
   React.useEffect(() => {
     if (useCostPricing) return;
@@ -824,23 +842,10 @@ export function DocumentLineEditor({
         }
         const priceQty = l.qty > 0 ? l.qty : 1;
         const nextBaseQty = l.qty > 0 ? computeBaseQty(l.productId, l.uom, l.qty) : 0;
-        if (isPreservedCommercialLine(l) && l.price > 0) {
-          if (l.discount != null) {
-            if (nextBaseQty === l.baseQty) return l;
-            changed = true;
-            return { ...l, baseQty: nextBaseQty };
-          }
-          const catalog = resolvePriceRef.current(l.productId, l.qty, l.uom, l.discount);
-          const looksUnderPriced =
-            fmcgOrg &&
-            !isPieceUom(l.uom) &&
-            catalog.price > 0 &&
-            l.price * 1.5 < catalog.price;
-          if (!looksUnderPriced) {
-            if (nextBaseQty === l.baseQty) return l;
-            changed = true;
-            return { ...l, baseQty: nextBaseQty };
-          }
+        if (isPreservedCommercialLine(l)) {
+          if (nextBaseQty === l.baseQty) return l;
+          changed = true;
+          return { ...l, baseQty: nextBaseQty };
         }
         // Keep line Disc% when set (edit / manual); otherwise use price-tag default.
         const { price, reason, discount } = resolvePriceRef.current(
@@ -877,6 +882,7 @@ export function DocumentLineEditor({
     catalogPricesByProductId,
     fmcgCatalogByProductId,
     priceListIdResolved,
+    repriceExistingRevision,
     pricingByProductId,
     packagingByProductId,
     useCostPricing,

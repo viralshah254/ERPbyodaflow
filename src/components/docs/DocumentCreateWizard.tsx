@@ -72,19 +72,18 @@ import {
   fetchCustomerDefaultPriceLists,
   fetchPriceListOptions,
   fetchSupplierDefaultCostLists,
-  setCustomerDefaultPriceList,
   fetchPriceListByIdApi,
   fetchDailyPricesApi,
   fetchCatalogPricesApi,
   resolveCustomerPriceListApi,
   fetchTaxConfigsApi,
   resolveCustomerTaxConfigApi,
-  setCustomerDefaultTaxConfig,
   type PricingOption,
   type TaxConfigRow,
 } from "@/lib/api/pricing";
 import { isPlantCatalogueTemplate } from "@/config/industry";
-import { isFmcgOrg, JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { usesInlineQuantitySheet, sameEditableLines, storedEditableUnitPrice } from "@/lib/docs/inline-quantity-sheet";
+import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
@@ -587,10 +586,9 @@ export function DocumentCreateWizard({
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
-  const sheetFinishedGoods = !isEditMode && (
-    (type === "sales-order" && (prefillFinishedGoods || currentOrgId === JOY_SUPERBAKERS_ORG_ID)) ||
-    (type === "invoice" && currentOrgId === JOY_SUPERBAKERS_ORG_ID)
-  );
+  const sheetFinishedGoods = usesInlineQuantitySheet({ type, orgId: currentOrgId, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods });
+  const explicitSheetEdit = isEditMode && sheetFinishedGoods;
+  const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
     () => (sheetFinishedGoods ? lines.filter((line) => line.qty > 0) : lines),
     [lines, sheetFinishedGoods]
@@ -785,6 +783,9 @@ export function DocumentCreateWizard({
     editHydratedRef.current = false;
     skipEditAutosaveRef.current = true;
     const doc = existingDocument;
+    setRepriceExistingRevision(0);
+    previousPricingParty.current = doc.partyId ?? "";
+    allowLeaveRef.current = false;
     const storedRate = doc.exchangeRate ?? 1;
     form.reset({
       date: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -797,7 +798,7 @@ export function DocumentCreateWizard({
       poRef: "",
       warehouse: doc.warehouseId ?? "",
       linesCount: doc.lines?.length ?? 0,
-      linesAreTaxInclusive: false,
+      linesAreTaxInclusive: doc.linesAreTaxInclusive ?? false,
       currency: doc.currency ?? baseCurrency,
       exchangeRate: storedRate,
       fxDate: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
@@ -805,7 +806,7 @@ export function DocumentCreateWizard({
     });
     const prefilled: DocumentLine[] = (doc.lines ?? []).map((l, i) => {
       const qty = l.qty ?? 1;
-      const price = l.unitPrice ?? (qty > 0 && l.amount ? l.amount / qty : 0);
+      const price = storedEditableUnitPrice(l, doc.linesAreTaxInclusive ?? false);
       const discount =
         typeof l.discount === "number" && Number.isFinite(l.discount) && l.discount >= 0
           ? l.discount
@@ -855,12 +856,8 @@ export function DocumentCreateWizard({
     } else {
       odaflowBaselineRef.current = null;
     }
-    if (doc.priceListId) {
-      setOverridePriceListId(doc.priceListId);
-    }
-    if (doc.taxConfigId) {
-      setOverrideTaxConfigId(doc.taxConfigId);
-    }
+    setOverridePriceListId(doc.priceListId ?? null);
+    setOverrideTaxConfigId(doc.taxConfigId ?? null);
     setStep(1);
     setMaxStepReached(prefilled.length > 0 ? 2 : 1);
     editHydratedRef.current = true;
@@ -1549,7 +1546,7 @@ export function DocumentCreateWizard({
 
   const persistEditDraft = React.useCallback(
     (immediate = false) => {
-      if (!isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
+      if (explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
       const doSave = () => {
         if (isOdaflowFmcgEdit && odaflowBaselineRef.current) {
           const baseline = odaflowBaselineRef.current;
@@ -1573,7 +1570,7 @@ export function DocumentCreateWizard({
       }
       editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
     },
-    [buildDraftPayload, existingDocument, form, isEditMode, isOdaflowFmcgEdit, lines, type]
+    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, type]
   );
 
   const persistWizardProgress = React.useCallback(
@@ -1618,6 +1615,7 @@ export function DocumentCreateWizard({
       }
 
       if (targetStep === 3) {
+        if (explicitSheetEdit && step === 1) { setStep(2); return; }
         if (!linesStepReady) {
           toast.error("Line items are still loading. Please wait a moment.");
           return;
@@ -1685,6 +1683,7 @@ export function DocumentCreateWizard({
       fmcgOrg,
       linkedSupplierBillId,
       headerStepReady,
+      explicitSheetEdit,
       lines,
       linesBlockedMessage,
       linesOperational,
@@ -1697,6 +1696,7 @@ export function DocumentCreateWizard({
   );
 
   const onReview = async () => {
+    if (explicitSheetEdit && step === 1) { setStep(2); return; }
     if (!linesStepReady) {
       toast.error("Line items are still loading. Please wait a moment.");
       setStep(2);
@@ -1928,6 +1928,7 @@ export function DocumentCreateWizard({
           toast.error(`The bill was saved, but the invoice copy did not upload. ${message}`);
         }
       }
+      allowLeaveRef.current = true;
       router.push(`/docs/${type}/${existingDocument.id}`);
     },
     [buildDraftPayload, existingDocument, invoiceCopyFile, label, router, type]
@@ -2172,11 +2173,15 @@ export function DocumentCreateWizard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, lineEditorPriceListId, lineEditorMode, fmcgOrg]);
 
+  const previousPricingParty = React.useRef(existingDocument?.partyId ?? "");
   React.useEffect(() => {
-    // When customer changes, clear the price list override so it re-derives from the new customer's default.
+    // Hydrating an existing customer must retain this document's stored tags.
+    if (!selectedPartyId || previousPricingParty.current === selectedPartyId) return;
+    previousPricingParty.current = selectedPartyId;
     setOverridePriceListId(null);
     setOverrideTaxConfigId(null);
-  }, [selectedPartyId]);
+    if (sheetFinishedGoods) setRepriceExistingRevision((n) => n + 1);
+  }, [selectedPartyId, sheetFinishedGoods]);
 
   // Resolve party → category → org price tag (FMCG tags; harmless for seafood if lists exist).
   React.useEffect(() => {
@@ -2237,9 +2242,7 @@ export function DocumentCreateWizard({
     return () => {
       cancelled = true;
     };
-    // Intentionally omit overrideTaxConfigId / taxCodes from deps — apply on party resolve only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedPartyId, lineEditorMode, fmcgOrg, applyTaxConfigToLines]);
+  }, [selectedPartyId, lineEditorMode, fmcgOrg, applyTaxConfigToLines, overrideTaxConfigId, taxCodes]);
 
   // Purchasing documents default to VAT inclusive. A tag copied from a PO or GRN wins.
   React.useEffect(() => {
@@ -2373,8 +2376,13 @@ export function DocumentCreateWizard({
 
   const formDirty = form.formState.isDirty;
   const partyValue = (form.getValues("party") || "").trim();
-  const hasUserEntries =
-    !isEditMode &&
+  const hasInlineEditChanges = explicitSheetEdit && existingDocument && (
+    formDirty || selectedPartyId !== (existingDocument.partyId ?? "") ||
+    (overridePriceListId ?? existingDocument.priceListId) !== existingDocument.priceListId ||
+    (overrideTaxConfigId ?? existingDocument.taxConfigId) !== existingDocument.taxConfigId ||
+    !sameEditableLines(existingDocument.lines, billableLines, existingDocument.linesAreTaxInclusive ?? false)
+  );
+  const hasUserEntries = Boolean(hasInlineEditChanges) || !isEditMode &&
     (formDirty ||
       lines.some((line) => Number.isFinite(line.qty) && line.qty > 0) ||
       Boolean(partyValue && partyValue !== autoFilledPartyRef.current) ||
@@ -2387,7 +2395,7 @@ export function DocumentCreateWizard({
   hasEntriesRef.current = hasUserEntries;
 
   React.useEffect(() => {
-    if (isEditMode) return;
+    if (isEditMode && !explicitSheetEdit) return;
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (allowLeaveRef.current || !hasEntriesRef.current) return;
       event.preventDefault();
@@ -2437,7 +2445,7 @@ export function DocumentCreateWizard({
       document.removeEventListener("click", onClick, true);
       window.removeEventListener("popstate", onPopState);
     };
-  }, [isEditMode, type]);
+  }, [isEditMode, explicitSheetEdit, type]);
 
   return (
     <div className="space-y-4">
@@ -2447,10 +2455,11 @@ export function DocumentCreateWizard({
           <span>Ordering from <strong>{hqSupplierName}</strong></span>
         </div>
       )}
+      {explicitSheetEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. Customer defaults are not changed.</p> : null}
       <DocumentStepper
         step={step}
         maxStepReached={maxStepReached}
-        maxForwardStep={linesStepReady ? STEPS.length : Math.min(maxStepReached, 2)}
+        maxForwardStep={explicitSheetEdit && step === 1 ? 2 : linesStepReady ? STEPS.length : Math.min(maxStepReached, 2)}
         steps={STEPS}
         onStepSelect={(s) => void goToStep(s)}
       />
@@ -2805,11 +2814,8 @@ export function DocumentCreateWizard({
                           value={effectiveSalesPriceListId}
                           onValueChange={(newId) => {
                             setOverridePriceListId(newId);
-                            if (selectedPartyId) {
-                              setCustomerDefaultPriceLists((prev) => ({ ...prev, [selectedPartyId]: newId }));
-                              setCustomerPriceListSources((prev) => ({ ...prev, [selectedPartyId]: "party" }));
-                              setCustomerDefaultPriceList(selectedPartyId, newId).catch(() => {});
-                            }
+                            if (sheetFinishedGoods) setRepriceExistingRevision((n) => n + 1);
+
                           }}
                         >
                           <SelectTrigger className="h-8 w-[160px] text-xs">
@@ -2841,10 +2847,7 @@ export function DocumentCreateWizard({
                             setOverrideTaxConfigId(newId);
                             const cfg = taxConfigOptions.find((t) => t.id === newId) ?? null;
                             applyTaxConfigToLines(cfg, taxCodes);
-                            if (selectedPartyId && cfg) {
-                              setTaxConfigSource("party");
-                              setCustomerDefaultTaxConfig(selectedPartyId, newId).catch(() => {});
-                            }
+
                           }}
                         >
                           <SelectTrigger className="h-8 w-[180px] text-xs">
@@ -2909,6 +2912,7 @@ export function DocumentCreateWizard({
             <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
+              repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
               currency={selectedCurrency}
@@ -3284,7 +3288,7 @@ export function DocumentCreateWizard({
         confirmLabel="Confirm"
         onConfirm={confirmOdaflowCorrectionReasons}
       />
-      {!isEditMode ? (
+      {(!isEditMode || explicitSheetEdit) ? (
         <ConfirmDialog
           open={leaveConfirmOpen}
           onOpenChange={(open) => {
@@ -3299,6 +3303,11 @@ export function DocumentCreateWizard({
           onConfirm={() => {
             const href = pendingLeaveRef.current;
             allowLeaveRef.current = true;
+            if (explicitSheetEdit) {
+              if (href === "back") window.history.go(-2);
+              else if (href) router.push(href);
+              return;
+            }
             void deleteDocumentDraftApi(type)
               .catch(() => {})
               .finally(() => {

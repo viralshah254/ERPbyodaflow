@@ -12,9 +12,9 @@ const products = [
   { id: "queen", code: "1", sku: "1", name: "Queen cakes", unit: "PCS", itemRole: "FINISHED", productType: "FINISHED" },
   { id: "cake", code: "FG-CAKE", sku: "FG-CAKE", barcode: "6164000350467", name: "Celebration cake", unit: "PCS", itemRole: "FINISHED", productType: "BOTH" },
 ];
-function Harness({ initial = [] }: { initial?: DocumentLine[] }) {
+function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision = 0, discount = 0, editorKey = 0 }: { initial?: DocumentLine[]; queenPrice?: number; inclusive?: boolean; revision?: number; discount?: number; editorKey?: number }) {
   const [lines, setLines] = React.useState<DocumentLine[]>(initial);
-  return <DocumentLineEditor sheetFinishedGoods fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId="standard" lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: 43.1 }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
+  return <DocumentLineEditor key={editorKey} sheetFinishedGoods fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
 }
 beforeEach(() => { setProductsCache([]); vi.mocked(fetchProductsPageApi).mockReset().mockResolvedValue({ items: products, hasMore: false, nextCursor: null } as never); });
 it("shows every finished good inline at zero including alphanumeric codes, without an add popup", async () => {
@@ -47,4 +47,52 @@ it("shows a recoverable catalogue error rather than silently requiring a popup",
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not load");
   fireEvent.click(screen.getByRole("button", { name: "Retry catalogue" }));
   await waitFor(() => expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("0"));
+});
+
+it("edits existing quantities, intentionally reprices for a different customer, and recomputes VAT basis", async () => {
+  const initial: DocumentLine[] = [{ id: "stored-line", sourceLineId: "stored-line", productId: "queen", sku: "1", name: "Queen cakes", uom: "PCS", qty: 5, baseQty: 5, price: 40, priceReason: "Existing", amount: 200, taxCodeId: "vat" }];
+  const view = render(<Harness initial={initial} />);
+  await screen.findByLabelText("Quantity for Celebration cake");
+  const row = () => within(screen.getByText("Queen cakes").closest("tr")!);
+  expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("5");
+  expect(row().getByText("KES 40.00")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Quantity for Queen cakes"), { target: { value: "2" } });
+  fireEvent.blur(screen.getByLabelText("Quantity for Queen cakes"));
+  expect(row().getByText("KES 80.00")).toBeInTheDocument();
+  view.rerender(<Harness initial={initial} queenPrice={50} revision={1} />);
+  await waitFor(() => expect(row().getByText("KES 100.00")).toBeInTheDocument());
+  expect(row().getByText("KES 50.00")).toBeInTheDocument();
+  expect(screen.getByText("Includes KES 13.79 tax")).toBeInTheDocument();
+  expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveAttribute("data-line-id", "stored-line");
+  view.rerender(<Harness initial={initial} queenPrice={50} revision={1} inclusive={false} />);
+  await waitFor(() => expect(row().getByText("KES 116.00")).toBeInTheDocument());
+  expect(screen.getByText("KES 16.00")).toBeInTheDocument();
+  expect(screen.getByLabelText("Quantity for Celebration cake")).toHaveValue("0");
+});
+it("uses the newly selected customer's discount rather than the old document's discount", async () => {
+  const initial: DocumentLine[] = [{ id: "old", productId: "queen", sku: "1", name: "Queen cakes", uom: "PCS", qty: 2, baseQty: 2, price: 40, priceReason: "Existing (20% discount)", discount: 20, amount: 80 }];
+  const view = render(<Harness initial={initial} />);
+  await screen.findByLabelText("Quantity for Celebration cake");
+  view.rerender(<Harness initial={initial} queenPrice={100} discount={10} revision={1} />);
+  const row = () => within(screen.getByText("Queen cakes").closest("tr")!);
+  await waitFor(() => expect(row().getByText("KES 90.00")).toBeInTheDocument());
+  expect(row().getByText("KES 180.00")).toBeInTheDocument();
+});
+
+it("reprices unused catalogue rows and retains a later manual discount when returning to Lines", async () => {
+  const view = render(<Harness queenPrice={100} discount={20} />);
+  await screen.findByLabelText("Quantity for Queen cakes");
+  const row = () => within(screen.getByText("Queen cakes").closest("tr")!);
+  expect(row().getByText("KES 80.00")).toBeInTheDocument();
+  view.rerender(<Harness queenPrice={100} discount={10} revision={1} />);
+  await waitFor(() => expect(row().getByText("KES 90.00")).toBeInTheDocument());
+  fireEvent.change(screen.getByLabelText("Quantity for Queen cakes"), { target: { value: "2" } });
+  fireEvent.blur(screen.getByLabelText("Quantity for Queen cakes"));
+  expect(row().getByText("KES 180.00")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Show details for Queen cakes" }));
+  fireEvent.change(screen.getByLabelText("Discount %"), { target: { value: "5" } });
+  fireEvent.blur(screen.getByLabelText("Discount %"));
+  expect(row().getByText("KES 190.00")).toBeInTheDocument();
+  view.rerender(<Harness queenPrice={100} discount={10} revision={1} editorKey={1} />);
+  await waitFor(() => expect(row().getByText("KES 190.00")).toBeInTheDocument());
 });
