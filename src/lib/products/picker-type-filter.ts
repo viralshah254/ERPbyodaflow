@@ -31,13 +31,14 @@ export function pickerListQuery(args: {
   typeFilter: PickerTypeFilter;
 }): PickerListQuery {
   const { productFilter, plantCatalogue, typeFilter } = args;
+  if (productFilter === "sellable") return { sellable: true };
   if (plantCatalogue && (typeFilter === "FINISHED" || typeFilter === "RAW" || typeFilter === "PACKAGING" || typeFilter === "SEMI")) {
     return { itemRole: typeFilter };
   }
   if (plantCatalogue) return {};
   return {
     purchasable: productFilter === "purchasable" ? true : undefined,
-    sellable: productFilter === "sellable" ? true : undefined,
+    sellable: undefined,
     productType:
       typeFilter === "RAW" || typeFilter === "FINISHED" || typeFilter === "BOTH" ? typeFilter : undefined,
   };
@@ -54,6 +55,10 @@ export function matchesPickerTypeFilter(
   plantCatalogue: boolean
 ): boolean {
   if (!filter) return true;
+  if (filter === "FINISHED") {
+    if (product.itemRole) return product.itemRole === "FINISHED";
+    return product.productType === "FINISHED" || product.productType === "BOTH" || (!plantCatalogue && !product.productType);
+  }
   if (plantCatalogue) {
     if (filter === "PACKAGING") return product.itemRole === "PACKAGING";
     if (filter === "SEMI") return product.itemRole === "SEMI";
@@ -62,11 +67,7 @@ export function matchesPickerTypeFilter(
       if (product.itemRole) return false;
       return product.productType === "RAW";
     }
-    if (filter === "FINISHED") {
-      if (product.itemRole === "FINISHED") return true;
-      if (product.itemRole) return false;
-      return product.productType === "FINISHED" || product.productType === "BOTH";
-    }
+
   }
   if (filter === "PACKAGING" || filter === "SEMI") return false;
   if (filter === "BOTH") return !product.productType || product.productType === "BOTH";

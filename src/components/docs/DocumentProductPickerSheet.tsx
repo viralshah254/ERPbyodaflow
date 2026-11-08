@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { ProductRow } from "@/lib/types/masters";
+import { productMatchesSearch, preferExactProductIdentifiers } from "@/lib/products/product-search";
 import { productTypeLabel } from "@/lib/products/product-type";
 import {
   defaultPickerTypeFilter,
@@ -50,7 +51,7 @@ type DocumentProductPickerSheetProps = {
   fmcgOrg?: boolean;
   /** Top Food and bakery catalogues. Type filter uses item role, including packaging. */
   plantCatalogue?: boolean;
-  /** Only numeric finished-goods item codes. Hides raw, packaging, and semi-finished. */
+  /** Finished goods with numeric or alphanumeric identifiers. Hides raw, packaging, and semi-finished. */
   sheetFinishedGoods?: boolean;
   /** Catalog already loaded for the lines step. */
   products?: ProductRow[];
@@ -95,7 +96,7 @@ export function DocumentProductPickerSheet({
   const [typeFilter, setTypeFilter] = React.useState<PickerTypeFilter>(() =>
     defaultPickerTypeFilter(productFilter, plantCatalogue)
   );
-  const typeOptions = sheetFinishedGoods
+  const typeOptions = (sheetFinishedGoods || productFilter === "sellable")
     ? [{ value: "FINISHED" as const, label: "Finished goods" }]
     : plantCatalogue
       ? PLANT_TYPE_FILTER_OPTIONS
@@ -160,7 +161,6 @@ export function DocumentProductPickerSheet({
           sellable: sheetFinishedGoods ? true : query.sellable,
           productType: sheetFinishedGoods ? undefined : query.productType,
           itemRole: sheetFinishedGoods ? undefined : query.itemRole,
-          numericItemCode: sheetFinishedGoods || undefined,
           limit: PAGE_SIZE,
           cursor: opts.cursor ?? "0",
           includeStock: false,
@@ -204,16 +204,15 @@ export function DocumentProductPickerSheet({
   const visible = React.useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     const tokens = q.split(/\s+/).filter(Boolean);
-    return merged.filter((p) => {
+    return preferExactProductIdentifiers(merged.filter((p) => {
       if (!matchesPickerTypeFilter(p, typeFilter, plantCatalogue)) return false;
       if (categoryKey && groupKey && groupKey(p) !== categoryKey) return false;
       if (!tokens.length) return true;
-      const hay = [p.sku, p.barcode ?? "", p.name, p.size ?? "", p.categoryName ?? "", p.category ?? "", p.productFamily ?? ""]
-        .join(" ")
-        .toLowerCase();
-      return tokens.every((t) => hay.includes(t));
-    });
-  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey, plantCatalogue]);
+      // Remote results already satisfy the server's identifier/alias search.
+      // Do not discard them with a different substring matcher.
+      return remoteItems.some((item) => item.id === p.id) || productMatchesSearch(p, q);
+    }), q);
+  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey, plantCatalogue, remoteItems]);
 
   React.useEffect(() => {
     autoPages.current = 0;
@@ -266,6 +265,12 @@ export function DocumentProductPickerSheet({
   };
 
   const addOne = (product: ProductRow, asNewLine: boolean) => {
+    // A scanner can send Enter before the debounce/request settles. Never add
+    // the previous query's highlighted product.
+    if (loading || search.trim() !== debouncedSearch) {
+      toast.info("Searching products. Select a result when the search is ready.");
+      return;
+    }
     emit([{ product, qty: rowQty(qtyById, product.id), asNewLine }]);
   };
 
@@ -355,7 +360,7 @@ export function DocumentProductPickerSheet({
                   if (!e.target.value.trim()) setCategoryKey(null);
                 }}
                 onKeyDown={onSearchKeyDown}
-                placeholder="Search name, SKU, barcode…"
+                placeholder="Search name, product code, SKU or barcode…"
                 className="pl-9"
               />
             </div>
@@ -422,7 +427,9 @@ export function DocumentProductPickerSheet({
                   const onOrder = existing.has(p.id);
                   const justAdded = addedIds.has(p.id);
                   const meta = [
-                    p.sku,
+                    p.code ? `Code ${p.code}` : undefined,
+                    p.sku ? `SKU ${p.sku}` : undefined,
+                    p.barcode ? `Barcode ${p.barcode}` : undefined,
                     p.size?.trim(),
                     groupKey && groupLabel ? groupLabel(groupKey(p)) : fmcgOrg ? (p.categoryName ?? p.category)?.trim() : p.productFamily?.trim(),
                     typeFilter ? undefined : productTypeLabel(p.productType),

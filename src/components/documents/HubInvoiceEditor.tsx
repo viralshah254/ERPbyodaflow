@@ -173,11 +173,11 @@ export function HubInvoiceEditor({
   }
 
   async function loadProducts(query: string): Promise<AsyncSearchableSelectOption[]> {
-    const page = await fetchProductsPageApi({ search: query.trim() || undefined, limit: 8, status: "ACTIVE" });
+    const page = await fetchProductsPageApi({ search: query.trim() || undefined, limit: 8, status: "ACTIVE", sellable: role === "customer" ? true : undefined, purchasable: role === "supplier" ? true : undefined });
     return page.items.map((product) => ({
       id: product.id,
       label: product.name,
-      description: [product.sku, product.unit].filter(Boolean).join(" · "),
+      description: [product.code ? `Code ${product.code}` : undefined, product.sku, product.barcode, product.unit].filter(Boolean).join(" · "),
     }));
   }
 

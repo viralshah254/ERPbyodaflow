@@ -1,6 +1,6 @@
 /**
  * Client-side product search. Same rules as the API:
- * a barcode matches the barcode, and a number is the pack size.
+ * numeric-only input searches identifiers; numbers with a name/unit search pack size.
  * g, gm, gms, and kg are ignored, so "blackforest 250g" and "250 gms"
  * both return every Black Forest whose size is 250.
  */
@@ -64,12 +64,14 @@ function pull(input: string, re: RegExp): { rest: string; matches: RegExpMatchAr
 
 type Atom =
   | { type: "barcode"; digits: string }
+  | { type: "identifier"; digits: string }
   | { type: "size"; number: string }
   | { type: "text"; pattern: string };
 
 function plan(query: string): Atom[] {
   const trimmed = query.trim();
   if (!trimmed) return [];
+  if (/^\d+$/.test(trimmed)) return [{ type: "identifier", digits: trimmed }];
   const barcodes = pull(trimmed, BARCODE_RE);
   const sizes = pull(barcodes.rest, SIZE_RE);
   const atoms: Atom[] = [];
@@ -93,10 +95,11 @@ export function productMatchesSearch(product: ProductSearchFields, query: string
   const atoms = plan(query);
   if (!atoms.length) return false;
   return atoms.every((atom) => {
-    if (atom.type === "barcode") {
+    if (atom.type === "barcode" || atom.type === "identifier") {
       return (
         String(product.barcode ?? "").startsWith(atom.digits) ||
-        String(product.code ?? "").startsWith(atom.digits)
+        String(product.code ?? "").startsWith(atom.digits) ||
+        String(product.sku ?? "").startsWith(atom.digits)
       );
     }
     if (atom.type === "size") {
@@ -110,4 +113,22 @@ export function productMatchesSearch(product: ProductSearchFields, query: string
     return [product.name, product.sku, product.code, product.barcode]
       .some((value) => re.test(String(value ?? "")));
   });
+}
+
+/** Quantity must be explicit so “cake 250” cannot silently order 250 cakes. */
+export function splitProductSearchQuantity(raw: string): { text: string; stripped: string | null; qty: number | null } {
+  const text = raw.trim();
+  const match = text.match(/^(.*?)\s+x\s*(\d+)$/i);
+  const qty = match ? Number(match[2]) : 0;
+  return match && match[1].trim() && Number.isSafeInteger(qty) && qty > 0
+    ? { text, stripped: match[1].trim(), qty }
+    : { text, stripped: null, qty: null };
+}
+
+/** Keep exact codes/scan matches ahead of prefixes without changing stored identifiers. */
+export function preferExactProductIdentifiers<T extends ProductSearchFields>(products: T[], query: string): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q || /[\s,]/.test(q)) return products;
+  const exact = products.filter((p) => [p.code, p.sku, p.barcode].some((v) => String(v ?? "").trim().toLowerCase() === q));
+  return exact.length ? exact : products;
 }

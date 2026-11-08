@@ -46,3 +46,9 @@ describe("document product picker type filter", () => {
     ).toEqual({ purchasable: true, sellable: undefined, productType: "RAW" });
   });
 });
+
+it("keeps buy-and-sell finished stock in selling pickers for any company", () => {
+  expect(matchesPickerTypeFilter({ productType: "BOTH" }, "FINISHED", false)).toBe(true);
+  expect(matchesPickerTypeFilter({ itemRole: "RAW", productType: "FINISHED" }, "FINISHED", false)).toBe(false);
+  expect(pickerListQuery({ productFilter: "sellable", plantCatalogue: true, typeFilter: "FINISHED" })).toEqual({ sellable: true });
+});

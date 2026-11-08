@@ -54,13 +54,12 @@ export async function fetchProductsForDocumentLines(
   return items;
 }
 
-/** Every active finished good with a numeric item code, in code order. */
-export async function fetchAllNumericFinishedGoods(): Promise<ProductRow[]> {
+/** Active finished goods, independent of whether identifiers are numeric or alphanumeric. */
+export async function fetchAllFinishedGoods(): Promise<ProductRow[]> {
   const rows: ProductRow[] = [];
   let cursor: string | null = "0";
   for (let page = 0; page < 20; page += 1) {
     const result = await fetchProductsPageApi({
-      numericItemCode: true,
       status: "ACTIVE",
       sellable: true,
       limit: 100,

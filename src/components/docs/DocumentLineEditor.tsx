@@ -3,6 +3,7 @@ import { Table as InteractiveTable } from "@/components/ui/table";
 
 
 import * as React from "react";
+import { productMatchesSearch, preferExactProductIdentifiers, splitProductSearchQuantity } from "@/lib/products/product-search";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
@@ -18,7 +19,7 @@ import {
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import {
   listProducts,
-  fetchAllNumericFinishedGoods,
+  fetchAllFinishedGoods,
   fetchProductsForDocumentLines,
   setProductsCache,
   subscribeProductsCache,
@@ -173,29 +174,8 @@ function mergeProductIntoCache(product: ProductRow): void {
   setProductsCache([...existing, product]);
 }
 
-/** Multi-word search: every token must appear somewhere in sku, name, category, description, or productFamily (case-insensitive). */
 function productMatchesLineSearch(p: ProductRow, query: string): boolean {
-  const tokens = query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (tokens.length === 0) return true;
-  const hay = [p.sku, p.barcode ?? "", p.name, p.size ?? "", p.category ?? "", p.description ?? "", p.productFamily ?? ""]
-    .join(" ")
-    .toLowerCase();
-  return tokens.every((t) => hay.includes(t));
-}
-
-/** Trailing whole number, or "x 24", is a quantity when the rest still matches products. */
-function splitTrailingQty(raw: string): { text: string; stripped: string | null; qty: number | null } {
-  const trimmed = raw.trim();
-  const match = trimmed.match(/^(.*?)(?:\s+x)?\s+(\d+)$/i);
-  if (!match) return { text: trimmed, qty: null, stripped: null };
-  const stripped = match[1].trim();
-  const qty = Number(match[2]);
-  if (!stripped || !Number.isInteger(qty) || qty < 1) return { text: trimmed, qty: null, stripped: null };
-  return { text: trimmed, stripped, qty };
+  return !query.trim() || productMatchesSearch(p, query);
 }
 
 /** Packs that are actually configured (pieces-per-pack > 1). */
@@ -346,6 +326,7 @@ export function DocumentLineEditor({
   const [pendingQtyFocusId, setPendingQtyFocusId] = React.useState<string | null>(null);
   const [expandedLineIds, setExpandedLineIds] = React.useState<Record<string, boolean>>({});
   const [remoteMatches, setRemoteMatches] = React.useState<ProductRow[]>([]);
+  const [remoteSearchKey, setRemoteSearchKey] = React.useState("");
 
   React.useEffect(() => {
     if (!fmcgOrg || !swapLineId) return;
@@ -452,7 +433,7 @@ export function DocumentLineEditor({
       return;
     }
     let cancelled = false;
-    const load = sheetFinishedGoods ? fetchAllNumericFinishedGoods() : fetchProductsForDocumentLines(productFilter);
+    const load = sheetFinishedGoods ? fetchAllFinishedGoods() : fetchProductsForDocumentLines(productFilter);
     load
       .then((rows) => {
         if (!cancelled) {
@@ -1125,7 +1106,7 @@ export function DocumentLineEditor({
     [currency, fmcgOrg, mode, packagingByProductId, resolvePrice, useCostPricing]
   );
 
-  const searchSplit = splitTrailingQty(searchQuery);
+  const searchSplit = splitProductSearchQuantity(searchQuery);
   const inChip = React.useCallback(
     (p: ProductRow) => !categoryChip || productGroupKey(p) === categoryChip,
     [categoryChip, productGroupKey]
@@ -1161,7 +1142,6 @@ export function DocumentLineEditor({
           fetchProductsApi({
             purchasable: sheetFinishedGoods ? undefined : productFilter === "purchasable" ? true : undefined,
             sellable: productFilter === "sellable" || sheetFinishedGoods ? true : undefined,
-            numericItemCode: sheetFinishedGoods || undefined,
             search,
             limit: 30,
             includeStock: false,
@@ -1171,6 +1151,7 @@ export function DocumentLineEditor({
         if (cancelled) return;
         const byId = new Map<string, ProductRow>();
         for (const page of pages) for (const row of page) byId.set(row.id, row);
+        setRemoteSearchKey(searchSplit.text);
         setRemoteMatches([...byId.values()]);
       });
     }, 150);
@@ -1183,13 +1164,13 @@ export function DocumentLineEditor({
   const searchResults = React.useMemo(() => {
     const byId = new Map<string, ProductRow>();
     for (const p of products) byId.set(p.id, p);
-    for (const p of remoteMatches) byId.set(p.id, p);
+    if (remoteSearchKey === searchSplit.text) for (const p of remoteMatches) byId.set(p.id, p);
     const q = queryForList.trim();
-    return [...byId.values()]
-      .filter((p) => inChip(p) && (!q || productMatchesLineSearch(p, q)))
+    return preferExactProductIdentifiers([...byId.values()]
+      .filter((p) => inChip(p) && (!q || (remoteSearchKey === searchSplit.text && remoteMatches.some((item) => item.id === p.id)) || productMatchesLineSearch(p, q))), q)
       .sort((a, b) => a.name.localeCompare(b.name))
       .slice(0, q ? 40 : 30);
-  }, [inChip, products, queryForList, remoteMatches]);
+  }, [inChip, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text]);
 
   React.useEffect(() => {
     setHighlightIndex(0);
@@ -1340,7 +1321,7 @@ export function DocumentLineEditor({
               ref={searchInputRef}
               value={searchQuery}
               disabled={productListLoading}
-              placeholder={productListLoading ? "Loading products…" : "Search name, SKU, or barcode"}
+              placeholder={productListLoading ? "Loading products…" : "Search name, product code, SKU or barcode"}
               className="h-9 pl-9"
               onChange={(e) => {
                 const value = e.target.value;
@@ -1371,7 +1352,7 @@ export function DocumentLineEditor({
         <p className="text-xs text-muted-foreground">
           <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd> new line
           <span className="mx-1.5">·</span>
-          Type a quantity, like seasoning 24
+          Add a quantity explicitly, like seasoning x 24
         </p>
         )}
         {swapLine ? (
