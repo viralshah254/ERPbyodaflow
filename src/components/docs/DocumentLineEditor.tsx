@@ -658,7 +658,9 @@ export function DocumentLineEditor({
           const p = item.product;
           if (!sheetFinishedGoods) ensureVariantsLoaded(p.id);
           const packaging = packagingByProductId?.[p.id] ?? [];
-          const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
+          // Quantity-sheet rows start in the SKU's own unit, as before batching.
+          // A pack (PK/CTN) is an explicit selection, never a timing-dependent default.
+          const uom = sheetFinishedGoods ? documentLineBaseUom(p, fmcgOrg) : defaultLineUom(packaging, mode, p, fmcgOrg);
           const baseQty = q > 0 ? computeBaseQty(p.id, uom, q) : 0;
           const { price, reason, discount } = resolvePrice(p.id, priceQty, uom);
           const draft: DocumentLine = {

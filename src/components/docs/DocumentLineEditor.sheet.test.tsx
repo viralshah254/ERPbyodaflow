@@ -49,17 +49,30 @@ it("keeps failed metadata loading recoverable instead of enabling incomplete pri
   expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(2);
 });
 
-it("uses batched carton conversions before creating rows and recalculates quantity and VAT", async () => {
+it("keeps new sheet rows in the SKU unit even when a default pack arrives before row creation", async () => {
   api.configured = true;
   vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({ queen: { packaging: [{ uom: "CTN", baseUom: "PCS", unitsPer: 24, isDefaultSalesUom: true }], pricing: [] }, cake: { packaging: [], pricing: [] } });
   render(<Harness queenPrice={50} />);
   const input = await screen.findByLabelText("Quantity for Queen cakes");
   fireEvent.change(input, { target: { value: "2" } }); fireEvent.blur(input);
   const row = within(screen.getByText("Queen cakes").closest("tr")!);
-  await waitFor(() => expect(row.getByText("KES 2,400.00")).toBeInTheDocument());
+  await waitFor(() => expect(row.getByText("KES 100.00")).toBeInTheDocument());
+  expect(row.getByText("KES 50.00")).toBeInTheDocument();
+  expect(screen.getByText("Includes KES 13.79 tax")).toBeInTheDocument();
+  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(1);
+});
+
+it("preserves an existing carton unit and uses batched conversions for quantity and VAT", async () => {
+  api.configured = true;
+  vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({ queen: { packaging: [{ uom: "CTN", baseUom: "PCS", unitsPer: 24, isDefaultSalesUom: true }], pricing: [] }, cake: { packaging: [], pricing: [] } });
+  render(<Harness queenPrice={50} initial={[{ id: "carton", productId: "queen", sku: "1", name: "Queen cakes", uom: "CTN", qty: 1, baseQty: 24, price: 1200, priceReason: "Existing", amount: 1200, taxCodeId: "vat" }]} />);
+  await screen.findByLabelText("Quantity for Celebration cake");
+  const input = screen.getByLabelText("Quantity for Queen cakes");
+  fireEvent.change(input, { target: { value: "2" } }); fireEvent.blur(input);
+  const row = within(screen.getByText("Queen cakes").closest("tr")!);
+  expect(row.getByText("KES 2,400.00")).toBeInTheDocument();
   expect(row.getByText("KES 1,200.00")).toBeInTheDocument();
   expect(screen.getByText("Includes KES 331.03 tax")).toBeInTheDocument();
-  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(1);
 });
 it("shows every finished good inline at zero including alphanumeric codes, without an add popup", async () => {
   render(<Harness />);
