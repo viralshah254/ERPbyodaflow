@@ -92,6 +92,7 @@ import { fetchFinancialTaxesApi } from "@/lib/api/financial-taxes";
 import { hydrateProductsFromApi, listProducts } from "@/lib/data/products.repo";
 import {
   fetchProductPackagingApi,
+  fetchDocumentProductDataApi,
   fetchProductPricingApi,
 } from "@/lib/api/product-master";
 import { fetchProductUomsApi } from "@/lib/api/uom";
@@ -1088,6 +1089,7 @@ export function DocumentCreateWizard({
     // Purchasing docs use cost-based / manual pricing; bulk prefetching all packaging
     // and price-list data for every product creates hundreds of parallel API calls.
     // Skip for purchasing flows — data will be fetched lazily per selected line.
+    if (sheetFinishedGoods) return;
     const isPurchasingDoc =
       type === "bill" || type === "purchase-order" || type === "grn" ||
       type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note";
@@ -1107,7 +1109,7 @@ export function DocumentCreateWizard({
     return () => {
       cancelled = true;
     };
-  }, [step, type, lines, prefetchLineProductData]);
+  }, [step, type, lines, prefetchLineProductData, sheetFinishedGoods]);
 
   const selectedPartyOption = React.useMemo(() => {
     if (selectedPartyDetail) return toPartyLookupOption(selectedPartyDetail);
@@ -1220,9 +1222,15 @@ export function DocumentCreateWizard({
     setPackagingByProductId((prev) => ({ ...prev, [productId]: items }));
   }, []);
 
+  const handleDocumentProductData = React.useCallback((data: Awaited<ReturnType<typeof fetchDocumentProductDataApi>>) => {
+    setPackagingByProductId((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.packaging])) }));
+    setPricingByProductId((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing])) }));
+  }, []);
+
   /** Fetch packaging / pricing for SKUs added via the product picker (beyond the initial cache page). */
   const handleProductsAdded = React.useCallback(
     (productIds: string[]) => {
+      if (sheetFinishedGoods) return;
       const isPurchasingDoc =
         type === "bill" ||
         type === "purchase-order" ||
@@ -1256,7 +1264,7 @@ export function DocumentCreateWizard({
         })
         .catch(() => {});
     },
-    [packagingByProductId, pricingByProductId, type]
+    [packagingByProductId, pricingByProductId, type, sheetFinishedGoods]
   );
 
   const handlePoSelect = React.useCallback(
@@ -2940,6 +2948,7 @@ export function DocumentCreateWizard({
               onProductsAdded={handleProductsAdded}
               onPackagingUpdated={handlePackagingUpdated}
               onCatalogReadyChange={setLineCatalogReady}
+              onDocumentProductData={handleDocumentProductData}
               lineColumnLabels={
                 type === "grn"
                   ? {

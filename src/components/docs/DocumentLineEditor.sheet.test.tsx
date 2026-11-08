@@ -2,21 +2,65 @@ import React from "react";
 import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DocumentLineEditor, type DocumentLine } from "./DocumentLineEditor";
-import { fetchProductsPageApi } from "@/lib/api/products";
+import { fetchProductsPageApi, fetchProductApi } from "@/lib/api/products";
+import { fetchDocumentProductDataApi, fetchProductVariantsApi } from "@/lib/api/product-master";
 import { setProductsCache } from "@/lib/data/products.repo";
 vi.mock("@/lib/api/products", () => ({ fetchProductsPageApi: vi.fn(), fetchProductApi: vi.fn().mockResolvedValue(null), fetchProductsApi: vi.fn().mockResolvedValue([]) }));
-vi.mock("@/lib/api/client", () => ({ isApiConfigured: () => false }));
+const api = vi.hoisted(() => ({ configured: false }));
+vi.mock("@/lib/api/client", () => ({ isApiConfigured: () => api.configured }));
 vi.mock("@/lib/api/pricing", () => ({ fetchPriceListsForUi: vi.fn().mockResolvedValue([{ id: "standard", name: "Standard price" }]) }));
-vi.mock("@/lib/api/product-master", () => ({ fetchProductVariantsApi: vi.fn().mockResolvedValue([]) }));
+vi.mock("@/lib/api/product-master", () => ({ fetchProductVariantsApi: vi.fn().mockResolvedValue([]), fetchDocumentProductDataApi: vi.fn() }));
 const products = [
   { id: "queen", code: "1", sku: "1", name: "Queen cakes", unit: "PCS", itemRole: "FINISHED", productType: "FINISHED" },
   { id: "cake", code: "FG-CAKE", sku: "FG-CAKE", barcode: "6164000350467", name: "Celebration cake", unit: "PCS", itemRole: "FINISHED", productType: "BOTH" },
 ];
 function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision = 0, discount = 0, editorKey = 0 }: { initial?: DocumentLine[]; queenPrice?: number; inclusive?: boolean; revision?: number; discount?: number; editorKey?: number }) {
   const [lines, setLines] = React.useState<DocumentLine[]>(initial);
-  return <DocumentLineEditor key={editorKey} sheetFinishedGoods fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
+  const [data, setData] = React.useState<Awaited<ReturnType<typeof fetchDocumentProductDataApi>>>({});
+  return <DocumentLineEditor onDocumentProductData={setData} packagingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.packaging]))} pricingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing]))} key={editorKey} sheetFinishedGoods fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
 }
-beforeEach(() => { setProductsCache([]); vi.mocked(fetchProductsPageApi).mockReset().mockResolvedValue({ items: products, hasMore: false, nextCursor: null } as never); });
+beforeEach(() => { api.configured = false; vi.mocked(fetchProductApi).mockClear(); vi.mocked(fetchProductVariantsApi).mockClear(); vi.mocked(fetchDocumentProductDataApi).mockReset().mockResolvedValue({}); setProductsCache([]); vi.mocked(fetchProductsPageApi).mockReset().mockResolvedValue({ items: products, hasMore: false, nextCursor: null } as never); });
+
+it("loads 100 inline rows with one metadata batch and no per-product detail or variant requests", async () => {
+  api.configured = true;
+  const rows = Array.from({ length: 100 }, (_, i) => ({ ...products[0], id: `fg-${i}`, sku: String(i), code: String(i), name: `Finished ${i}` }));
+  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: rows, hasMore: false, nextCursor: null } as never);
+  vi.mocked(fetchDocumentProductDataApi).mockResolvedValue(Object.fromEntries(rows.map((row) => [row.id, { packaging: [], pricing: [] }])));
+  render(<Harness />);
+  await screen.findByLabelText("Quantity for Finished 99");
+  expect(fetchProductsPageApi).toHaveBeenCalledTimes(1);
+  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(1);
+  expect(fetchDocumentProductDataApi).toHaveBeenCalledWith(rows.map((row) => row.id));
+  expect(fetchProductApi).not.toHaveBeenCalled();
+  expect(fetchProductVariantsApi).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Show details for Finished 0" }));
+  await waitFor(() => expect(fetchProductVariantsApi).toHaveBeenCalledTimes(1));
+  expect(fetchProductVariantsApi).toHaveBeenCalledWith("fg-0");
+}, 20000);
+
+it("keeps failed metadata loading recoverable instead of enabling incomplete pricing", async () => {
+  api.configured = true;
+  vi.mocked(fetchDocumentProductDataApi).mockRejectedValueOnce(new Error("Offline"));
+  render(<Harness />);
+  expect(await screen.findByRole("alert")).toHaveTextContent("Could not load");
+  expect(screen.queryByLabelText("Quantity for Queen cakes")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry catalogue" }));
+  await screen.findByLabelText("Quantity for Queen cakes");
+  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(2);
+});
+
+it("uses batched carton conversions before creating rows and recalculates quantity and VAT", async () => {
+  api.configured = true;
+  vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({ queen: { packaging: [{ uom: "CTN", baseUom: "PCS", unitsPer: 24, isDefaultSalesUom: true }], pricing: [] }, cake: { packaging: [], pricing: [] } });
+  render(<Harness queenPrice={50} />);
+  const input = await screen.findByLabelText("Quantity for Queen cakes");
+  fireEvent.change(input, { target: { value: "2" } }); fireEvent.blur(input);
+  const row = within(screen.getByText("Queen cakes").closest("tr")!);
+  await waitFor(() => expect(row.getByText("KES 2,400.00")).toBeInTheDocument());
+  expect(row.getByText("KES 1,200.00")).toBeInTheDocument();
+  expect(screen.getByText("Includes KES 331.03 tax")).toBeInTheDocument();
+  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(1);
+});
 it("shows every finished good inline at zero including alphanumeric codes, without an add popup", async () => {
   render(<Harness />);
   expect(await screen.findByLabelText("Quantity for Queen cakes")).toHaveValue("0");

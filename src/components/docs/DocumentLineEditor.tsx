@@ -52,7 +52,7 @@ import {
   productCategoryLabelFromKey,
   compareProductCategoryKeys,
 } from "@/lib/products/product-category-group";
-import { fetchProductVariantsApi } from "@/lib/api/product-master";
+import { fetchProductVariantsApi, fetchDocumentProductDataApi } from "@/lib/api/product-master";
 import type { ProductVariant } from "@/lib/products/types";
 import { resolveFmcgProductSizeLabel } from "@/lib/products/fmcg-size";
 import { formatMoney } from "@/lib/money";
@@ -165,6 +165,7 @@ interface DocumentLineEditorProps {
   onPackagingUpdated?: (productId: string, items: ProductPackaging[]) => void;
   /** Fires when the sellable/purchasable product catalog finishes loading (or is not needed). */
   onCatalogReadyChange?: (ready: boolean) => void;
+  onDocumentProductData?: (data: Awaited<ReturnType<typeof fetchDocumentProductDataApi>>) => void;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -316,6 +317,7 @@ export function DocumentLineEditor({
   onProductsAdded,
   onPackagingUpdated,
   onCatalogReadyChange,
+  onDocumentProductData,
 }: DocumentLineEditorProps) {
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -413,15 +415,18 @@ export function DocumentLineEditor({
   }, [productFilter, filteredProducts, cachedProducts]);
 
   const [variantsByProductId, setVariantsByProductId] = React.useState<Record<string, ProductVariant[]>>({});
+  const variantsPending = React.useRef(new Set<string>());
   const ensureVariantsLoaded = React.useCallback((productId: string) => {
-    if (variantsByProductId[productId] !== undefined) return;
+    if (variantsByProductId[productId] !== undefined || variantsPending.current.has(productId)) return;
+    variantsPending.current.add(productId);
     fetchProductVariantsApi(productId)
       .then((items) => setVariantsByProductId((prev) => ({ ...prev, [productId]: items })))
-      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })));
+      .catch(() => setVariantsByProductId((prev) => ({ ...prev, [productId]: [] })))
+      .finally(() => variantsPending.current.delete(productId));
   }, [variantsByProductId]);
 
   React.useEffect(() => {
-    if (!fmcgOrg || !isApiConfigured()) return;
+    if (!fmcgOrg || !isApiConfigured() || sheetFinishedGoods) return;
     const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))];
     for (const productId of productIds) {
       ensureVariantsLoaded(productId);
@@ -433,7 +438,12 @@ export function DocumentLineEditor({
         })
         .catch(() => {});
     }
-  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId]);
+  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId, sheetFinishedGoods]);
+
+  const catalogueLinesRef = React.useRef(lines);
+  catalogueLinesRef.current = lines;
+  const documentDataCallbackRef = React.useRef(onDocumentProductData);
+  documentDataCallbackRef.current = onDocumentProductData;
 
   React.useEffect(() => {
     if (!productFilter || productFilter === "all") {
@@ -446,7 +456,13 @@ export function DocumentLineEditor({
     setFilteredProducts(null);
     const load = sheetFinishedGoods ? fetchAllFinishedGoods() : fetchProductsForDocumentLines(productFilter);
     load
-      .then((rows) => {
+      .then(async (rows) => {
+        if (sheetFinishedGoods && isApiConfigured()) {
+          const ids = [...rows.map((p) => p.id), ...catalogueLinesRef.current.map((line) => line.productId)];
+          const data = await fetchDocumentProductDataApi(ids);
+          if (cancelled) return;
+          documentDataCallbackRef.current?.(data);
+        }
         if (!cancelled) {
           const sorted =
             mode === "purchasing"
@@ -472,9 +488,9 @@ export function DocumentLineEditor({
   }, [productFilter, mode, sheetFinishedGoods, catalogRetry]);
 
   React.useEffect(() => {
-    const catalogReady = !productFilter || productFilter === "all" || filteredProducts !== null;
+    const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
     onCatalogReadyChange?.(catalogReady);
-  }, [productFilter, filteredProducts, onCatalogReadyChange]);
+  }, [productFilter, filteredProducts, onCatalogReadyChange, catalogError]);
 
   /** CoolCatch: product family. FMCG: product category. */
   const groupOptions = React.useMemo(() => {
@@ -640,7 +656,7 @@ export function DocumentLineEditor({
             }
           }
           const p = item.product;
-          ensureVariantsLoaded(p.id);
+          if (!sheetFinishedGoods) ensureVariantsLoaded(p.id);
           const packaging = packagingByProductId?.[p.id] ?? [];
           const uom = defaultLineUom(packaging, mode, p, fmcgOrg);
           const baseQty = q > 0 ? computeBaseQty(p.id, uom, q) : 0;
@@ -684,7 +700,7 @@ export function DocumentLineEditor({
       if (focusId && focusQty) setPendingQtyFocusId(focusId);
       if (created.length) onProductsAdded?.(created.map((l) => l.productId));
 
-      if (isApiConfigured()) {
+      if (isApiConfigured() && !sheetFinishedGoods) {
         for (const newLine of created) {
           void fetchProductApi(newLine.productId)
             .then((full) => {
@@ -721,6 +737,7 @@ export function DocumentLineEditor({
       resolvePrice,
       taxCodes,
       useCostPricing,
+      sheetFinishedGoods,
     ]
   );
 
@@ -1085,7 +1102,7 @@ export function DocumentLineEditor({
   const showDiscount = !useCostPricing;
 
   React.useEffect(() => {
-    lines.forEach((l) => ensureVariantsLoaded(l.productId));
+    if (!sheetFinishedGoods) lines.forEach((l) => ensureVariantsLoaded(l.productId));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1527,9 +1544,10 @@ export function DocumentLineEditor({
                         className="mt-0.5 shrink-0 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
                         aria-expanded={expanded}
                         aria-label={expanded ? `Hide details for ${l.name}` : `Show details for ${l.name}`}
-                        onClick={() =>
-                          setExpandedLineIds((prev) => ({ ...prev, [l.id]: !prev[l.id] }))
-                        }
+                        onClick={() => {
+                          ensureVariantsLoaded(l.productId);
+                          setExpandedLineIds((prev) => ({ ...prev, [l.id]: !prev[l.id] }));
+                        }}
                       >
                         {expanded ? (
                           <Icons.ChevronDown className="h-4 w-4" />

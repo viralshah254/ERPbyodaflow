@@ -10,6 +10,22 @@ export type ProductPackagingPayload = {
   source: "product" | "defaults";
 };
 
+/** Full packaging and tier prices in bounded batches; no browser cache across tenants. */
+export async function fetchDocumentProductDataApi(productIds: string[]): Promise<Record<string, { packaging: ProductPackaging[]; pricing: ProductPrice[] }>> {
+  requireLiveApi("Document product data");
+  const ids = [...new Set(productIds.filter(Boolean))];
+  const result: Record<string, { packaging: ProductPackaging[]; pricing: ProductPrice[] }> = {};
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const page = ids.slice(offset, offset + 100);
+    const payload = await apiRequest<{ byProduct: typeof result }>("/api/settings/products/document-data-batch", { params: { ids: page.join(",") } });
+    for (const id of page) {
+      if (!payload.byProduct?.[id]) throw new Error("A product is unavailable in this company. Reload the document catalogue.");
+      result[id] = payload.byProduct[id];
+    }
+  }
+  return result;
+}
+
 /** Packs defined on this product only (no org-wide defaults). */
 export async function fetchProductPackagingApi(productId: string): Promise<ProductPackaging[]> {
   const payload = await fetchProductPackagingDetailApi(productId);
