@@ -588,7 +588,7 @@ export function DocumentCreateWizard({
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
   const sheetFinishedGoods = !isEditMode && (
-    (type === "sales-order" && prefillFinishedGoods) ||
+    (type === "sales-order" && (prefillFinishedGoods || currentOrgId === JOY_SUPERBAKERS_ORG_ID)) ||
     (type === "invoice" && currentOrgId === JOY_SUPERBAKERS_ORG_ID)
   );
   const billableLines = React.useMemo(

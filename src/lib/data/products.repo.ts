@@ -58,7 +58,10 @@ export async function fetchProductsForDocumentLines(
 export async function fetchAllFinishedGoods(): Promise<ProductRow[]> {
   const rows: ProductRow[] = [];
   let cursor: string | null = "0";
-  for (let page = 0; page < 20; page += 1) {
+  const seen = new Set<string>();
+  while (cursor != null) {
+    if (seen.has(cursor)) throw new Error("Product catalogue pagination did not advance.");
+    seen.add(cursor);
     const result = await fetchProductsPageApi({
       status: "ACTIVE",
       sellable: true,
@@ -67,10 +70,11 @@ export async function fetchAllFinishedGoods(): Promise<ProductRow[]> {
       includeStock: false,
     });
     rows.push(...result.items);
-    if (!result.hasMore || !result.nextCursor) break;
+    if (!result.hasMore) break;
+    if (!result.nextCursor) throw new Error("Product catalogue pagination is incomplete.");
     cursor = result.nextCursor;
   }
-  return rows.sort(
+  return [...new Map(rows.map((row) => [row.id, row])).values()].sort(
     (a, b) => numericItemCodeSort(a) - numericItemCodeSort(b) || a.name.localeCompare(b.name)
   );
 }

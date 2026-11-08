@@ -24,7 +24,7 @@ import {
   setProductsCache,
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
-import { displayItemCode, isNumericItemCode } from "@/lib/products/item-code";
+import { displayItemCode } from "@/lib/products/item-code";
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
@@ -103,8 +103,8 @@ interface DocumentLineEditorProps {
   /** Filter products: purchasable (PO), sellable (SO), or all. */
   productFilter?: "purchasable" | "sellable" | "all";
   /**
-   * New document lists every numeric finished good with a zero quantity.
-   * Add products and search stay on that same list.
+   * Lists every active finished good inline with a zero quantity.
+   * Users enter quantities directly; no add-products dialog is needed.
    */
   sheetFinishedGoods?: boolean;
   /** Available tax codes for the tax column select. */
@@ -389,6 +389,9 @@ export function DocumentLineEditor({
   };
 
   const [filteredProducts, setFilteredProducts] = React.useState<ProductRow[] | null>(null);
+  const [catalogError, setCatalogError] = React.useState(false);
+  const [sheetCatalogReady, setSheetCatalogReady] = React.useState(false);
+  const [catalogRetry, setCatalogRetry] = React.useState(0);
   /** Re-subscribe when global product cache updates (hydrate) so defaultTaxCodeId etc. are fresh. */
   const cachedProducts = React.useSyncExternalStore(
     subscribeProductsCache,
@@ -433,6 +436,9 @@ export function DocumentLineEditor({
       return;
     }
     let cancelled = false;
+    setCatalogError(false);
+    setSheetCatalogReady(false);
+    setFilteredProducts(null);
     const load = sheetFinishedGoods ? fetchAllFinishedGoods() : fetchProductsForDocumentLines(productFilter);
     load
       .then((rows) => {
@@ -449,15 +455,16 @@ export function DocumentLineEditor({
                 })
               : rows;
           setFilteredProducts(sorted);
+          setSheetCatalogReady(sheetFinishedGoods);
         }
       })
       .catch(() => {
-        if (!cancelled) setFilteredProducts([]);
+        if (!cancelled) { setFilteredProducts([]); setCatalogError(true); }
       });
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods]);
+  }, [productFilter, mode, sheetFinishedGoods, catalogRetry]);
 
   React.useEffect(() => {
     const catalogReady = !productFilter || productFilter === "all" || filteredProducts !== null;
@@ -712,22 +719,18 @@ export function DocumentLineEditor({
     ]
   );
 
-  const sheetPrefilledRef = React.useRef(false);
   React.useEffect(() => {
-    if (!sheetFinishedGoods || sheetPrefilledRef.current) return;
+    if (!sheetFinishedGoods || !sheetCatalogReady) return;
     if (!filteredProducts?.length) return;
-    if (!filteredProducts.every((product) => isNumericItemCode(product.code) || isNumericItemCode(product.sku))) return;
-    if (lines.length > 0) {
-      sheetPrefilledRef.current = true;
-      return;
-    }
-    sheetPrefilledRef.current = true;
+    const existingIds = new Set(lines.map((line) => line.productId));
+    const missingProducts = filteredProducts.filter((product) => !existingIds.has(product.id));
+    if (!missingProducts.length) return;
     commitProducts(
-      filteredProducts.map((product) => ({ product, qty: 0, asNewLine: true })),
+      missingProducts.map((product) => ({ product, qty: 0, asNewLine: false })),
       undefined,
       false
     );
-  }, [sheetFinishedGoods, filteredProducts, lines.length, commitProducts]);
+  }, [sheetFinishedGoods, sheetCatalogReady, filteredProducts, lines, commitProducts]);
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -1219,9 +1222,15 @@ export function DocumentLineEditor({
     }
   };
 
+  const displayedLines = React.useMemo(() => {
+    if (!sheetFinishedGoods || !searchQuery.trim()) return lines;
+    const candidates = lines.map((line) => ({ ...products.find((p) => p.id === line.productId), name: line.name, sku: line.sku, line }));
+    return preferExactProductIdentifiers(candidates.filter((p) => productMatchesSearch(p, searchQuery)), searchQuery).map((p) => p.line);
+  }, [lines, products, searchQuery, sheetFinishedGoods]);
+
   const moveFieldFocus = (lineId: string, field: "qty" | "price", dir: -1 | 1) => {
-    const idx = lines.findIndex((l) => l.id === lineId);
-    const next = lines[idx + dir];
+    const idx = displayedLines.findIndex((l) => l.id === lineId);
+    const next = displayedLines[idx + dir];
     if (!next) return;
     const el = editorRef.current?.querySelector<HTMLInputElement>(
       `[data-line-id="${CSS.escape(next.id)}"][data-line-field="${field}"]`
@@ -1236,7 +1245,7 @@ export function DocumentLineEditor({
     lineId: string,
     field: "qty" | "price"
   ) => {
-    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown" || (sheetFinishedGoods && event.key === "Enter" && !event.shiftKey)) {
       event.preventDefault();
       moveFieldFocus(lineId, field, event.key === "ArrowUp" ? -1 : 1);
     }
@@ -1247,6 +1256,12 @@ export function DocumentLineEditor({
     if (productPickerOpen) return;
     if (document.querySelector("[data-radix-select-content]")) return;
     event.preventDefault();
+    if (sheetFinishedGoods) {
+      const target = event.target as HTMLInputElement;
+      if (target.dataset.lineId) moveFieldFocus(target.dataset.lineId, "qty", 1);
+      else editorRef.current?.querySelector<HTMLInputElement>("[data-line-qty]")?.focus();
+      return;
+    }
     if (fmcgOrg && !swapLineId) {
       setProductPickerOpen(true);
       return;
@@ -1288,6 +1303,7 @@ export function DocumentLineEditor({
     }
   };
 
+  const LineTable = sheetFinishedGoods ? "table" : InteractiveTable;
   const showChips = searchOpen && !searchQuery.trim() && groupOptions.length > 0;
   const swapLine = swapLineId ? lines.find((l) => l.id === swapLineId) : undefined;
 
@@ -1295,7 +1311,13 @@ export function DocumentLineEditor({
     <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
       <Label>{lineItemsLabel}</Label>
       <div data-line-composer className="relative space-y-2">
-        {fmcgOrg && !swapLineId ? (
+        {sheetFinishedGoods ? (
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">All active finished goods are listed below. Enter the quantities sold; leave the others at 0. Prices and totals update automatically.</p>
+            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); editorRef.current?.querySelector<HTMLInputElement>("[data-line-qty]")?.focus(); } }} aria-label="Filter finished goods" placeholder="Find name, product code, SKU or barcode" className="max-w-lg" />
+            <p className="text-xs text-muted-foreground">{lines.length} products · {lines.filter((line) => line.qty > 0).length} selected · Enter or arrow keys move between quantities.</p>
+          </div>
+        ) : fmcgOrg && !swapLineId ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
@@ -1426,7 +1448,7 @@ export function DocumentLineEditor({
         ) : null}
       </div>
 
-      <DocumentProductPickerSheet
+      {!sheetFinishedGoods && <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         sheetFinishedGoods={sheetFinishedGoods}
@@ -1441,18 +1463,20 @@ export function DocumentLineEditor({
         groupOptions={groupOptions.map((key) => ({ key, label: productGroupLabel(key) }))}
         existingProductIds={lines.map((l) => l.productId)}
         onAddMany={(items) => commitProducts(items)}
-      />
+      />}
 
+      {sheetFinishedGoods && catalogError ? <div role="alert" className="rounded border border-destructive p-3"><p>Could not load the finished-goods catalogue. Your entered quantities are preserved.</p><Button type="button" variant="outline" onClick={() => setCatalogRetry((n) => n + 1)}>Retry catalogue</Button></div> : null}
+      {sheetFinishedGoods && lines.length > 0 && displayedLines.length === 0 ? <p role="status">No finished goods match this search. Clear the filter to see all products; entered quantities are retained.</p> : null}
       {lines.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          {fmcgOrg
+          {sheetFinishedGoods ? (productListLoading ? "Loading all finished goods…" : catalogError ? "Catalogue unavailable." : "No active finished goods are configured.") : fmcgOrg
             ? "No lines yet. Add products to build this order."
             : "No lines yet. Search above to add the first product."}
         </p>
       ) : (
         <div className="min-w-0 space-y-2">
           <div className="min-w-0 overflow-hidden rounded-md border">
-            <InteractiveTable className="w-full table-fixed border-collapse text-sm">
+            <LineTable className="w-full table-fixed border-collapse text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
                   <th className="w-24 px-2 py-2 font-medium">Item</th>
@@ -1472,7 +1496,7 @@ export function DocumentLineEditor({
                 </tr>
               </thead>
               <tbody>
-          {lines.map((l) => {
+          {displayedLines.map((l) => {
             const product = products.find((p) => p.id === l.productId);
             const taxCode = taxCodes.find((t) => t.id === l.taxCodeId);
             const baseQtyShown = lineColumnLabels?.baseQtyBasis === "stock" ? l.baseQty : (l.poQty ?? l.baseQty);
@@ -1514,7 +1538,9 @@ export function DocumentLineEditor({
                             "line-clamp-2 text-left text-sm font-medium leading-snug hover:underline",
                             CAPS_ON_PRODUCT_CLASS
                           )}
+                          disabled={sheetFinishedGoods}
                           onClick={() => {
+                            if (sheetFinishedGoods) return;
                             setSwapLineId(l.id);
                             setSearchQuery("");
                             setSearchOpen(true);
@@ -1595,8 +1621,8 @@ export function DocumentLineEditor({
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 p-0"
-                      aria-label={`Remove ${l.name}`}
-                      onClick={() => removeLine(l.id)}
+                      aria-label={sheetFinishedGoods ? `Clear quantity for ${l.name}` : `Remove ${l.name}`}
+                      onClick={() => sheetFinishedGoods ? finalizeLineQtyDraft(l.id, "0") : removeLine(l.id)}
                     >
                       <Icons.Trash2 className="h-4 w-4" />
                     </Button>
@@ -1684,7 +1710,7 @@ export function DocumentLineEditor({
             );
           })}
               </tbody>
-            </InteractiveTable>
+            </LineTable>
           </div>
           <div className="mt-4 flex justify-end">
             <dl className="w-full max-w-xs space-y-1.5 text-sm">
