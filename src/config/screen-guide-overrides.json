@@ -545,5 +545,27 @@
       "Review the report description and category before opening it. Set dates and filters on the report screen before relying on its results.",
       "Use Saved Views to reopen saved report configurations. Open Scheduled and Exports to review existing report schedules and export history."
     ]
+  },
+  "/purchasing/requests/[id]/review": {
+    "title": "Review requisition items",
+    "summary": "Match each requested item and manually approve its quantity before supplier ordering.",
+    "tasks": [
+      "Match items by product name, code, SKU or barcode; confirm the requested unit.",
+      "Choose Approve item, Reject item or Leave pending for each line and save the review.",
+      "Review the last supplier, price, currency and tax basis; change supplier when needed.",
+      "Approve the requisition, then create draft POs from approved remaining quantities.",
+      "Release cancelled PO quantities only after downstream receipts and bills are cancelled."
+    ]
+  },
+  "/settings/company-email": {
+    "title": "Company email setup",
+    "summary": "Authenticate this company sender before approved purchase orders can be emailed to suppliers.",
+    "tasks": [
+      "Choose a company-owned or OdaFlow-managed SendGrid account and enter the company sender.",
+      "Save the settings, install SendGrid DNS records and the displayed company ownership TXT record.",
+      "Verify domain ownership and SendGrid authentication to enable supplier sending.",
+      "Configure the signed Event Webhook to distinguish provider acceptance from confirmed delivery.",
+      "Changes disable sending until verification is repeated; saved API keys are never displayed."
+    ]
   }
 }

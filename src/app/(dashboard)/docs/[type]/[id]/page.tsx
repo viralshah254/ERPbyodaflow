@@ -10,6 +10,7 @@ import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploa
 import { linkHubDocument } from "@/lib/api/document-hub";
 import { DocumentFulfilmentLinesTable } from "@/components/docs/DocumentFulfilmentLinesTable";
 import { LinePackingCell } from "@/components/docs/LinePackingCell";
+import { PurchaseOrderEmailPanel } from "@/components/purchasing/PurchaseOrderEmailPanel";
 import { DocumentTabs } from "@/components/docs/DocumentTabs";
 import { DocumentRightPanel } from "@/components/docs/DocumentRightPanel";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
@@ -458,7 +459,7 @@ export default function DocViewPage() {
   );
 
   const effectiveConvertTargets = React.useMemo(() => {
-    let targets = convertTargets;
+    let targets = type === "purchase-request" ? [] : convertTargets;
     if (type === "sales-order") {
       if (fulfilmentInProgress || !canCreateDeliveryNote) {
         targets = targets.filter((t) => t !== "delivery-note");
@@ -2149,6 +2150,8 @@ export default function DocViewPage() {
           );
         })()}
 
+        {type === "purchase-request" ? <div className="mb-4 rounded border p-4"><p className="mb-2 text-sm">Match products and manually approve item quantities before creating draft purchase orders.</p><Button asChild><Link href={`/purchasing/requests/${id}/review`}>Review items / create purchase orders</Link></Button></div> : null}
+        {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
         <DocumentTabs
           key={`${type}-${id}`}
           lines={

@@ -176,9 +176,9 @@ export default function PurchaseRequestsPage() {
               asChild
               onClick={(e) => e.stopPropagation()}
             >
-              <Link href={`/docs/purchase-request/${r.id}`}>
+              <Link href={`/purchasing/requests/${r.id}/review`}>
                 <Icons.ShoppingCart className="h-3 w-3 mr-1" />
-                Create PO
+                Review items / PO
               </Link>
             </Button>
           ) : null,

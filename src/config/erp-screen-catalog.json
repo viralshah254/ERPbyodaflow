@@ -5688,5 +5688,61 @@
     "hints": [
       "work-queue"
     ]
+  },
+  {
+    "route": "/purchasing/requests/[id]/review",
+    "title": "Requisition item review",
+    "description": "Match requested products, manually approve quantities and create grouped draft purchase orders.",
+    "sections": [
+      {
+        "title": "Manual item decisions",
+        "description": "Approve, reject or leave individual items pending; retain source quantities and units."
+      },
+      {
+        "title": "Supplier and price evidence",
+        "description": "Default to completed purchase history and review supplier, price, currency and tax."
+      },
+      {
+        "title": "Approved remaining quantities",
+        "description": "Create draft orders only for approved quantities not already ordered."
+      }
+    ],
+    "fields": [
+      "Matched product",
+      "Approved quantity",
+      "Supplier",
+      "Purchase unit price",
+      "Currency",
+      "Tax code",
+      "Order quantity"
+    ],
+    "hints": []
+  },
+  {
+    "route": "/settings/company-email",
+    "title": "Company email",
+    "description": "Configure an encrypted company-owned SendGrid key or a managed authenticated sender.",
+    "sections": [
+      {
+        "title": "Company sender",
+        "description": "Save sender identity and reply address for this company."
+      },
+      {
+        "title": "Domain verification",
+        "description": "Prove domain ownership and authenticate the same domain in SendGrid."
+      },
+      {
+        "title": "Delivery events",
+        "description": "Verify signed event callbacks before showing delivered or bounced statuses."
+      }
+    ],
+    "fields": [
+      "From email",
+      "Reply-To email",
+      "SendGrid API key",
+      "DNS TXT record",
+      "Event Webhook public key"
+    ],
+    "hints": []
   }
 ]

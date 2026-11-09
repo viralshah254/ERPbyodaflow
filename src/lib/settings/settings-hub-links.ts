@@ -21,6 +21,7 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     id: "organization",
     title: "Organization",
     links: [
+      { href: "/settings/company-email", label: "Company email", description: "Authenticate your SendGrid sender and track supplier PO delivery", icon: "Mail", requiresPermissions: ["admin.settings"] },
       { href: "/settings/fmcg-setup", label: "FMCG operational setup", description: "Opening date, costing, Kenya tax and reconciliation checks", icon: "ClipboardCheck", requiresPermissions: ["admin.settings", "finance.close.write"], requiresFmcg: true },
       { href: "/settings/org", label: "Organization profile", description: "Org name, type, and core identity", icon: "Building", requiresPermissions: ["settings.org.read"] },
       { href: "/settings/environment", label: "Environment", description: "Sandbox dummy data and Go Live", icon: "FlaskConical", requiresPermissions: ["settings.org.read"] },
