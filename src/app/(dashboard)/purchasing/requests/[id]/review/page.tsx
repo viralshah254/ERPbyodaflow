@@ -107,9 +107,20 @@ export default function PurchaseRequestReviewPage() {
             currency: page.request.currency || "KES",
             decision: "PENDING" as const,
           }),
-          productOption: line.productId
-            ? { id: line.productId, label: line.description || line.productId }
-            : undefined,
+          productOption:
+            saved?.productId || line.productId
+              ? {
+                  id: saved?.productId || line.productId!,
+                  label:
+                    page.products?.find(
+                      (product) =>
+                        product.id === (saved?.productId || line.productId),
+                    )?.name ||
+                    line.description ||
+                    saved?.productId ||
+                    line.productId!,
+                }
+              : undefined,
           supplierOption: saved?.supplierId
             ? {
                 id: saved.supplierId,
@@ -639,7 +650,7 @@ export default function PurchaseRequestReviewPage() {
             </div>
             {orders.length ? (
               <div className="space-y-2">
-                <h2 className="font-semibold">Linked draft purchase orders</h2>
+                <h2 className="font-semibold">Linked purchase orders</h2>
                 {orders.map((orderId) => (
                   <p key={orderId}>
                     <Link

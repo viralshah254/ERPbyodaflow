@@ -37,6 +37,7 @@ export type PurchaseReviewPage = {
   review: PurchaseReview | null;
   taxes: Array<{ id: string; name: string; rate: number }>;
   suppliers: Array<{ id: string; name: string }>;
+  products?: Array<{ id: string; name: string }>;
 };
 export type PurchaseDefault = {
   supplierId?: string;
