@@ -3851,10 +3851,10 @@ function DynamicNextStepsPanel({
     } else if (status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Inbox className="h-4 w-4" />, text: "Awaiting approval — check your inbox", href: "/approvals/inbox", actionLabel: "Go to inbox" });
     } else if (status === "APPROVED") {
-      steps.push({ icon: <Icons.ShoppingCart className="h-4 w-4 text-blue-500" />, text: "Approved — convert to a Purchase Order", action: () => onConvert("purchase-order"), actionLabel: "Create PO", variant: "default" });
+      steps.push({ icon: <Icons.ShoppingCart className="h-4 w-4 text-blue-500" />, text: "Approved — order the manually reviewed remaining quantities", href: `/purchasing/requests/${document?.id}/review`, actionLabel: "Review items / create PO", variant: "default" });
     }
   } else if (type === "purchase-order") {
-    steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this purchase order", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
+    steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Review the supplier email delivery panel below. It sends only the approved PO using your company sender." });
     if (status === "DRAFT") {
       steps.push({ icon: <Icons.Send className="h-4 w-4" />, text: "Submit this PO for approval before creating a GRN", action: () => void onAction("submit"), actionLabel: "Submit for approval", variant: "default" });
     } else if (status === "PENDING_APPROVAL") {
