@@ -106,6 +106,7 @@ export type Delivery = {
   providerId?: string;
 };
 export type PoDeliveryState = {
+  sourceHash: string;
   jobs: Delivery[];
   supplier: { name: string; email?: string } | null;
   sender: string | null;
@@ -119,6 +120,7 @@ export const sendPo = (
   requestKey: string,
   approve: boolean,
   resendReason?: string,
+  reviewed?: { to: string; from: string; sourceHash: string },
 ) =>
   apiRequest(
     `/api/procurement/orders/${encodeURIComponent(id)}/${approve ? "approve-send" : "send"}`,

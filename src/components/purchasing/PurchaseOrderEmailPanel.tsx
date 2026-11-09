@@ -52,6 +52,15 @@ export function PurchaseOrderEmailPanel({
         requestKey.current,
         approve,
         canResend ? resendReason : undefined,
+        {
+          to: canResend
+            ? data!.jobs.find((job) =>
+                ["ACCEPTED", "DELIVERED"].includes(job.status),
+              )!.to
+            : data!.supplier!.email!,
+          from: data!.sender!,
+          sourceHash: data!.sourceHash,
+        },
       );
       requestKey.current = crypto.randomUUID();
       setReviewed(false);
@@ -94,7 +103,11 @@ export function PurchaseOrderEmailPanel({
           size="sm"
           variant="outline"
           disabled={busy}
-          onClick={() => void load()}
+          onClick={() => {
+            setReviewed(false);
+            requestKey.current = crypto.randomUUID();
+            void load();
+          }}
         >
           Refresh delivery status
         </Button>
@@ -110,7 +123,7 @@ export function PurchaseOrderEmailPanel({
         <>
           <p className="text-sm">
             Supplier: <b>{data.supplier?.name || "Select a supplier"}</b> · To:{" "}
-            {data.supplier?.email || "Supplier email missing"}
+            {canResend ? data.jobs.find(job => ["ACCEPTED", "DELIVERED"].includes(job.status))?.to : data.supplier?.email || "Supplier email missing"}
             <br />
             From: {data.sender || "Company sender not verified"}
           </p>

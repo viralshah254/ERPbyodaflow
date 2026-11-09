@@ -16,6 +16,7 @@ beforeEach(() => {
   vi.stubGlobal("React", React);
   vi.clearAllMocks();
   vi.mocked(getPoDeliveries).mockResolvedValue({
+    sourceHash: "a".repeat(64),
     jobs: [],
     supplier: { name: "Synthetic supplier", email: "supplier@example.test" },
     sender: "orders@example.test",
@@ -44,12 +45,17 @@ it("requires explicit recipient/PDF review and uses the approve-send action, not
       expect.any(String),
       true,
       undefined,
+      expect.objectContaining({
+        to: "supplier@example.test",
+        sourceHash: "a".repeat(64),
+      }),
     ),
   );
   expect(refresh).toHaveBeenCalled();
 });
 it("blocks sending when this company has not verified a sender", async () => {
   vi.mocked(getPoDeliveries).mockResolvedValue({
+    sourceHash: "a".repeat(64),
     jobs: [],
     supplier: { name: "Supplier", email: "supplier@example.test" },
     sender: null,
@@ -71,6 +77,7 @@ it("blocks sending when this company has not verified a sender", async () => {
 });
 it("does not offer another send after an uncertain provider outcome", async () => {
   vi.mocked(getPoDeliveries).mockResolvedValue({
+    sourceHash: "a".repeat(64),
     jobs: [
       {
         _id: "job",
@@ -99,6 +106,7 @@ it("does not offer another send after an uncertain provider outcome", async () =
 });
 it("resends only after review and an explicit reason", async () => {
   vi.mocked(getPoDeliveries).mockResolvedValue({
+    sourceHash: "a".repeat(64),
     jobs: [
       {
         _id: "job",
@@ -108,7 +116,7 @@ it("resends only after review and an explicit reason", async () => {
         createdAt: "2026-11-09",
       },
     ],
-    supplier: { name: "Supplier", email: "supplier@example.test" },
+    supplier: { name: "Supplier", email: "changed@example.test" },
     sender: "orders@example.test",
   });
   render(
@@ -121,6 +129,7 @@ it("resends only after review and an explicit reason", async () => {
   const resend = await screen.findByRole("button", {
     name: "Resend same approved PO",
   });
+  expect(screen.getByText(/To: supplier@example.test/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox"));
   expect(resend).toBeDisabled();
   fireEvent.change(screen.getByRole("textbox"), {
@@ -133,6 +142,10 @@ it("resends only after review and an explicit reason", async () => {
       expect.any(String),
       false,
       "Supplier requested another copy",
+      expect.objectContaining({
+        to: "supplier@example.test",
+        sourceHash: "a".repeat(64),
+      }),
     ),
   );
 });
