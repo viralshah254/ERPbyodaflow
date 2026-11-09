@@ -96,6 +96,7 @@ export function PurchaseOrderEmailPanel({
     <section
       className="mb-5 space-y-3 rounded border p-4"
       aria-label="Supplier email delivery"
+      data-tutorial-hint="purchase-order-email"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="font-semibold">Supplier email delivery</h2>

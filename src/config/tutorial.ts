@@ -1,3 +1,4 @@
+import { purchasingGuideForRoute } from "./purchasing-tutorials";
 /**
  * Tutorial config: chapters aligned with nav, descriptions and Copilot prompts.
  * Used by the Tutorial page and PageHelp for route-based help.
@@ -157,7 +158,7 @@ const ITEM_PROMPTS: Partial<Record<string, string>> = {
   "sales-returns":
     "Explain returns and credit notes: RMA, stock disposition, AR, and analysis of return reasons.",
   "purchasing-requests":
-    "Explain requisitions: intake, approval matrices, conversion to PO, and duplicate prevention.",
+    "Explain requisition item matching, manual quantity approval, last supplier and price defaults, approved remainder allocation, draft PO approval and tracked company email delivery.",
   "purchasing-guided-sourcing-flow":
     "Explain the procurement sourcing journey: flow health metrics, each step card, landed cost, variance, and finance review handoff.",
   "purchasing-grn":
@@ -355,6 +356,8 @@ const CHAPTER_META: Record<
 };
 
 export function writtenGuide(key: string, href: string) {
+  const purchasing = purchasingGuideForRoute(href);
+  if (purchasing) return purchasing;
   const alias = GUIDE_ALIASES[key];
   const base = ROUTE_GUIDES[href] ?? COMPLETION_GUIDES[key] ?? ITEM_GUIDES[key] ??
     (alias ? COMPLETION_GUIDES[alias] ?? ITEM_GUIDES[alias] : undefined) ?? ORPHAN_ROUTE_GUIDES[href];
@@ -497,6 +500,11 @@ export function getTutorialForRoute(pathname: string): TutorialForRoute | null {
   const original = pathname.replace(/\/$/, "") || "/";
   const normalized = TUTORIAL_ROUTE_ALIASES[original] ?? original;
 
+  const purchasing = purchasingGuideForRoute(normalized);
+  if (purchasing) {
+    const settings = normalized === "/settings/company-email";
+    return { chapterId: settings ? "settings" : "purchasing", chapterTitle: settings ? "Settings & administration" : "Purchasing", copilotPrompt: `Explain ${purchasing.title} using the saved instructions. Never execute approvals or send supplier email as part of a tutorial.`, hrefToChapter: settings ? "/tutorial/settings" : "/tutorial/purchasing", itemLabel: purchasing.title, ...purchasing, guideTips: purchasing.guideTips ?? [], elementHints: purchasing.elementHints ?? [] };
+  }
   const exactOrphan = ORPHAN_ROUTE_GUIDES[normalized];
   if (exactOrphan) {
     return orphanPayloadToTutorial(exactOrphan);

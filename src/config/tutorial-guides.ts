@@ -1,3 +1,4 @@
+import { REQUISITION_ITEM_GUIDE, PURCHASE_ORDER_GUIDE } from "./purchasing-tutorials";
 /**
  * Per-page guide content: summary and optional steps for each tutorial item.
  * Keys match nav item keys. Missing keys fall back to chapter description in getTutorialForRoute.
@@ -775,38 +776,8 @@ export const ITEM_GUIDES: Partial<
     recommendedNextStep: { label: "Credit notes (docs)", href: "/docs/credit-note" },
   },
   // Purchasing
-  "purchasing-requests": {
-    guideSummary:
-      "Purchase Requests (requisitions) capture internal demand before money is committed to a supplier. They enforce budget, category approval, and audit trail—especially in multi-site organisations.",
-    guideSteps: [
-      "Enter need-by date, department/project, and lines with suggested suppliers if allowed.",
-      "Attach specs or quotes when technical sourcing is required.",
-      "Submit for approval per policy matrix.",
-      "Track status; nudge approvers when production is blocked.",
-      "Upon approval, convert to PO with minimal retyping.",
-      "Reject or close requests that are duplicated or obsolete.",
-    ],
-    guideTips: [
-      "Clear naming in the title field helps approvers triage faster.",
-    ],
-    recommendedNextStep: { label: "Purchase orders", href: "/purchasing/orders" },
-  },
-  "purchasing-orders": {
-    guideSummary:
-      "Purchase Orders under Purchasing is the buyer’s primary list: open POs, lead times, and receipt status. It ties to MRP, warehouse receiving, and AP—treat it as a contract with the supplier, not just paperwork.",
-    guideSteps: [
-      "Filter open POs to plan cash and receiving docks.",
-      "Edit lines only while supplier has not confirmed; use change orders if your process supports them.",
-      "Send PO to supplier via email/portal integration when available.",
-      "Close PO lines when fully received or formally cancelled.",
-      "Escalate price or date breaches early—waiting until invoice time is expensive.",
-      "Link contracts or RFQs when enterprise procurement requires it.",
-    ],
-    guideTips: [
-      "Partial receipts are normal—track remaining qty for cash forecasting.",
-    ],
-    recommendedNextStep: { label: "Goods receipt", href: "/inventory/receipts" },
-  },
+  "purchasing-requests": REQUISITION_ITEM_GUIDE,
+  "purchasing-orders": PURCHASE_ORDER_GUIDE,
   "purchasing-guided-sourcing-flow": {
     guideSummary:
       "Guided Sourcing Flow is a wizard-style path from “we need to buy X” to a drafted PO, with fewer dead ends than jumping between requisitions, supplier master, and PO screens. Ideal for new buyers, regulated categories, or when leadership wants a standard script.",

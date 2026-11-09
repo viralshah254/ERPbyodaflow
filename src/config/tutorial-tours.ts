@@ -1,3 +1,4 @@
+import { purchasingGuideForRoute } from "./purchasing-tutorials";
 /**
  * Spotlight tour definitions.
  * Hand-written tours win on their exact route. Every other screen gets a
@@ -828,7 +829,7 @@ export const TUTORIAL_TOURS: TourDef[] = [
       {
         element: "h1",
         title: "Purchase requests",
-        description: "Internal requisitions; submit for approval and convert to a purchase order when approved.",
+        description: "Create the requisition, open Review items, manually approve quantities and save supplier/price evidence. Approve the requisition, then create grouped draft POs from the approved remainder; POs need their own approval and reviewed email delivery.",
       },
     ],
   },
@@ -1358,6 +1359,14 @@ export function getTourForRoute(pathname: string): TourDef | null {
     return null;
   }
 
+  if (/^\/purchasing\/requests\/[^/]+\/review$/.test(normalized) || /^\/docs\/purchase-order\/(?!new$)[^/]+$/.test(normalized) || normalized === "/settings/company-email") {
+    const guide = purchasingGuideForRoute(normalized)!;
+    return ensureInteractive({ tourId: `purchasing-workflow:${normalized}`, route: normalized, title: guide.title, steps: [
+      { element: "h1", title: guide.title, description: guide.guideSummary },
+      ...(guide.elementHints ?? []).map(hint => ({ element: hint.selector, title: "Review this step", description: hint.hint })),
+      { element: workArea(), title: "Continue deliberately", description: "Read the full guide for the sequence and recovery steps. This tour never saves an item decision, creates an order, enables a sender, approves, sends, posts or pays for you." },
+    ] });
+  }
   const exact = TUTORIAL_TOURS.find((tour) => tour.route === normalized);
   if (exact) return ensureInteractive(exact);
 

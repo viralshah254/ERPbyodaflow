@@ -108,6 +108,7 @@ export default function CompanyEmailPage() {
               <p>Loading company email settings…</p>
             ) : (
               <fieldset
+                data-tutorial-hint="company-email-sender"
                 disabled={busy}
                 className="space-y-4 rounded border p-4"
               >
@@ -201,7 +202,7 @@ export default function CompanyEmailPage() {
                   Save sender settings
                 </Button>
                 {data.dnsName ? (
-                  <div className="space-y-3 rounded bg-muted p-3">
+                  <div className="space-y-3 rounded bg-muted p-3" data-tutorial-hint="company-email-domain">
                     <h2 className="font-semibold">
                       Authenticate this company domain
                     </h2>

@@ -273,7 +273,7 @@ export default function PurchaseRequestReviewPage() {
               </Link>
             </Button>
             <div className="overflow-x-auto rounded border">
-              <table className="w-full text-sm">
+              <table className="w-full text-sm" data-tutorial-hint="purchase-request-item-review">
                 <thead>
                   <tr className="border-b text-left">
                     <th className="p-3">Requested / matched item</th>
@@ -588,6 +588,7 @@ export default function PurchaseRequestReviewPage() {
                     !dirty ||
                     rows.some((row) => row.productId && !row.defaultsReady)
                   }
+                  data-tutorial-hint="purchase-request-save-review"
                   onClick={() => void save()}
                 >
                   {busy ? "Working…" : "Save manual item review"}
@@ -606,6 +607,7 @@ export default function PurchaseRequestReviewPage() {
                         Number(orderQuantities[row.lineId]) > 0,
                     )
                   }
+                  data-tutorial-hint="purchase-request-create-orders"
                   onClick={() => void create()}
                 >
                   Create draft purchase orders

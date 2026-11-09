@@ -92,6 +92,10 @@ function resolveGuide(pathname: string, visited: Set<string>): ScreenGuide | nul
       else if (kind === "record") tasks = [summary, `Inspect the current document state. This type's configured workflow includes ${config.statusWorkflow.map(s => s.label).join(", ")}; only the applicable actions are displayed.`, ...tasks.slice(1)];
     }
   }
+  if (parts[1] === "docs" && parts[2] === "purchase-order" && kind === "record" && info) {
+    summary = info.guideSummary;
+    tasks = info.guideSteps;
+  }
   if (kind === "report") {
     identity = screen.route.replace("[reportId]", parts.at(-1)!);
     title = exact?.label ?? `${human(parts.at(-1)!)} report`;
