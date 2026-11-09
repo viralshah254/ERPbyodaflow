@@ -2,7 +2,7 @@ import * as React from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ReceiptCollectionGrid } from "./ReceiptCollectionGrid";
-import { createBatchApPaymentApi, fetchApReceiptItemsApi, previewApSettlementApi } from "@/lib/api/payments";
+import { createArPaymentApi, fetchArOpenItemsApi, previewArSettlementApi, createBatchApPaymentApi, fetchApReceiptItemsApi, previewApSettlementApi } from "@/lib/api/payments";
 vi.mock("@/lib/org/useBaseCurrency", () => ({ useBaseCurrency: () => "KES" }));
 vi.mock("@/lib/api/treasury-ops", () => ({ fetchBankAccountsApi: vi.fn().mockResolvedValue([{ id: "bank", name: "Bank" }]) }));
 vi.mock("@/components/ui/searchable-select", () => ({ SearchableSelect: ({ value, onValueChange }: any) => <select aria-label="Bank" value={value} onChange={e => onValueChange(e.target.value)}><option value="" /><option value="bank">Bank</option></select> }));
@@ -49,4 +49,28 @@ describe("batch payouts", () => {
     expect(attempts[0][0].clientRequestId).toBeTruthy();
     expect(attempts[1][0].clientRequestId).toBe(attempts[0][0].clientRequestId);
   });
+});
+
+it.each([false, true])("allows an explicit on-account entry in payout=%s without inventing allocations", async (payout) => {
+  vi.mocked(fetchArOpenItemsApi).mockResolvedValue({ invoices: [], creditNotes: [] });
+  vi.mocked(fetchApReceiptItemsApi).mockResolvedValue({ invoices: [], creditNotes: [] });
+  const emptyPreview = { invoiceLines: [], creditNoteApplications: [], cashApplied: 0, creditsApplied: 0, unapplied: 100, flags: [] };
+  vi.mocked(previewArSettlementApi).mockResolvedValue(emptyPreview); vi.mocked(previewApSettlementApi).mockResolvedValue(emptyPreview);
+  vi.mocked(createArPaymentApi).mockResolvedValue({ id: "receipt", number: "AR-1" });
+  render(<ReceiptCollectionGrid payout={payout} />);
+  fireEvent.change(screen.getByLabelText("Bank"), { target: { value: "bank" } });
+  fireEvent.change(screen.getAllByLabelText("Supplier")[0], { target: { value: "supplier" } });
+  fireEvent.change(screen.getByLabelText("Method 1"), { target: { value: "BANK_TRANSFER" } });
+  fireEvent.change(screen.getByLabelText("Amount 1"), { target: { value: "100" } });
+  const onAccount = await screen.findByRole("checkbox", { name: "Record line 1 on account" });
+  const post = screen.getByRole("button", { name: payout ? "Post payouts" : "Post receipts" });
+  fireEvent.click(post);
+  await screen.findByText(/Choose invoices or select Record on account/);
+  const create = payout ? createBatchApPaymentApi : createArPaymentApi;
+  expect(create).not.toHaveBeenCalled();
+  fireEvent.click(onAccount);
+  fireEvent.change(screen.getByLabelText("Method 1"), { target: { value: "CASH" } });
+  expect(onAccount).not.toBeChecked();
+  fireEvent.click(onAccount); fireEvent.click(post);
+  await waitFor(() => expect(create).toHaveBeenCalledWith(expect.objectContaining({ amount: 100, allocations: [], bankAccountId: "bank" })));
 });

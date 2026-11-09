@@ -31,8 +31,8 @@ import {
   sfaSegmentLabel,
   type CustomerKindId,
 } from "@/lib/fmcg/sfa-customer";
-import { fetchCustomerDirectorySummaryApi } from "@/lib/api/customer-directory";
-import { fetchPartiesPageApi, fetchPartyCreditSummaryApi, hidePartyInOrgApi } from "@/lib/api/parties";
+import { fetchCustomerDirectorySummaryApi, fetchCustomerBalancesApi } from "@/lib/api/customer-directory";
+import { fetchPartiesPageApi, hidePartyInOrgApi } from "@/lib/api/parties";
 import { OdaflowMultichainMappingBoard } from "@/components/integrations/OdaflowMultichainMappingBoard";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 import { fetchPaymentTermsApi } from "@/lib/api/payment-terms";
@@ -120,8 +120,11 @@ export function CustomerDirectoryPanel({
     [onActiveTabChange]
   );
   const [search, setSearch] = React.useState("");
+  const [settledSearch, setSettledSearch] = React.useState("");
+  React.useEffect(() => { const timer = setTimeout(() => setSettledSearch(search), 300); return () => clearTimeout(timer); }, [search]);
   const [parties, setParties] = React.useState<PartyRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [directoryLoadError, setDirectoryLoadError] = React.useState<string | null>(null);
   const [branchesSupermarket, setBranchesSupermarket] = React.useState<PartyRow | null>(null);
   const [branchesOpen, setBranchesOpen] = React.useState(false);
   const [hideTarget, setHideTarget] = React.useState<{
@@ -135,7 +138,10 @@ export function CustomerDirectoryPanel({
   const [totalCount, setTotalCount] = React.useState<number | undefined>(undefined);
   const [paymentClass, setPaymentClass] = React.useState<"all" | "CASH" | "CREDIT">("all");
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
-  const [outstandingById, setOutstandingById] = React.useState<Record<string, number>>({});
+  const balanceRequestRef = React.useRef(0);
+  const cancelBalanceLoad = React.useCallback(() => { balanceRequestRef.current++; }, []);
+  const [balancesLoading, setBalancesLoading] = React.useState(false);
+  const [outstandingById, setOutstandingById] = React.useState<Record<string, Array<{ currency: string; amount: number }>>>({});
 
   React.useEffect(() => {
     void fetchPaymentTermsApi()
@@ -159,51 +165,54 @@ export function CustomerDirectoryPanel({
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const request = ++balanceRequestRef.current;
+    setLoading(true); setDirectoryLoadError(null); setOutstandingById({}); setBalancesLoading(false);
     try {
-      if (segmentTabs) {
-        void fetchCustomerDirectorySummaryApi()
-          .then(setDirectoryCounts)
-          .catch(() => setDirectoryCounts(null));
-      }
       const page = await fetchPartiesPageApi({
         role: segmentTabs ? undefined : "customer",
         directory: segmentTabs && tabConfig && "directory" in tabConfig ? tabConfig.directory : undefined,
-        search: search.trim() || undefined,
+        search: settledSearch.trim() || undefined,
         paymentClass: paymentClass === "all" ? undefined : paymentClass,
         status: "ACTIVE",
         limit: pageSize,
         cursor: pageOffset > 0 ? String(pageOffset) : undefined,
       });
+      if (request !== balanceRequestRef.current) return;
       setParties(page.items);
       setHasMore(Boolean(page.nextCursor));
       setTotalCount(page.totalCount);
       if (canReadAr && page.items.length) {
-        const summaries = await Promise.all(
-          page.items.map(async (party) => {
-            const summary = await fetchPartyCreditSummaryApi(party.id);
-            return [party.id, summary?.outstandingBalance ?? 0] as const;
-          })
-        );
-        setOutstandingById(Object.fromEntries(summaries));
-      } else {
-        setOutstandingById({});
+        setBalancesLoading(true);
+        void fetchCustomerBalancesApi(page.items.map((party) => party.id)).then((balances) => {
+          if (request === balanceRequestRef.current) setOutstandingById(balances);
+        }).catch(() => {
+          if (request === balanceRequestRef.current) setOutstandingById({});
+        }).finally(() => { if (request === balanceRequestRef.current) setBalancesLoading(false); });
       }
+
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load customers");
+      if (request === balanceRequestRef.current) {
+        const message = err instanceof Error ? err.message : "Failed to load customers";
+        setDirectoryLoadError(message); setParties([]); setHasMore(false);
+        toast.error(message);
+      }
     } finally {
-      setLoading(false);
+      if (request === balanceRequestRef.current) setLoading(false);
     }
-  }, [activeTab, approvalOpen, canReadAr, pageOffset, pageSize, paymentClass, search, segmentTabs, tabConfig]);
+  }, [approvalOpen, canReadAr, pageOffset, pageSize, paymentClass, settledSearch, segmentTabs, tabConfig]);
 
   React.useEffect(() => {
     void loadParties();
-  }, [loadParties]);
+    return cancelBalanceLoad;
+  }, [loadParties, branchListRefreshKey, cancelBalanceLoad]);
 
   React.useEffect(() => {
-    if (branchListRefreshKey === 0) return;
-    void loadParties();
-  }, [branchListRefreshKey, loadParties]);
+    if (!segmentTabs) return;
+    let cancelled = false;
+    void fetchCustomerDirectorySummaryApi().then((counts) => { if (!cancelled) setDirectoryCounts(counts); }).catch(() => { if (!cancelled) setDirectoryCounts(null); });
+    return () => { cancelled = true; };
+  }, [segmentTabs, branchListRefreshKey]);
+
 
   // After create, hub switches tab — clear search so the new customer isn't filtered out.
   React.useEffect(() => {
@@ -274,7 +283,7 @@ export function CustomerDirectoryPanel({
 
   const renderModernTradeTable = () => (
     <div className={LIST_TABLE_STATIC_CLASS}>
-      {loading ? (
+      {directoryLoadError ? (<div role="alert" className="p-6 text-sm">{directoryLoadError} Use Refresh to try again.</div>) : loading ? (
         <p className="p-6 text-sm text-muted-foreground">Loading…</p>
       ) : parties.length === 0 ? (
         <EmptyState
@@ -380,7 +389,7 @@ export function CustomerDirectoryPanel({
 
     return (
       <div className={LIST_TABLE_STATIC_CLASS}>
-        {loading ? (
+        {directoryLoadError ? (<div role="alert" className="p-6 text-sm">{directoryLoadError} Use Refresh to try again.</div>) : loading ? (
           <p className="p-6 text-sm text-muted-foreground">Loading…</p>
         ) : parties.length === 0 ? (
           <EmptyState
@@ -455,7 +464,7 @@ export function CustomerDirectoryPanel({
                   <div className="flex flex-wrap gap-2 shrink-0 items-center">
                     {canReadAr ? (
                       <span className="text-sm font-medium tabular-nums mr-1">
-                        {formatMoney(outstandingById[party.id] ?? 0, currency)}
+                        {outstandingById[party.id] ? outstandingById[party.id].length ? outstandingById[party.id].map((row) => formatMoney(row.amount, row.currency)).join(" · ") : formatMoney(0, currency) : balancesLoading ? "Loading balance…" : "Balance unavailable"}
                       </span>
                     ) : null}
                     <Button size="sm" variant="secondary" asChild>

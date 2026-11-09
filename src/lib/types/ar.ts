@@ -53,6 +53,7 @@ export type SettlementPreview = {
 };
 
 export type PaymentRow = {
+  currency?: string;
   id: string;
   number: string;
   date: string;

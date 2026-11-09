@@ -270,6 +270,7 @@ export async function fetchApSuppliersPageApi(
 
 function mapArPaymentRow(item: BackendPayment): PaymentRow {
   return {
+    currency: item.currency,
     id: item.id,
     number: item.number,
     date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,

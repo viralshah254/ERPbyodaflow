@@ -39,7 +39,11 @@ type ReceiptRow = {
   creditApplications: CreditNoteApplicationLine[];
   matchLabels: string[];
   openLoading: boolean;
+  openReady: boolean;
+  loadRevision: number;
+  onAccount: boolean;
   matching: boolean;
+  matchReady: boolean;
   expanded: boolean;
   dirty: boolean;
   error?: string;
@@ -72,7 +76,11 @@ function blankRow(): ReceiptRow {
     creditApplications: [],
     matchLabels: [],
     openLoading: false,
+    openReady: false,
+    loadRevision: 0,
+    onAccount: false,
     matching: false,
+    matchReady: false,
     expanded: false,
     dirty: false,
   };
@@ -125,10 +133,10 @@ function matchText(row: ReceiptRow, currency: string, payout: boolean): string {
   return unapplied > 0.009 ? `${applied} · unapplied ${formatMoney(unapplied, currency)}` : applied;
 }
 
-function rowProblem(row: ReceiptRow): string | null {
-  if (!row.customerId) return "Select a customer.";
+function rowProblem(row: ReceiptRow, payout: boolean): string | null {
+  if (!row.customerId) return payout ? "Select a supplier." : "Select a customer.";
   const amount = Number(row.amount);
-  if (!Number.isFinite(amount) || amount <= 0) return "Enter the amount received.";
+  if (!Number.isFinite(amount) || amount <= 0) return payout ? "Enter the amount paid." : "Enter the amount received.";
   if ((row.method === "CHEQUE" || row.method === "MPESA") && !row.reference.trim()) {
     return row.method === "CHEQUE" ? "Enter the cheque number." : "Enter the M-Pesa code.";
   }
@@ -168,11 +176,12 @@ function ReceiptLine({
   React.useEffect(() => {
     if (!row.customerId) return;
     let cancelled = false;
-    onChangeRef.current({ openLoading: true, error: undefined });
+    onChangeRef.current({ openLoading: true, openReady: false, error: undefined });
     (payout ? fetchApReceiptItemsApi : fetchArOpenItemsApi)(row.customerId)
       .then((items) => {
         if (cancelled) return;
         onChangeRef.current({
+          openReady: true,
           invoices: items.invoices,
           creditNotes: items.creditNotes,
           openLoading: false,
@@ -182,6 +191,7 @@ function ReceiptLine({
         if (!cancelled) {
           onChangeRef.current({
             openLoading: false,
+            openReady: false,
             error: (error as Error).message || "Could not load open invoices.",
           });
         }
@@ -189,7 +199,7 @@ function ReceiptLine({
     return () => {
       cancelled = true;
     };
-  }, [row.customerId, row.id, payout]);
+  }, [row.customerId, row.id, row.loadRevision, payout]);
 
   React.useEffect(() => {
     const amount = Number(row.amount);
@@ -197,7 +207,7 @@ function ReceiptLine({
     let cancelled = false;
     const handle = window.setTimeout(() => {
       const references = referenceTokens(row.reference);
-      onChangeRef.current({ matching: true });
+      onChangeRef.current({ matching: true, matchReady: false });
       (payout ? previewApSettlementApi : previewArSettlementApi)({
         partyId: row.customerId,
         amount,
@@ -214,6 +224,7 @@ function ReceiptLine({
             creditApplications: applied.creditApplications,
             matchLabels: [...new Set(preview.invoiceLines.map((line) => line.invoiceNumber).filter(Boolean))],
             matching: false,
+            matchReady: true,
             error: undefined,
           });
         })
@@ -221,6 +232,7 @@ function ReceiptLine({
           if (!cancelled) {
             onChangeRef.current({
               matching: false,
+              matchReady: false,
               error: (error as Error).message || "Could not match this receipt.",
             });
           }
@@ -230,7 +242,7 @@ function ReceiptLine({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [row.customerId, row.amount, row.reference, row.dirty, row.id, payout]);
+  }, [row.customerId, row.amount, row.reference, row.dirty, row.id, row.loadRevision, payout]);
 
   const clearCustomerMatch = (customerId: string) => {
     if (customerId === row.customerId) return;
@@ -333,7 +345,8 @@ function ReceiptLine({
               {row.expanded ? "Hide split" : "Edit split"}
             </Button>
           </div>
-          {row.error ? <p className="mt-1 text-xs text-destructive">{row.error}</p> : null}
+          {row.openReady && !row.matching && (row.matchReady || row.dirty) && Number(row.amount) > 0 && sumAmounts(Object.values(row.invoiceAmounts)) <= 0 ? <label className="mt-2 flex items-center gap-2 text-xs"><input type="checkbox" aria-label={`Record line ${index + 1} on account`} checked={row.onAccount} onChange={(event) => onChange({ onAccount: event.target.checked, error: undefined })} />Record on account (unapplied)</label> : null}
+          {row.error ? <div className="mt-1 text-xs text-destructive"><p>{row.error}</p><Button type="button" size="sm" variant="ghost" onClick={() => onChange({ loadRevision: row.loadRevision + 1, dirty: false, matching: Number(row.amount) > 0, error: undefined })}>Retry matching</Button></div> : null}
         </TableCell>
         <TableCell><Button type="button" variant="ghost" size="sm" aria-label={`Remove line ${index + 1}`} onClick={onRemove}>Remove</Button></TableCell>
       </TableRow>
@@ -434,7 +447,12 @@ export function ReceiptCollectionGrid({ payout = false }: { payout?: boolean }) 
   }, [focusRowId]);
 
   const updateRow = (id: string, patch: Partial<ReceiptRow>) => {
-    setRows((current) => current.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+    setRows((current) => current.map((row) => {
+      if (row.id !== id) return row;
+      const changedMatch = (patch.customerId !== undefined && patch.customerId !== row.customerId) || (patch.amount !== undefined && patch.amount !== row.amount) || (patch.reference !== undefined && patch.reference !== row.reference);
+      const changedMethod = patch.method !== undefined && patch.method !== row.method;
+      return { ...row, ...(changedMatch || changedMethod ? { onAccount: false } : {}), ...(changedMatch ? { matchReady: false } : {}), ...patch };
+    }));
   };
 
   const startNextLine = (row: ReceiptRow) => {
@@ -486,7 +504,7 @@ export function ReceiptCollectionGrid({ payout = false }: { payout?: boolean }) 
         remaining.push(row);
         continue;
       }
-      const problem = row.openLoading || row.matching ? "Wait for invoice matching to finish." : rowProblem(row) || (sumAmounts(Object.values(row.invoiceAmounts)) <= 0 ? "Allocate this payment to at least one invoice." : null);
+      const problem = row.openLoading || row.matching || !row.openReady || (!row.dirty && !row.matchReady) ? "Load open invoices successfully before posting. Use Retry matching if loading failed." : rowProblem(row, payout) || (sumAmounts(Object.values(row.invoiceAmounts)) <= 0 && !row.onAccount ? "Choose invoices or select Record on account for an unapplied amount." : null);
       if (problem) {
         failed = true;
         remaining.push({ ...row, error: problem, expanded: true });
@@ -561,7 +579,7 @@ export function ReceiptCollectionGrid({ payout = false }: { payout?: boolean }) 
         </p>
       </div>
       <p className="text-xs text-muted-foreground">
-        Enter on the amount starts the next line. Choosing a {payout ? "supplier" : "customer"} loads open invoices. A matching reference is preferred; otherwise open invoices are suggested. Reference matching is optional. Review or edit the split before posting.
+        Enter on the amount starts the next line. Choosing a {payout ? "supplier" : "customer"} loads open invoices. A matching reference is preferred; otherwise open invoices are suggested. Reference matching is optional. Review or edit the split before posting. If no invoice should be settled, select Record on account to keep the amount unapplied.
       </p>
       <div className="rounded-md border">
         <Table>

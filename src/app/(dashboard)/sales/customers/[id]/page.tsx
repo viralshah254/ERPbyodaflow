@@ -18,10 +18,10 @@ import {
   CustomerInvoicesPanel,
   CustomerOrdersPanel,
   CustomerPaymentsPanel,
-  useCustomerActivity,
 } from "@/components/customers/CustomerHistoryPanels";
 import { fetchPartyByIdApi, fetchPartyCreditSummaryApi, type PartyDetail } from "@/lib/api/parties";
 import type { PartyCreditSummary } from "@/lib/api/parties";
+import { fetchArOpenPageApi } from "@/lib/api/payments";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useFinancialSettings } from "@/lib/org/useFinancialSettings";
 import { formatMoney } from "@/lib/money";
@@ -53,7 +53,6 @@ export default function Customer360Page() {
   const fmcg = isFmcgOrg(templateId);
   const { settings } = useFinancialSettings();
   const currency = settings.baseCurrency?.trim()?.toUpperCase() || "KES";
-  const activity = useCustomerActivity(id, canReadAr);
   const [editOpen, setEditOpen] = React.useState(false);
 
   const requested = searchParams.get("tab");
@@ -65,6 +64,10 @@ export default function Customer360Page() {
   const [party, setParty] = React.useState<PartyDetail | null>(null);
   const [credit, setCredit] = React.useState<PartyCreditSummary | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [creditLoading, setCreditLoading] = React.useState(false);
+  const [openInvoiceCount, setOpenInvoiceCount] = React.useState<number | null>(null);
+  const requestRef = React.useRef(0);
+  const cancelLoad = React.useCallback(() => { requestRef.current++; }, []);
 
   React.useEffect(() => {
     setTab(initialTab);
@@ -72,26 +75,25 @@ export default function Customer360Page() {
 
   const load = React.useCallback(async () => {
     if (!id) return;
-    setLoading(true);
-    try {
-      const [detail, summary] = await Promise.all([
-        fetchPartyByIdApi(id),
-        canReadAr ? fetchPartyCreditSummaryApi(id) : Promise.resolve(null),
-      ]);
+    const request = ++requestRef.current;
+    setLoading(true); setCreditLoading(canReadAr); setParty(null); setCredit(null); setOpenInvoiceCount(null);
+    const detailTask = fetchPartyByIdApi(id).then((detail) => {
+      if (request !== requestRef.current) return;
       setParty(detail);
-      setCredit(summary);
       if (!detail) toast.error("Customer not found.");
-    } catch (error) {
-      toast.error((error as Error).message || "Failed to load customer");
-      setParty(null);
-    } finally {
-      setLoading(false);
-    }
+    }).catch((error) => {
+      if (request === requestRef.current) toast.error((error as Error).message || "Could not load customer.");
+    }).finally(() => { if (request === requestRef.current) setLoading(false); });
+    const creditTask = canReadAr ? fetchPartyCreditSummaryApi(id).then((summary) => {
+      if (request === requestRef.current) setCredit(summary);
+    }).finally(() => { if (request === requestRef.current) setCreditLoading(false); }) : Promise.resolve();
+    const countTask = canReadAr ? fetchArOpenPageApi(id, { limit: 1, offset: 0 }).then((page) => {
+      if (request === requestRef.current) setOpenInvoiceCount(page.openCount);
+    }).catch(() => {}) : Promise.resolve();
+    await Promise.allSettled([detailTask, creditTask, countTask]);
   }, [canReadAr, id]);
 
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  React.useEffect(() => { void load(); return cancelLoad; }, [load, cancelLoad]);
 
   const onTabChange = (value: string) => {
     const next = isTab(value) ? value : "overview";
@@ -112,16 +114,6 @@ export default function Customer360Page() {
     .filter(Boolean)
     .join(", ");
 
-  const openInvoiceCount = activity.openInvoices?.length ?? null;
-  const clearedCount =
-    activity.openInvoices == null
-      ? null
-      : activity.invoices.filter((row) => {
-          if (["DRAFT", "PENDING_APPROVAL", "APPROVED", "CANCELLED", "REJECTED", "VOID"].includes(row.status)) {
-            return false;
-          }
-          return !activity.openInvoices!.some((open) => open.id === row.id);
-        }).length;
 
   return (
     <PageShell>
@@ -145,12 +137,12 @@ export default function Customer360Page() {
                 Edit customer
               </Button>
             ) : null}
-            <Button asChild>
+            {canWriteSales ? <><Button asChild>
               <Link href={`/docs/sales-order/new?party=${encodeURIComponent(id)}`}>
                 <Icons.ShoppingCart className="mr-2 h-4 w-4" />
                 New order
               </Link>
-            </Button>
+            </Button><Button variant="outline" asChild><Link href={`/docs/invoice/new?party=${encodeURIComponent(id)}`}>New invoice</Link></Button></> : null}
           </div>
         }
       />
@@ -161,6 +153,7 @@ export default function Customer360Page() {
           <p className="text-sm text-muted-foreground">Customer not found.</p>
         ) : (
           <Tabs value={tab} onValueChange={onTabChange}>
+            {canReadAr && !creditLoading && !credit ? <div role="alert" className="mb-4 rounded border p-3 text-sm">Credit information is unavailable. <Button variant="outline" size="sm" onClick={() => void load()}>Retry customer data</Button></div> : null}
             <TabsList className="mb-4 flex h-auto flex-wrap" data-tutorial-hint="customer-tabs">
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="orders">Orders</TabsTrigger>
@@ -177,7 +170,7 @@ export default function Customer360Page() {
                     <CardTitle className="text-sm text-muted-foreground">Outstanding</CardTitle>
                   </CardHeader>
                   <CardContent className="text-2xl font-semibold">
-                    {canReadAr ? formatMoney(credit?.outstandingBalance ?? 0, currency) : "—"}
+                    {canReadAr && credit ? formatMoney(credit.outstandingBalance, currency) : creditLoading ? "Loading…" : "—"}
                   </CardContent>
                 </Card>
                 <Card>
@@ -194,7 +187,7 @@ export default function Customer360Page() {
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">Credit limit</CardTitle>
+                    <CardTitle className="text-sm text-muted-foreground">{credit?.creditControlMode === "DAYS" ? "Credit terms" : "Credit limit"}</CardTitle>
                   </CardHeader>
                   <CardContent className="text-2xl font-semibold">
                     {formatCustomerCreditLimit({
@@ -227,9 +220,9 @@ export default function Customer360Page() {
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">Cleared invoices</CardTitle>
+                    <CardTitle className="text-sm text-muted-foreground">Credit used</CardTitle>
                   </CardHeader>
-                  <CardContent className="text-2xl font-semibold">{clearedCount == null ? "—" : clearedCount}</CardContent>
+                  <CardContent className="text-2xl font-semibold">{credit?.creditUsed == null ? "—" : formatMoney(credit.creditUsed, currency)}</CardContent>
                 </Card>
               </div>
               <Card data-tutorial-hint="customer-profile">
@@ -256,11 +249,11 @@ export default function Customer360Page() {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Orders</p>
-                    <p>{activity.loading ? "…" : activity.orders.length}</p>
+                    <button className="text-primary hover:underline" onClick={() => onTabChange("orders")}>View orders</button>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Payments</p>
-                    <p>{activity.payments == null ? "—" : activity.payments.length}</p>
+                    {canReadAr ? <button className="text-primary hover:underline" onClick={() => onTabChange("payments")}>View receipts</button> : <p>—</p>}
                   </div>
                   {party.onHold ? (
                     <div>
@@ -284,16 +277,16 @@ export default function Customer360Page() {
             </TabsContent>
 
             <TabsContent value="orders">
-              <CustomerOrdersPanel activity={activity} />
+              <CustomerOrdersPanel key={id} partyId={id} />
             </TabsContent>
 
             <TabsContent value="invoices">
-              <CustomerInvoicesPanel activity={activity} />
+              <CustomerInvoicesPanel key={id} partyId={id} canReadAr={canReadAr} />
             </TabsContent>
 
             {canReadAr ? (
               <TabsContent value="payments">
-                <CustomerPaymentsPanel activity={activity} />
+                <CustomerPaymentsPanel key={id} partyId={id} />
               </TabsContent>
             ) : null}
 
@@ -301,7 +294,7 @@ export default function Customer360Page() {
               <section className="space-y-3">
                 <h2 className="text-base font-semibold">Credit limit</h2>
                 <p className="text-sm text-muted-foreground">
-                  {credit?.creditLimitAmount != null
+                  {!credit ? "Credit information is unavailable." : credit.creditLimitAmount != null
                     ? `${formatMoney(credit.creditLimitAmount, currency)} limit, ${formatMoney(credit.availableCredit ?? 0, currency)} still available.`
                     : "No cash credit amount limit is set, so orders are not capped by amount."}
                   {" "}
@@ -313,7 +306,7 @@ export default function Customer360Page() {
               </section>
               <section className="space-y-3">
                 <h2 className="text-base font-semibold">Credit notes</h2>
-                <CustomerCreditNotes activity={activity} />
+                <CustomerCreditNotes key={id} partyId={id} />
               </section>
             </TabsContent>
 

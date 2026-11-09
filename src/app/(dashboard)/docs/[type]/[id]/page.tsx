@@ -4,6 +4,7 @@ import { useAccountingOnly } from "@/lib/api/invoice-posting";
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { creditQuantityPreview } from "@/lib/docs/credit-quantity-preview";
 import { DocumentPageShell } from "@/components/docs/DocumentPageShell";
 import { DocumentHubUploadButton } from "@/components/documents/DocumentHubUploadButton";
 import { linkHubDocument } from "@/lib/api/document-hub";
@@ -322,6 +323,8 @@ export default function DocViewPage() {
   const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | "submit" | null>(null);
   /** True only for the very first fetch when document is still null — drives skeleton vs empty-state decisions. */
   const [initialLoading, setInitialLoading] = React.useState(true);
+  const [documentLoadError, setDocumentLoadError] = React.useState<string | null>(null);
+  const documentRequestRef = React.useRef(0);
   /** True when re-fetching after an action; existing document stays visible. */
   const [refreshing, setRefreshing] = React.useState(false);
   /** Secondary payload (attachments / comments / audit) still loading after core detail. */
@@ -712,6 +715,8 @@ export default function DocViewPage() {
 
   const refreshDocument = React.useCallback(
     async (isBackground = false, fullPayload = true) => {
+      const request = ++documentRequestRef.current;
+      setDocumentLoadError(null);
       if (isBackground) {
         setRefreshing(true);
       } else {
@@ -724,12 +729,18 @@ export default function DocViewPage() {
         const detail = await fetchDocumentDetailApi(type as DocTypeKey, id, {
           include: fullPayload ? ["all"] : ["core"],
         });
+        if (request !== documentRequestRef.current) return;
         setDocument(detail);
+        if (!detail) setDocumentLoadError("This document could not be found in the current company.");
       } catch (e) {
+        if (request !== documentRequestRef.current) return;
+        setDocumentLoadError((e as Error).message || "Could not load this document.");
         toast.error((e as Error).message);
       } finally {
-        setInitialLoading(false);
-        setRefreshing(false);
+        if (request === documentRequestRef.current) {
+          setInitialLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [type, id]
@@ -887,8 +898,11 @@ export default function DocViewPage() {
     });
   }, [creditQtyDraft, document, type]);
 
+  const creditPreview = React.useMemo(() => creditQuantityPreview(document?.lines ?? [], creditQtyDraft), [document?.lines, creditQtyDraft]);
+
   const saveCreditQuantities = React.useCallback(async () => {
     if (!document || !isCreditNoteDoc(type)) return;
+    if (creditPreview.error) { toast.error(creditPreview.error); return; }
     setCreditQtySaving(true);
     try {
       const lines = (document.lines ?? []).flatMap((line) => {
@@ -900,12 +914,15 @@ export default function DocViewPage() {
         if (cap != null && qty > cap + 0.001) {
           throw new Error(`${line.description} can be credited up to ${cap}.`);
         }
+        const preview = creditQuantityPreview([line], { [line.id]: String(qty) });
         return [
           {
             lineId: line.id,
             productId: line.productId,
             description: line.description,
             quantity: qty,
+            amount: preview.total,
+            tax: preview.tax,
             unit: line.unit,
             unitPrice: line.unitPrice,
             ...(line.discount != null ? { discount: line.discount } : {}),
@@ -918,7 +935,7 @@ export default function DocViewPage() {
         toast.error("Enter a quantity on at least one line. Zero leaves that line off the credit note.");
         return;
       }
-      await patchDocumentApi(type as DocTypeKey, id, { lines, total: document.total ?? 0 });
+      await patchDocumentApi(type as DocTypeKey, id, { lines, total: creditPreview.total, ...(typeof document.linesAreTaxInclusive === "boolean" ? { linesAreTaxInclusive: document.linesAreTaxInclusive } : {}) });
       toast.success("Credit note quantities updated.");
       await refreshDocument(true);
     } catch (e) {
@@ -926,7 +943,7 @@ export default function DocViewPage() {
     } finally {
       setCreditQtySaving(false);
     }
-  }, [creditQtyDraft, document, id, refreshDocument, type]);
+  }, [creditQtyDraft, creditPreview, document, id, refreshDocument, type]);
 
   // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
   React.useEffect(() => {
@@ -1287,6 +1304,16 @@ export default function DocViewPage() {
     return <p className="p-6 text-sm text-muted-foreground">Opening receipt…</p>;
   }
 
+  if (!document) {
+    return <DocumentPageShell title={label} breadcrumbs={[{ label: "Documents", href: "/docs" }, { label, href: `/docs/${type}` }]}>
+      {loading ? <p role="status">Loading document…</p> : <div role="alert" className="space-y-3">
+        <p>{documentLoadError || "Document unavailable."}</p>
+        <Button onClick={() => void refreshDocument(false, false)}>Retry</Button>
+        <Button variant="outline" asChild><Link href={`/docs/${type}`}>Back to list</Link></Button>
+      </div>}
+    </DocumentPageShell>;
+  }
+
   return (
     <>
     {refreshing && (
@@ -1302,7 +1329,7 @@ export default function DocViewPage() {
         { label, href: `/docs/${type}` },
         { label: breadcrumbLabel },
       ]}
-      status={document?.status ?? "APPROVED"}
+      status={document.status}
       statusActor={document?.statusActor ?? null}
       createdByName={createdByDisplayName}
       rightSlot={rightSlot}
@@ -2171,11 +2198,12 @@ export default function DocViewPage() {
                       </p>
                       <Button
                         size="sm"
-                        disabled={creditQtySaving || !creditQtyDirty}
+                        disabled={creditQtySaving || !creditQtyDirty || Boolean(creditPreview.error) || creditPreview.selected === 0}
                         onClick={() => void saveCreditQuantities()}
                       >
                         {creditQtySaving ? "Saving…" : "Save quantities"}
                       </Button>
+                      {creditQtyDirty ? <div className="basis-full" role={creditPreview.error ? "alert" : "status"}>{creditPreview.error || `Unsaved credit total ${formatMoney(creditPreview.total, document.currency ?? "KES")} · VAT ${formatMoney(creditPreview.tax, document.currency ?? "KES")}. The header shows the saved total until you save quantities.`}</div> : null}
                     </div>
                   ) : null}
                   <div className="rounded border overflow-x-auto">

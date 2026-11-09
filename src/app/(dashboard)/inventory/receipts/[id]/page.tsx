@@ -1302,7 +1302,7 @@ export default function ReceiptDetailPage() {
               compact
               title="Receipt Timeline"
               steps={[
-                { id: "po", label: "Purchase order approved", status: grn.poRef ? "completed" : "upcoming", detail: grn.poRef ?? "No purchase order" },
+                ...(grn.poRef ? [{ id: "po", label: "Purchase order approved", status: "completed" as const, detail: grn.poRef }] : []),
                 { id: "arrive", label: "Receipt recorded", status: ["POSTED", "RECEIVED", "CONVERTED"].includes(grn.status) ? "completed" : "upcoming", detail: "Document date is not proof of physical arrival." },
                 {
                   id: "verify",
