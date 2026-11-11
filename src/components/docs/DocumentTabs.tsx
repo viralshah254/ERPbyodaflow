@@ -6,6 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 export const DOC_TAB_IDS = ["lines", "taxes", "attachments", "comments", "approval", "audit"] as const;
 
 interface DocumentTabsProps {
+  compact?: boolean;
   defaultTab?: (typeof DOC_TAB_IDS)[number];
   lines: React.ReactNode;
   taxes?: React.ReactNode;
@@ -18,6 +19,7 @@ interface DocumentTabsProps {
 /** Standard document detail tabs: Lines, Taxes/Charges, Attachments, Comments, Approval, Audit. */
 export function DocumentTabs({
   defaultTab = "lines",
+  compact = false,
   lines,
   taxes,
   attachments,
@@ -35,7 +37,7 @@ export function DocumentTabs({
         <TabsTrigger value="approval">Approval</TabsTrigger>
         <TabsTrigger value="audit">Audit</TabsTrigger>
       </TabsList>
-      <TabsContent value="lines" className="mt-4">
+      <TabsContent value="lines" className={compact ? "mt-2" : "mt-4"}>
         {lines}
       </TabsContent>
       <TabsContent value="taxes" className="mt-4">

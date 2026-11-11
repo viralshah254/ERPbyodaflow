@@ -14,6 +14,7 @@ interface DocumentPageShellProps {
   statusActor?: DocumentStatusActor | null;
   createdByName?: string | null;
   rightSlot?: React.ReactNode;
+  compact?: boolean;
   children: React.ReactNode;
 }
 
@@ -26,6 +27,7 @@ export function DocumentPageShell({
   statusActor,
   createdByName,
   rightSlot,
+  compact = false,
   children,
 }: DocumentPageShellProps) {
   return (
@@ -47,7 +49,7 @@ export function DocumentPageShell({
           createdByName={createdByName}
         />
       )}
-      <div className="min-w-0 flex-1 p-3 sm:p-5">{children}</div>
+      <div className={compact ? "min-w-0 flex-1 p-2 sm:p-3" : "min-w-0 flex-1 p-3 sm:p-5"}>{children}</div>
     </PageShell>
   );
 }

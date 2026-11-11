@@ -1380,6 +1380,292 @@ export default function DocViewPage() {
     </DocumentPageShell>;
   }
 
+  const compactInvoice = type === "invoice";
+  const documentPriceTag = (
+    <DocumentPriceTagControl
+      docType={type as DocTypeKey}
+      docId={id}
+      partyId={document.partyId}
+      priceListId={document.priceListId}
+      priceListName={document.priceListName}
+      status={document.status}
+      lines={document.lines}
+      linesAreTaxInclusive={document.linesAreTaxInclusive}
+      onApplied={() => refreshDocument(true)}
+    />
+  );
+  const documentContext = (
+    <>
+        <Card className="border-0 shadow-none bg-transparent p-0">
+          <CardContent className="p-0 space-y-4">
+            {loading ? null : (
+              <>
+                {type === "delivery-note" && document?.status === "DRAFT" ? (
+                  <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+                    <p className="font-medium flex items-start gap-2 leading-snug">
+                      <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
+                      Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; POD (what the customer received) is recorded in the Odaflow mobile app and becomes the invoicing basis.
+                    </p>
+                  </div>
+                ) : null}
+                {type === "delivery-note" && document?.status === "DRAFT" && document?.id ? (
+                  <DeliveryNoteWarehousePanel
+                    documentId={document.id}
+                    branchId={document.branchId}
+                    warehouseId={document.warehouseId}
+                    canEdit={canWrite}
+                    onUpdated={() => refreshDocument(true)}
+                  />
+                ) : null}
+                {type === "delivery-note" &&
+                document &&
+                document.status !== "DRAFT" &&
+                !document.podConfirmation?.confirmedAt &&
+                ["IN_TRANSIT", "DELIVERED", "POSTED"].includes(String(document.status).toUpperCase()) ? (
+                  <div className="mt-4 rounded-lg border border-blue-300/70 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50">
+                    <p className="font-medium flex items-start gap-2 leading-snug">
+                      <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
+                      <span>
+                        {fmcgOrg ? (
+                          <>
+                            Shipped quantities are frozen from warehouse issue. Print or download this delivery note (stamp / signature boxes included), get the customer copy signed, then{" "}
+                            <strong>Upload signed DN</strong> here — or record POD from the mobile dispatch app. Invoice from this DN only after POD.
+                          </>
+                        ) : (
+                          <>
+                            Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
+                          </>
+                        )}
+                        {canAmendDispatch ? (
+                          <span className="block mt-1 font-normal">
+                            Administrators can use <strong>Amend dispatch</strong> above to correct a dispatch mistake before POD (updates stock, pick & pack, and any draft invoice).
+                          </span>
+                        ) : document.dispatchAmendEligibility?.reason ? (
+                          <span className="block mt-1 font-normal text-blue-900/80 dark:text-blue-100/80">
+                            {document.dispatchAmendEligibility.reason}
+                          </span>
+                        ) : null}
+                      </span>
+                    </p>
+                  </div>
+                ) : null}
+                {type === "delivery-note" &&
+                  document &&
+                  (document.dispatchPickup ||
+                    document.deliveryCheckIn ||
+                    document.warehouseDrop ||
+                    document.podConfirmation?.confirmedAt) && (
+                    <DeliveryEvidencePanel
+                      documentId={id}
+                      documentNumber={document.number}
+                      lines={document.lines}
+                      dispatchPickup={document.dispatchPickup}
+                      deliveryCheckIn={document.deliveryCheckIn}
+                      warehouseDrop={document.warehouseDrop}
+                      podConfirmation={document.podConfirmation}
+                      onDownloadSignedCopy={(attachmentId, fileBase) =>
+                        downloadDocumentAttachmentApi(
+                          "delivery-note",
+                          id,
+                          attachmentId,
+                          fileBase,
+                          (msg) => toast.info(msg || "Download not available.")
+                        )
+                      }
+                    />
+                  )}
+                {(type === "sales-order" || type === "delivery-note" || type === "invoice") && document ? (
+                  <div className="mt-4 pt-4 border-t space-y-2">
+                    <Label htmlFor="document-delivery-address">Delivery address</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {document.odaflowChannel === "modern_trade"
+                        ? "Branch the goods go to. The customer on this order is who the invoice goes to, unless the LPO was for head office."
+                        : document.odaflowChannel
+                          ? "Customer location for this delivery."
+                          : "Where these goods are delivered."}
+                    </p>
+                    <SfaDeliveryAddress
+                      address={document.deliveryAddress}
+                      isSfaOrder={document.externalSource === "odaflow" || Boolean(document.odaflowChannel)}
+                      editable={document.status === "DRAFT"}
+                    >
+                      {document.status === "DRAFT" ? (
+                        <>
+                          <Textarea
+                            id="document-delivery-address"
+                            value={deliveryDraft}
+                            onChange={(e) => setDeliveryDraft(e.target.value)}
+                            placeholder="Branch, shop, or customer location"
+                            rows={2}
+                            className="resize-y min-h-[60px] max-w-3xl"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={deliverySaving || deliveryDraft === (document.deliveryAddress ?? "")}
+                            onClick={async () => {
+                              setDeliverySaving(true);
+                              try {
+                                await patchDocumentApi(type as DocTypeKey, id, {
+                                  deliveryAddress: deliveryDraft.trim(),
+                                });
+                                await refreshDocument(true);
+                                toast.success("Delivery address saved.");
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              } finally {
+                                setDeliverySaving(false);
+                              }
+                            }}
+                          >
+                            {deliverySaving ? "Saving…" : "Save address"}
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-sm font-medium max-w-3xl">{document.deliveryAddress?.trim() || "—"}</p>
+                      )}
+                    </SfaDeliveryAddress>
+                  </div>
+                ) : null}
+                {/* Invoice payment status bar */}
+                {purchaseTaxDoc && document?.id ? (
+                  <PurchaseSupplierRefsCard
+                    documentId={document.id}
+                    type={type as DocTypeKey}
+                    documentStatus={document.status}
+                    supplierInvoiceNumber={document.supplierInvoiceNumber}
+                    supplierCuInvoiceNumber={document.supplierCuInvoiceNumber}
+                    canWrite={canWrite}
+                    onSaved={() => refreshDocument(true)}
+                  />
+                ) : null}
+                {document?.status === "DRAFT" && (
+                  <div className="mt-4 pt-4 border-t space-y-2">
+                    <Label htmlFor="document-notes">Notes</Label>
+                    <Textarea
+                      id="document-notes"
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      placeholder="Notes for this document (internal / print as configured)…"
+                      rows={3}
+                      className="resize-y min-h-[72px] max-w-3xl"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={
+                        notesSaving || notesDraft === (document.notes ?? "")
+                      }
+                      onClick={async () => {
+                        if (!document) return;
+                        setNotesSaving(true);
+                        try {
+                          await patchDocumentApi(type as DocTypeKey, id, {
+                            notes: notesDraft.trim() || undefined,
+                          });
+                          await refreshDocument(true);
+                          toast.success("Notes saved.");
+                        } catch (e) {
+                          toast.error((e as Error).message);
+                        } finally {
+                          setNotesSaving(false);
+                        }
+                      }}
+                    >
+                      {notesSaving ? "Saving…" : "Save notes"}
+                    </Button>
+                  </div>
+                )}
+                {type === "invoice" && document?.paymentStatus && (
+                  <div className="mt-4 pt-3 border-t">
+                    <div className="flex items-center justify-between mb-1 text-sm">
+                      <span className="text-muted-foreground">Payment status</span>
+                      <span
+                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          document.paymentStatus === "PAID"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : document.paymentStatus === "PARTIALLY_PAID"
+                              ? "bg-amber-100 text-amber-700"
+                              : document.isOverdue
+                                ? "bg-red-100 text-red-700"
+                                : "bg-gray-100 text-gray-600"
+                        }`}
+                      >
+                        {document.isOverdue && document.paymentStatus !== "PAID"
+                          ? "OVERDUE"
+                          : document.paymentStatus?.replace("_", " ")}
+                      </span>
+                    </div>
+                    {document.paymentStatus !== "PAID" && document.total != null && (
+                      <>
+                        <div className="h-2 bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${document.isOverdue ? "bg-red-500" : "bg-emerald-500"}`}
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                document.total > 0
+                                  ? Math.round(((document.paidAmount ?? 0) / document.total) * 100)
+                                  : 0
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {formatMoney(
+                            kesEquivalent(document.paidAmount ?? 0, document.currency ?? "KES", document.exchangeRate) ?? (document.paidAmount ?? 0),
+                            "KES"
+                          )}{" "}
+                          paid of{" "}
+                          {formatMoney(
+                            kesEquivalent(document.total, document.currency ?? "KES", document.exchangeRate) ?? document.total,
+                            "KES"
+                          )}
+                          {document.dueDate && (
+                            <span className="ml-2">· Due {new Date(document.dueDate).toLocaleDateString()}</span>
+                          )}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+        {!loading && document ? (
+          <DocumentChainTimeline
+            sourceDocument={document.sourceDocument}
+            documentChain={document.documentChain ?? []}
+            currentDoc={{
+              id,
+              typeKey: type,
+              number: document.number ?? id,
+              status: document.status ?? "DRAFT",
+              total: document.total,
+            }}
+            currency={document.currency ?? "KES"}
+            exchangeRate={document.exchangeRate}
+          />
+        ) : null}
+        {fmcgOrg && isIncotexSignableDocType(type) && !loading && document ? (
+          <KraSigningPanel
+            typeKey={type}
+            documentId={id}
+            documentStatus={document.status}
+            kraSigning={document.kraSigning}
+            fiscalState={document.fiscalState}
+            canRetry={!accountingOnly && (canWrite || canWriteFinance)}
+            onUpdated={(kraSigning) =>
+              setDocument((prev) => (prev ? { ...prev, kraSigning } : prev))
+            }
+          />
+        ) : null}
+    </>
+  );
+
   return (
     <>
     {refreshing && (
@@ -1399,6 +1685,7 @@ export default function DocViewPage() {
       statusActor={document?.statusActor ?? null}
       createdByName={createdByDisplayName}
       rightSlot={rightSlot}
+      compact={compactInvoice}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <DocumentHubUploadButton
@@ -1754,20 +2041,21 @@ export default function DocViewPage() {
         </div>
       }
     >
-      <div className="space-y-4">
+      <div className={compactInvoice ? "space-y-2.5" : "space-y-4"}>
         {loading ? (
           <DocumentDetailHeaderSkeleton
             columns={type === "sales-order" || type === "delivery-note" ? 5 : 4}
           />
         ) : (
           <DocumentDetailHeader
+            compact={compactInvoice}
             fields={[
-              {
+              ...(!compactInvoice ? [{
                 label: "Number",
                 value: document?.number ? <DocumentNumberField number={document.number} /> : "—",
                 mono: true,
-              },
-              ...(salesTaxDoc
+              }] : []),
+              ...(salesTaxDoc && (!compactInvoice || listedCuNumber(document.kraSigning))
                 ? [
                     {
                       label: "KRA CU number",
@@ -1860,26 +2148,18 @@ export default function DocViewPage() {
                   ]
                 : []),
               ...(["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type) && document ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite && !fiscallySigned && !fiscalUnresolved} onSaved={() => refreshDocument(true)} /> }] : []),
-              ...(["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) && document
+              ...(["quote", "sales-order", "delivery-note", "credit-note"].includes(type) && document
                 ? [
                     {
                       label: "Price tag",
-                      value: (
-                        <DocumentPriceTagControl
-                          docType={type as DocTypeKey}
-                          docId={id}
-                          partyId={document.partyId}
-                          priceListId={document.priceListId}
-                          priceListName={document.priceListName}
-                          status={document.status}
-                          lines={document.lines}
-                          linesAreTaxInclusive={document.linesAreTaxInclusive}
-                          onApplied={() => refreshDocument(true)}
-                        />
-                      ),
+                      value: documentPriceTag,
                     },
                   ]
                 : []),
+              ...(compactInvoice && document.paymentStatus ? [{
+                label: "Payment status",
+                value: document.isOverdue && document.paymentStatus !== "PAID" ? "Overdue" : document.paymentStatus.replaceAll("_", " "),
+              }] : []),
               {
                 label: "Total",
                 value: (
@@ -1932,273 +2212,7 @@ export default function DocViewPage() {
             className="mt-4"
           />
         ) : null}
-        <Card className="border-0 shadow-none bg-transparent p-0">
-          <CardContent className="p-0 space-y-4">
-            {loading ? null : (
-              <>
-                {type === "delivery-note" && document?.status === "DRAFT" ? (
-                  <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
-                    <p className="font-medium flex items-start gap-2 leading-snug">
-                      <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
-                      Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; POD (what the customer received) is recorded in the Odaflow mobile app and becomes the invoicing basis.
-                    </p>
-                  </div>
-                ) : null}
-                {type === "delivery-note" && document?.status === "DRAFT" && document?.id ? (
-                  <DeliveryNoteWarehousePanel
-                    documentId={document.id}
-                    branchId={document.branchId}
-                    warehouseId={document.warehouseId}
-                    canEdit={canWrite}
-                    onUpdated={() => refreshDocument(true)}
-                  />
-                ) : null}
-                {type === "delivery-note" &&
-                document &&
-                document.status !== "DRAFT" &&
-                !document.podConfirmation?.confirmedAt &&
-                ["IN_TRANSIT", "DELIVERED", "POSTED"].includes(String(document.status).toUpperCase()) ? (
-                  <div className="mt-4 rounded-lg border border-blue-300/70 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-800/70 dark:bg-blue-950/40 dark:text-blue-50">
-                    <p className="font-medium flex items-start gap-2 leading-snug">
-                      <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
-                      <span>
-                        {fmcgOrg ? (
-                          <>
-                            Shipped quantities are frozen from warehouse issue. Print or download this delivery note (stamp / signature boxes included), get the customer copy signed, then{" "}
-                            <strong>Upload signed DN</strong> here — or record POD from the mobile dispatch app. Invoice from this DN only after POD.
-                          </>
-                        ) : (
-                          <>
-                            Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
-                          </>
-                        )}
-                        {canAmendDispatch ? (
-                          <span className="block mt-1 font-normal">
-                            Administrators can use <strong>Amend dispatch</strong> above to correct a dispatch mistake before POD (updates stock, pick & pack, and any draft invoice).
-                          </span>
-                        ) : document.dispatchAmendEligibility?.reason ? (
-                          <span className="block mt-1 font-normal text-blue-900/80 dark:text-blue-100/80">
-                            {document.dispatchAmendEligibility.reason}
-                          </span>
-                        ) : null}
-                      </span>
-                    </p>
-                  </div>
-                ) : null}
-                {type === "delivery-note" &&
-                  document &&
-                  (document.dispatchPickup ||
-                    document.deliveryCheckIn ||
-                    document.warehouseDrop ||
-                    document.podConfirmation?.confirmedAt) && (
-                    <DeliveryEvidencePanel
-                      documentId={id}
-                      documentNumber={document.number}
-                      lines={document.lines}
-                      dispatchPickup={document.dispatchPickup}
-                      deliveryCheckIn={document.deliveryCheckIn}
-                      warehouseDrop={document.warehouseDrop}
-                      podConfirmation={document.podConfirmation}
-                      onDownloadSignedCopy={(attachmentId, fileBase) =>
-                        downloadDocumentAttachmentApi(
-                          "delivery-note",
-                          id,
-                          attachmentId,
-                          fileBase,
-                          (msg) => toast.info(msg || "Download not available.")
-                        )
-                      }
-                    />
-                  )}
-                {(type === "sales-order" || type === "delivery-note" || type === "invoice") && document ? (
-                  <div className="mt-4 pt-4 border-t space-y-2">
-                    <Label htmlFor="document-delivery-address">Delivery address</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {document.odaflowChannel === "modern_trade"
-                        ? "Branch the goods go to. The customer on this order is who the invoice goes to, unless the LPO was for head office."
-                        : document.odaflowChannel
-                          ? "Customer location for this delivery."
-                          : "Where these goods are delivered."}
-                    </p>
-                    <SfaDeliveryAddress
-                      address={document.deliveryAddress}
-                      isSfaOrder={document.externalSource === "odaflow" || Boolean(document.odaflowChannel)}
-                      editable={document.status === "DRAFT"}
-                    >
-                      {document.status === "DRAFT" ? (
-                        <>
-                          <Textarea
-                            id="document-delivery-address"
-                            value={deliveryDraft}
-                            onChange={(e) => setDeliveryDraft(e.target.value)}
-                            placeholder="Branch, shop, or customer location"
-                            rows={2}
-                            className="resize-y min-h-[60px] max-w-3xl"
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="secondary"
-                            disabled={deliverySaving || deliveryDraft === (document.deliveryAddress ?? "")}
-                            onClick={async () => {
-                              setDeliverySaving(true);
-                              try {
-                                await patchDocumentApi(type as DocTypeKey, id, {
-                                  deliveryAddress: deliveryDraft.trim(),
-                                });
-                                await refreshDocument(true);
-                                toast.success("Delivery address saved.");
-                              } catch (e) {
-                                toast.error((e as Error).message);
-                              } finally {
-                                setDeliverySaving(false);
-                              }
-                            }}
-                          >
-                            {deliverySaving ? "Saving…" : "Save address"}
-                          </Button>
-                        </>
-                      ) : (
-                        <p className="text-sm font-medium max-w-3xl">{document.deliveryAddress?.trim() || "—"}</p>
-                      )}
-                    </SfaDeliveryAddress>
-                  </div>
-                ) : null}
-                {/* Invoice payment status bar */}
-                {purchaseTaxDoc && document?.id ? (
-                  <PurchaseSupplierRefsCard
-                    documentId={document.id}
-                    type={type as DocTypeKey}
-                    documentStatus={document.status}
-                    supplierInvoiceNumber={document.supplierInvoiceNumber}
-                    supplierCuInvoiceNumber={document.supplierCuInvoiceNumber}
-                    canWrite={canWrite}
-                    onSaved={() => refreshDocument(true)}
-                  />
-                ) : null}
-                {document?.status === "DRAFT" && (
-                  <div className="mt-4 pt-4 border-t space-y-2">
-                    <Label htmlFor="document-notes">Notes</Label>
-                    <Textarea
-                      id="document-notes"
-                      value={notesDraft}
-                      onChange={(e) => setNotesDraft(e.target.value)}
-                      placeholder="Notes for this document (internal / print as configured)…"
-                      rows={3}
-                      className="resize-y min-h-[72px] max-w-3xl"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      disabled={
-                        notesSaving || notesDraft === (document.notes ?? "")
-                      }
-                      onClick={async () => {
-                        if (!document) return;
-                        setNotesSaving(true);
-                        try {
-                          await patchDocumentApi(type as DocTypeKey, id, {
-                            notes: notesDraft.trim() || undefined,
-                          });
-                          await refreshDocument(true);
-                          toast.success("Notes saved.");
-                        } catch (e) {
-                          toast.error((e as Error).message);
-                        } finally {
-                          setNotesSaving(false);
-                        }
-                      }}
-                    >
-                      {notesSaving ? "Saving…" : "Save notes"}
-                    </Button>
-                  </div>
-                )}
-                {type === "invoice" && document?.paymentStatus && (
-                  <div className="mt-4 pt-3 border-t">
-                    <div className="flex items-center justify-between mb-1 text-sm">
-                      <span className="text-muted-foreground">Payment status</span>
-                      <span
-                        className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                          document.paymentStatus === "PAID"
-                            ? "bg-emerald-100 text-emerald-700"
-                            : document.paymentStatus === "PARTIALLY_PAID"
-                              ? "bg-amber-100 text-amber-700"
-                              : document.isOverdue
-                                ? "bg-red-100 text-red-700"
-                                : "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {document.isOverdue && document.paymentStatus !== "PAID"
-                          ? "OVERDUE"
-                          : document.paymentStatus?.replace("_", " ")}
-                      </span>
-                    </div>
-                    {document.paymentStatus !== "PAID" && document.total != null && (
-                      <>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${document.isOverdue ? "bg-red-500" : "bg-emerald-500"}`}
-                            style={{
-                              width: `${Math.min(
-                                100,
-                                document.total > 0
-                                  ? Math.round(((document.paidAmount ?? 0) / document.total) * 100)
-                                  : 0
-                              )}%`,
-                            }}
-                          />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          {formatMoney(
-                            kesEquivalent(document.paidAmount ?? 0, document.currency ?? "KES", document.exchangeRate) ?? (document.paidAmount ?? 0),
-                            "KES"
-                          )}{" "}
-                          paid of{" "}
-                          {formatMoney(
-                            kesEquivalent(document.total, document.currency ?? "KES", document.exchangeRate) ?? document.total,
-                            "KES"
-                          )}
-                          {document.dueDate && (
-                            <span className="ml-2">· Due {new Date(document.dueDate).toLocaleDateString()}</span>
-                          )}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-        {!loading && document ? (
-          <DocumentChainTimeline
-            sourceDocument={document.sourceDocument}
-            documentChain={document.documentChain ?? []}
-            currentDoc={{
-              id,
-              typeKey: type,
-              number: document.number ?? id,
-              status: document.status ?? "DRAFT",
-              total: document.total,
-            }}
-            currency={document.currency ?? "KES"}
-            exchangeRate={document.exchangeRate}
-          />
-        ) : null}
-        {fmcgOrg && isIncotexSignableDocType(type) && !loading && document ? (
-          <KraSigningPanel
-            typeKey={type}
-            documentId={id}
-            documentStatus={document.status}
-            kraSigning={document.kraSigning}
-            fiscalState={document.fiscalState}
-            canRetry={!accountingOnly && (canWrite || canWriteFinance)}
-            onUpdated={(kraSigning) =>
-              setDocument((prev) => (prev ? { ...prev, kraSigning } : prev))
-            }
-          />
-        ) : null}
+        {!compactInvoice && documentContext}
         {type === "bill" && landedAllocation && (() => {
           const centreLabels: Record<string, string> = {
             currency_conversion: "FX conversion",
@@ -2235,9 +2249,10 @@ export default function DocViewPage() {
         {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
         <DocumentTabs
           key={`${type}-${id}`}
+          compact={compactInvoice}
           lines={
             <Card>
-              <CardContent className="pt-4">
+              <CardContent className={compactInvoice ? "p-2 sm:p-3" : "pt-4"}>
                 {initialLoading && !document ? (
                   <div className="space-y-2 py-2">
                     {[1, 2, 3].map((n) => (
@@ -2290,10 +2305,12 @@ export default function DocViewPage() {
                       {creditQtyDirty ? <div className="basis-full" role={creditPreview.error ? "alert" : "status"}>{creditPreview.error || `Unsaved credit total ${formatMoney(creditPreview.total, document.currency ?? "KES")} · VAT ${formatMoney(creditPreview.tax, document.currency ?? "KES")}. The header shows the saved total until you save quantities.`}</div> : null}
                     </div>
                   ) : null}
-                  <div className="rounded border overflow-x-auto">
+                  <div className={compactInvoice ? "invoice-lines rounded border" : "rounded border overflow-x-auto"}>
                     <div
                       className={
-                        isGrnDoc
+                        compactInvoice
+                          ? "invoice-line-grid invoice-line-head border-b px-2.5 py-2 text-xs font-medium text-muted-foreground"
+                          : isGrnDoc
                           ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
                           : showFulfilmentTable
                           ? "min-w-[986px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -2357,7 +2374,9 @@ export default function DocViewPage() {
                         <div
                           key={line.id ?? line.description}
                           className={
-                            isGrnDoc
+                            compactInvoice
+                              ? "invoice-line-grid invoice-line-row border-b px-2.5 py-2 text-sm last:border-b-0"
+                              : isGrnDoc
                               ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
                               : showFulfilmentTable
                               ? `min-w-[986px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0${
@@ -2475,9 +2494,9 @@ export default function DocViewPage() {
                               ) : null}
                             </div>
                           ) : (
-                            <span className="text-right">{line.qty ?? "—"}</span>
+                            <span data-invoice-label="Qty" className="text-right">{line.qty ?? "—"}</span>
                           )}
-                          <span className="text-right">
+                          <span data-invoice-label="Remaining" className="text-right">
                             {line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}
                           </span>
                           {isPurchaseDoc ? (
@@ -2490,14 +2509,14 @@ export default function DocViewPage() {
                             </span>
                           ) : null}
                           {!isPurchaseDoc && !isGrnDoc ? (
-                            <span className="text-right tabular-nums text-muted-foreground text-xs">
+                            <span data-invoice-label="Discount" className="text-right tabular-nums text-muted-foreground text-xs">
                               {(line.discount ?? 0) > 0 ? `${line.discount}%` : "—"}
                             </span>
                           ) : null}
-                          <span className="text-xs text-muted-foreground truncate" title={taxTitle}>
+                          <span data-invoice-label="Tax" className={compactInvoice ? "break-words text-xs text-muted-foreground" : "text-xs text-muted-foreground truncate"} title={taxTitle}>
                             {taxLabel}
                           </span>
-                          <div className="flex justify-end">
+                          <div data-invoice-label="Amount" className="flex min-w-0 justify-end">
                             {line.amount != null ? (
                               <DualCurrencyAmount
                                 amount={
@@ -2608,6 +2627,18 @@ export default function DocViewPage() {
             </Card>
           }
         />
+        {compactInvoice && (
+          <details className="rounded-md border bg-card px-3 py-2">
+            <summary className="cursor-pointer text-sm font-medium">Address, notes, pricing and history</summary>
+            <div className="mt-2 space-y-3">
+              <div className="max-w-xs">
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Price tag</p>
+                {documentPriceTag}
+              </div>
+              {documentContext}
+            </div>
+          </details>
+        )}
       </div>
       <PrintPreviewDrawer
         open={printOpen}

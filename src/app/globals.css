@@ -159,3 +159,52 @@ html[data-erp-guide-open="true"] [data-gaia-widget] {
   visibility: hidden;
   pointer-events: none;
 }
+
+.invoice-lines {
+  container: invoice-lines / inline-size;
+}
+
+.invoice-line-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3rem 3rem 4.25rem 3.25rem minmax(4.5rem, 0.35fr) 8rem;
+  column-gap: 0.5rem;
+  align-items: start;
+}
+
+.invoice-line-grid > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@container invoice-lines (width < 37rem) {
+  .invoice-line-head {
+    display: none;
+  }
+
+  .invoice-line-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 0.5rem;
+  }
+
+  .invoice-line-row > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .invoice-line-row > [data-invoice-label],
+  .invoice-line-row > :nth-child(2) {
+    display: block;
+    text-align: left;
+  }
+
+  .invoice-line-row > [data-invoice-label]::before,
+  .invoice-line-row > :nth-child(2)::before {
+    content: attr(data-invoice-label);
+    display: block;
+    font-size: 0.6875rem;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .invoice-line-row > :nth-child(2)::before {
+    content: "UOM";
+  }
+}
