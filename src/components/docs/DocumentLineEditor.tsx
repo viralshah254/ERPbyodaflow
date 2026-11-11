@@ -1,5 +1,5 @@
 "use client";
-import { joyFinishedGoodSalesUnit } from "@/lib/docs/joy-sales-uom";
+import { joyFinishedGoodSalesUnit, joyRetailPackPricingRows } from "@/lib/docs/joy-sales-uom";
 import { Table as InteractiveTable } from "@/components/ui/table";
 
 
@@ -523,12 +523,13 @@ export function DocumentLineEditor({
       const packaging = packagingByProductId?.[productId];
       if (fmcgOrg) {
         const product = products.find((p) => p.id === productId);
-        const unitsPer = resolveUnitsPerPiece(uom, packaging, product?.baseUom ?? product?.unit);
+        const rows = joyFinishedGoods ? joyRetailPackPricingRows(product, packaging) : packaging;
+        const unitsPer = resolveUnitsPerPiece(uom, rows, product?.baseUom ?? product?.unit);
         return Math.round(qty * unitsPer * 1000) / 1000;
       }
       return getBaseQty(productId, uom, qty, packaging);
     },
-    [fmcgOrg, packagingByProductId, products]
+    [fmcgOrg, joyFinishedGoods, packagingByProductId, products]
   );
 
   // Resolve price: daily (seafood) → FMCG piece×pack → flat catalog → tiered product_pricing.
@@ -558,7 +559,9 @@ export function DocumentLineEditor({
             discountOverride != null && Number.isFinite(discountOverride)
               ? discountOverride
               : fmcgItem.discountPercent,
-          packaging: packagingByProductId?.[productId],
+          packaging: joyFinishedGoods
+            ? joyRetailPackPricingRows(product, packagingByProductId?.[productId])
+            : packagingByProductId?.[productId],
           productBaseUom: product?.baseUom ?? product?.unit,
         });
         const effectiveDiscount =
@@ -589,6 +592,7 @@ export function DocumentLineEditor({
     },
     [
       useCostPricing,
+      joyFinishedGoods,
       dailyPricesByProductId,
       fmcgCatalogByProductId,
       catalogPricesByProductId,

@@ -87,7 +87,8 @@ export function catalogUnitsForUom(
   const want = normalizeUom(unit);
   if (!want || isPieceUom(want)) return null;
   const group = PACK_UOM_GROUPS.find((list) => list.includes(want)) ?? [want];
-  const hit = (packs ?? []).find((row) => group.includes(normalizeUom(row.uom)));
+  const hit = packs?.find((row) => normalizeUom(row.uom) === want) ??
+    packs?.find((row) => group.includes(normalizeUom(row.uom)));
   return hit && hit.unitsPer > 1 ? hit.unitsPer : null;
 }
 

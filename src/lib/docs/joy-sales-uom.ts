@@ -13,6 +13,18 @@ export function joyFinishedGoodSalesUnit(
   );
   if (/^(PK|PACK)$/i.test(stored)) return "PACK";
   if (!counts.some((pieces) => pieces > 1)) return "PCS";
-  return packaging?.some((row) => /^(PK|PACK|PACKS)$/i.test(row.uom.trim()) && row.unitsPer !== 1)
+  return packaging?.some((row) => /^PACK$/i.test(row.uom.trim()) && row.unitsPer !== 1)
     ? "PCS" : "PACK";
+}
+
+/** Keep the legacy PK conversion distinct from one retail PACK of the finished SKU. */
+export function joyRetailPackPricingRows(
+  product: ProductRow | undefined,
+  packaging: ProductPackaging[] | undefined,
+): ProductPackaging[] | undefined {
+  if (!product || joyFinishedGoodSalesUnit(product, packaging) !== "PACK" ||
+      packaging?.some((row) => /^PACK$/i.test(row.uom.trim()))) return packaging;
+  const base = product.baseUom ?? product.unit ?? "PCS";
+  if (/^(PACK|PK)$/i.test(base)) return packaging;
+  return [...(packaging ?? []), { uom: "PACK", unitsPer: 1, baseUom: base }];
 }

@@ -46,7 +46,7 @@ it("uses PCS for a single cake and PACK for a Joy retail multipack without multi
   ];
   vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: rows, hasMore: false, nextCursor: null } as never);
   vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({
-    queen: { packaging: [{ uom: "PACK", baseUom: "EA", unitsPer: 1 }], pricing: [] },
+    queen: { packaging: [{ uom: "PK", baseUom: "EA", unitsPer: 8 }], pricing: [] },
     cake: { packaging: [], pricing: [] },
   });
   render(<Harness joyFinishedGoods />);
