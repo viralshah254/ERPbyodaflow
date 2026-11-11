@@ -3040,7 +3040,8 @@ export function DocumentCreateWizard({
                 lineEditorMode === "sales" && !fmcgOrg ? catalogPricesByProductId : undefined
               }
               fmcgCatalogByProductId={
-                lineEditorMode === "sales" && fmcgOrg ? fmcgCatalogByProductId : undefined
+                lineEditorMode === "sales" && fmcgOrg && (currentOrgId !== JOY_SUPERBAKERS_ORG_ID || salesPricingReady)
+                  ? fmcgCatalogByProductId : undefined
               }
               fmcgOrg={fmcgOrg}
               plantCatalogue={plantCatalogue}
