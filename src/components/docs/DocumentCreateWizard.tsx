@@ -3021,6 +3021,7 @@ export function DocumentCreateWizard({
             <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
+              joyFinishedGoods={currentOrgId === JOY_SUPERBAKERS_ORG_ID && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}

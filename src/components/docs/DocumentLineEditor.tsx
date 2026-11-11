@@ -1,4 +1,5 @@
 "use client";
+import { joyFinishedGoodSalesUnit } from "@/lib/docs/joy-sales-uom";
 import { Table as InteractiveTable } from "@/components/ui/table";
 
 
@@ -159,6 +160,7 @@ interface DocumentLineEditorProps {
   fmcgOrg?: boolean;
   /** Manufacturer and bakery plants. The picker lists finished goods, raw materials, and packaging. */
   plantCatalogue?: boolean;
+  joyFinishedGoods?: boolean;
   /** Load packaging / pricing for products just added from the picker. */
   onProductsAdded?: (productIds: string[]) => void;
   /** FMCG: a pack was saved from the line UOM menu. Replace that product's packaging. */
@@ -205,7 +207,7 @@ function mergeLineUomOptions(
   if (opts?.fmcgOrg) {
     const base = String(opts.baseUom ?? "PCS").trim().toUpperCase() || "PCS";
     const merged = new Set<string>([base, ...configuredPackUoms(packagingForProduct)]);
-    if (!isPieceUom(base)) merged.add("PCS");
+    if (!isPieceUom(base) && base !== "PACK") merged.add("PCS");
     if (currentValue) merged.add(String(currentValue).trim().toUpperCase());
     const arr = [...merged].filter(Boolean);
     arr.sort((a, b) => {
@@ -314,6 +316,7 @@ export function DocumentLineEditor({
   fmcgCatalogByProductId,
   fmcgOrg = false,
   plantCatalogue = false,
+  joyFinishedGoods = false,
   onProductsAdded,
   onPackagingUpdated,
   onCatalogReadyChange,
@@ -660,7 +663,8 @@ export function DocumentLineEditor({
           const packaging = packagingByProductId?.[p.id] ?? [];
           // Quantity-sheet rows start in the SKU's own unit, as before batching.
           // A pack (PK/CTN) is an explicit selection, never a timing-dependent default.
-          const uom = sheetFinishedGoods ? documentLineBaseUom(p, fmcgOrg) : defaultLineUom(packaging, mode, p, fmcgOrg);
+          const joyUnit = joyFinishedGoods ? joyFinishedGoodSalesUnit(p, packaging) : undefined;
+          const uom = joyUnit ?? (sheetFinishedGoods ? documentLineBaseUom(p, fmcgOrg) : defaultLineUom(packaging, mode, p, fmcgOrg));
           const baseQty = q > 0 ? computeBaseQty(p.id, uom, q) : 0;
           const { price, reason, discount } = resolvePrice(p.id, priceQty, uom);
           const draft: DocumentLine = {
@@ -740,6 +744,7 @@ export function DocumentLineEditor({
       taxCodes,
       useCostPricing,
       sheetFinishedGoods,
+      joyFinishedGoods,
     ]
   );
 
@@ -914,7 +919,8 @@ export function DocumentLineEditor({
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
       const packaging = packagingByProductId?.[productId] ?? [];
-      const uom = defaultLineUom(packaging, mode, row, fmcgOrg);
+      const uom = (joyFinishedGoods ? joyFinishedGoodSalesUnit(row, packaging) : undefined) ??
+        defaultLineUom(packaging, mode, row, fmcgOrg);
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
       const baseQty = computeBaseQty(productId, uom, qty);
@@ -1127,11 +1133,13 @@ export function DocumentLineEditor({
   const priceLabelFor = React.useCallback(
     (p: ProductRow) => {
       if (useCostPricing) return "";
-      const uom = defaultLineUom(packagingByProductId?.[p.id] ?? [], mode, p, fmcgOrg);
+      const packaging = packagingByProductId?.[p.id] ?? [];
+      const uom = (joyFinishedGoods ? joyFinishedGoodSalesUnit(p, packaging) : undefined) ??
+        defaultLineUom(packaging, mode, p, fmcgOrg);
       const { price } = resolvePrice(p.id, 1, uom);
       return formatMoney(price, currency);
     },
-    [currency, fmcgOrg, mode, packagingByProductId, resolvePrice, useCostPricing]
+    [currency, fmcgOrg, joyFinishedGoods, mode, packagingByProductId, resolvePrice, useCostPricing]
   );
 
   const searchSplit = splitProductSearchQuantity(searchQuery);
@@ -1609,7 +1617,7 @@ export function DocumentLineEditor({
                       packagingForProduct={packagingByProductId?.[l.productId]}
                       catalogUomCodes={catalogUomCodes}
                       fmcgOrg={fmcgOrg}
-                      baseUom={documentLineBaseUom(
+                      baseUom={(joyFinishedGoods && product ? joyFinishedGoodSalesUnit(product, packagingByProductId?.[l.productId]) : undefined) ?? documentLineBaseUom(
                         {
                           baseUom: product?.baseUom,
                           unit: product?.unit,

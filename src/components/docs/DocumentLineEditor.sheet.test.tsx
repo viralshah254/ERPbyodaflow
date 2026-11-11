@@ -14,10 +14,10 @@ const products = [
   { id: "queen", code: "1", sku: "1", name: "Queen cakes", unit: "PCS", itemRole: "FINISHED", productType: "FINISHED" },
   { id: "cake", code: "FG-CAKE", sku: "FG-CAKE", barcode: "6164000350467", name: "Celebration cake", unit: "PCS", itemRole: "FINISHED", productType: "BOTH" },
 ];
-function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision = 0, discount = 0, editorKey = 0 }: { initial?: DocumentLine[]; queenPrice?: number; inclusive?: boolean; revision?: number; discount?: number; editorKey?: number }) {
+function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision = 0, discount = 0, editorKey = 0, joyFinishedGoods = false }: { initial?: DocumentLine[]; queenPrice?: number; inclusive?: boolean; revision?: number; discount?: number; editorKey?: number; joyFinishedGoods?: boolean }) {
   const [lines, setLines] = React.useState<DocumentLine[]>(initial);
   const [data, setData] = React.useState<Awaited<ReturnType<typeof fetchDocumentProductDataApi>>>({});
-  return <DocumentLineEditor onDocumentProductData={setData} packagingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.packaging]))} pricingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing]))} key={editorKey} sheetFinishedGoods fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
+  return <DocumentLineEditor onDocumentProductData={setData} packagingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.packaging]))} pricingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing]))} key={editorKey} sheetFinishedGoods joyFinishedGoods={joyFinishedGoods} fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
 }
 beforeEach(() => { api.configured = false; vi.mocked(fetchProductApi).mockClear(); vi.mocked(fetchProductVariantsApi).mockClear(); vi.mocked(fetchDocumentProductDataApi).mockReset().mockResolvedValue({}); setProductsCache([]); vi.mocked(fetchProductsPageApi).mockReset().mockResolvedValue({ items: products, hasMore: false, nextCursor: null } as never); });
 
@@ -37,6 +37,29 @@ it("loads 100 inline rows with one metadata batch and no per-product detail or v
   await waitFor(() => expect(fetchProductVariantsApi).toHaveBeenCalledTimes(1));
   expect(fetchProductVariantsApi).toHaveBeenCalledWith("fg-0");
 }, 20000);
+
+it("uses PCS for a single cake and PACK for a Joy retail multipack without multiplying its price", async () => {
+  api.configured = true;
+  const rows = [
+    { ...products[0], name: "Queen cakes 8PCS (250 GMS)", unit: "EA", size: "8pcs" },
+    { ...products[1], name: "Celebration cake (500 GMS)", unit: "EA", size: "500 g" },
+  ];
+  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: rows, hasMore: false, nextCursor: null } as never);
+  vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({
+    queen: { packaging: [{ uom: "PACK", baseUom: "EA", unitsPer: 1 }], pricing: [] },
+    cake: { packaging: [], pricing: [] },
+  });
+  render(<Harness joyFinishedGoods />);
+  const input = await screen.findByLabelText("Quantity for Queen cakes 8PCS (250 GMS)");
+  const pack = within(input.closest("tr")!);
+  const piece = within(screen.getByLabelText("Quantity for Celebration cake (500 GMS)").closest("tr")!);
+  expect(pack.getByRole("combobox")).toHaveTextContent("PACK");
+  expect(piece.getByRole("combobox")).toHaveTextContent("PCS");
+  fireEvent.change(input, { target: { value: "2" } });
+  fireEvent.blur(input);
+  expect(pack.getByText("KES 86.20")).toBeInTheDocument();
+  expect(screen.getByText("Includes KES 11.89 tax")).toBeInTheDocument();
+});
 
 it("keeps failed metadata loading recoverable instead of enabling incomplete pricing", async () => {
   api.configured = true;
