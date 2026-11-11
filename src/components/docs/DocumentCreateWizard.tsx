@@ -2860,7 +2860,7 @@ export function DocumentCreateWizard({
               </div>
             </>
           ) : null}
-          <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
               {fmcgOrg && (lineEditorMode === "sales" || fmcgPurchaseDoc) && (
@@ -2877,12 +2877,12 @@ export function DocumentCreateWizard({
 
                           }}
                         >
-                          <SelectTrigger className="h-8 w-[160px] text-xs">
+                          <SelectTrigger className="h-auto min-h-8 w-44 gap-2 text-left text-xs [&>span]:line-clamp-none [&>span]:whitespace-normal [&>span]:[overflow-wrap:anywhere] [&>svg]:shrink-0">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
                             {priceListOptions.map((pl) => (
-                              <SelectItem key={pl.id} value={pl.id} className="text-xs">
+                              <SelectItem key={pl.id} value={pl.id} className="whitespace-normal text-xs [overflow-wrap:anywhere]">
                                 {pl.name}
                               </SelectItem>
                             ))}

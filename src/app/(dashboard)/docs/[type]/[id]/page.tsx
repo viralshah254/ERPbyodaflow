@@ -2156,6 +2156,10 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
+              ...(compactInvoice ? [{
+                label: "Price list",
+                value: <span className="whitespace-normal [overflow-wrap:anywhere]">{document.priceListName?.trim() || (document.priceListId ? "Name unavailable" : "No price list recorded")}</span>,
+              }] : []),
               ...(compactInvoice && document.paymentStatus ? [{
                 label: "Payment status",
                 value: document.isOverdue && document.paymentStatus !== "PAID" ? "Overdue" : document.paymentStatus.replaceAll("_", " "),
@@ -2629,12 +2633,8 @@ export default function DocViewPage() {
         />
         {compactInvoice && (
           <details className="rounded-md border bg-card px-3 py-2">
-            <summary className="cursor-pointer text-sm font-medium">Address, notes, pricing and history</summary>
+            <summary className="cursor-pointer text-sm font-medium">Address, notes and history</summary>
             <div className="mt-2 space-y-3">
-              <div className="max-w-xs">
-                <p className="mb-1 text-xs font-medium text-muted-foreground">Price tag</p>
-                {documentPriceTag}
-              </div>
               {documentContext}
             </div>
           </details>
