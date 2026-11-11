@@ -300,3 +300,51 @@ html[data-erp-guide-open="true"] [data-gaia-widget] {
     display: block;
   }
 }
+
+.responsive-data-table {
+  container: responsive-data-table / inline-size;
+}
+
+.responsive-data-table :is(th, td) {
+  overflow-wrap: anywhere;
+}
+
+@container responsive-data-table (width < 54rem) {
+  .responsive-data-table thead:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .responsive-data-table thead:focus-within tr {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .responsive-data-table :is(table, tbody) {
+    display: block;
+  }
+
+  .responsive-data-table tbody tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr));
+  }
+
+  .responsive-data-table tbody td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .responsive-data-table tbody td {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .responsive-data-table td[data-cell-label]:not(:first-child)::before {
+    content: attr(data-cell-label);
+    display: block;
+    font-size: 0.6875rem;
+    color: hsl(var(--muted-foreground));
+  }
+}

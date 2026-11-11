@@ -64,6 +64,7 @@ interface DataTableProps<T> {
   onRowClick?: (row: T) => void;
   className?: string;
   emptyMessage?: string;
+  responsiveRows?: boolean;
   /** Enable row selection with checkboxes */
   selectable?: boolean;
   selectedIds?: string[];
@@ -107,6 +108,7 @@ export function DataTable<T extends object>({
   onRowClick,
   className,
   emptyMessage = "No data available",
+  responsiveRows = false,
   selectable,
   selectedIds = [],
   onSelectionChange,
@@ -228,6 +230,7 @@ export function DataTable<T extends object>({
       className={cn(
         "min-w-0 max-w-full rounded-md border",
         scrollMode === "fill" && "flex min-h-0 flex-1 flex-col overflow-hidden",
+        responsiveRows && "responsive-data-table",
         className,
       )}
     >
@@ -239,6 +242,7 @@ export function DataTable<T extends object>({
       >
         {/* Native <table> — avoid Table component's inner overflow wrapper (breaks sticky columns). */}
         <table
+          role={responsiveRows ? "table" : undefined}
           className={cn(
             "caption-bottom text-sm",
             "w-full min-w-0",
@@ -246,8 +250,8 @@ export function DataTable<T extends object>({
             tableSizeClass,
           )}
         >
-          <TableHeader>
-            <TableRow>
+          <TableHeader role={responsiveRows ? "rowgroup" : undefined}>
+            <TableRow role={responsiveRows ? "row" : undefined}>
               {selectable && (
                 <TableHead
                   className={cn(headerCell, "sticky left-0 z-20 w-12")}
@@ -323,9 +327,9 @@ export function DataTable<T extends object>({
               ))}
             </TableRow>
           </TableHeader>
-          <TableBody>
+          <TableBody role={responsiveRows ? "rowgroup" : undefined}>
             {displayData.length === 0 ? (
-              <TableRow>
+              <TableRow role={responsiveRows ? "row" : undefined}>
                 <TableCell
                   colSpan={colSpan}
                   className="h-24 text-center text-muted-foreground"
@@ -339,6 +343,7 @@ export function DataTable<T extends object>({
                 const checked = id ? selectedSet.has(id) : false;
                 return (
                   <TableRow
+                    role={responsiveRows ? "row" : undefined}
                     key={id || rowIndex}
                     className={cn(
                       "group",
@@ -368,6 +373,8 @@ export function DataTable<T extends object>({
                       return (
                         <TableCell
                           key={column.id}
+                          role={responsiveRows ? "cell" : undefined}
+                          data-cell-label={responsiveRows && typeof column.header === "string" ? column.header : undefined}
                           className={cn(
                             column.sticky &&
                               cn(

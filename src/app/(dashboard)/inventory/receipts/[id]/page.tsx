@@ -443,9 +443,19 @@ export default function ReceiptDetailPage() {
   };
 
   const lineColumns = [
-    { id: "sku", header: "SKU", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.sku ?? "—", sticky: true },
-    { id: "product", header: "Product", accessor: (line: GrnLineRow & { _lineIndex?: number }) => line.productName ?? "—" },
-    { id: "qty", header: "Qty", accessor: (line: GrnLineRow & { _lineIndex?: number }) => `${(line.qty ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${line.uom ?? ""}`.trim() },
+    {
+      id: "product",
+      header: "Product",
+      accessor: (line: GrnLineRow) => (
+        <div>
+          <p className="font-medium">{line.productName || "—"}</p>
+          {line.sku && <p className="text-xs text-muted-foreground">{line.sku}</p>}
+        </div>
+      ),
+      sortValue: (line: GrnLineRow) => line.productName,
+      searchValue: (line: GrnLineRow) => `${line.productName} ${line.sku}`,
+    },
+    { id: "qty", header: hasCashWeightAudit ? "Receipt qty" : "Received", accessor: (line: GrnLineRow) => `${(line.qty ?? 0).toLocaleString("en-US", { maximumFractionDigits: 6 })} ${line.uom ?? ""}`.trim() },
     {
       id: "lot",
       header: "Lot / QC",
@@ -455,7 +465,7 @@ export default function ReceiptDetailPage() {
           return (
             <div className="space-y-1">
               <Input
-                className="h-8 w-36"
+                className="h-8 w-full min-w-0 max-w-36"
                 placeholder="Lot number *"
                 value={editingLot[idx] ?? line.lotNumber ?? ""}
                 onChange={(event) => setEditingLot((current) => ({ ...current, [idx]: event.target.value }))}
@@ -477,7 +487,7 @@ export default function ReceiptDetailPage() {
               />
               <Input
                 type="date"
-                className="h-8 w-36"
+                className="h-8 w-full min-w-0 max-w-36"
                 aria-label={`Expiry date for line ${idx + 1}`}
                 value={(editingExpiry[idx] ?? line.expiryDate ?? "").slice(0, 10)}
                 onChange={(event) => setEditingExpiry((current) => ({ ...current, [idx]: event.target.value }))}
@@ -501,7 +511,7 @@ export default function ReceiptDetailPage() {
             {line.expiryDate ? <div className="text-xs text-muted-foreground">Expires {line.expiryDate.slice(0, 10)}</div> : null}
             <Badge variant="outline">{line.lotStatus ?? "QUARANTINED"}</Badge>
             {line.qcStatus === "PENDING" && canRecordQc ? (
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 <Button size="sm" variant="outline" className="h-7 px-2" onClick={async () => { try { setGrn(await recordGRNLineQc(grn.id, idx, "ACCEPTED")); toast.success("Receipt lot released."); } catch (error) { toast.error((error as Error).message); } }}>Release</Button>
                 <Button size="sm" variant="outline" className="h-7 px-2 text-destructive" onClick={async () => { try { setGrn(await recordGRNLineQc(grn.id, idx, "REJECTED")); toast.success("Receipt lot rejected."); } catch (error) { toast.error((error as Error).message); } }}>Reject</Button>
               </div>
@@ -561,7 +571,7 @@ export default function ReceiptDetailPage() {
                       value={reasonValue}
                       onValueChange={(v) => setEditingVarianceReason((prev) => ({ ...prev, [idx]: v }))}
                     >
-                      <SelectTrigger className="h-7 text-xs w-44">
+                      <SelectTrigger className="h-7 w-full max-w-44 text-xs">
                         <SelectValue placeholder="Variance reason *" />
                       </SelectTrigger>
                       <SelectContent>
@@ -924,19 +934,15 @@ export default function ReceiptDetailPage() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-2 gap-x-3 gap-y-2 p-4 pt-0 text-xs md:grid-cols-3">
                   <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Number</p>
-                    <p className="font-medium leading-tight">{grn.number}</p>
-                  </div>
-                  <div>
                     <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Date</p>
                     <p className="font-medium leading-tight">{grn.date}</p>
                   </div>
+                  {grn.poRef && <div>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">PO reference</p>
+                    <p className="font-medium leading-tight">{grn.poRef}</p>
+                  </div>}
                   <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">PO Reference</p>
-                    <p className="font-medium leading-tight">{grn.poRef ?? "—"}</p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Warehouse</p>
+                    <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Receiving warehouse</p>
                     <p className="font-medium leading-tight">{grn.warehouse ?? "—"}</p>
                   </div>
                   <div>
@@ -968,8 +974,11 @@ export default function ReceiptDetailPage() {
                           {grn.supplierInvoiceNumber || grn.linkedBill.number}
                         </Link>
                       ) : canWrite ? (
-                        <div className="mt-1 space-y-2">
+                        <details className="mt-1">
+                          <summary className="cursor-pointer break-words font-medium">{supplierInvoiceNo || "Add or link supplier invoice"}</summary>
+                          <div className="mt-2 space-y-2">
                           <Input
+                            aria-label="Supplier invoice number"
                             value={supplierInvoiceNo}
                             onChange={(event) => setSupplierInvoiceNo(event.target.value)}
                             placeholder="Invoice number on the supplier tax invoice"
@@ -1010,7 +1019,8 @@ export default function ReceiptDetailPage() {
                             emptyMessage="No supplier invoices found."
                             allowClear
                           />
-                        </div>
+                          </div>
+                        </details>
                       ) : (
                         <p className="font-medium">{grn.supplierInvoiceNumber || "—"}</p>
                       )}
@@ -1098,7 +1108,6 @@ export default function ReceiptDetailPage() {
               <CardHeader className="flex-row items-start justify-between space-y-0 p-4 pb-2">
                 <div>
                   <CardTitle className="text-base">Receipt Lines</CardTitle>
-                  <CardDescription className="text-xs">Received quantity and financial value per line.</CardDescription>
                 </div>
                 {canRecordQc && grn.status !== "DRAFT" && pendingQcLineIndexes.length > 1 ? (
                   <Button
@@ -1123,9 +1132,15 @@ export default function ReceiptDetailPage() {
                 ) : null}
               </CardHeader>
               <CardContent className="p-0">
-                <div className="max-h-[min(38vh,20rem)] overflow-auto">
-                  <DataTable<GrnLineRow & { _lineIndex?: number }> data={linesWithIndex} columns={lineColumns} emptyMessage="No receipt lines." />
-                </div>
+                <DataTable<GrnLineRow & { _lineIndex?: number }>
+                  data={linesWithIndex}
+                  columns={lineColumns}
+                  emptyMessage="No receipt lines."
+                  searchPlaceholder="Find a product or SKU…"
+                  scrollMode="natural"
+                  size="compact"
+                  responsiveRows
+                />
               </CardContent>
               {hasCashWeightAudit && totalReceivedWeight > 0 && (
                 <div className="border-t px-4 py-3 space-y-3">
