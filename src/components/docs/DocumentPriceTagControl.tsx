@@ -243,9 +243,10 @@ export function DocumentPriceTagControl({
         options={options}
         placeholder="Choose a price tag"
         searchPlaceholder="Search price tags"
+        wrapLabels
         disabled={busy || options.length === 0}
       />
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] font-normal text-muted-foreground">{hint}</p>
         <Button
           type="button"

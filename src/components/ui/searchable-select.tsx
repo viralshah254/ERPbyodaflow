@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import * as Icons from "lucide-react";
 
@@ -21,6 +22,7 @@ interface SearchableSelectProps {
   emptyMessage?: string;
   disabled?: boolean;
   allowClear?: boolean;
+  wrapLabels?: boolean;
   className?: string;
 }
 
@@ -33,6 +35,7 @@ export function SearchableSelect({
   emptyMessage = "No options found.",
   disabled = false,
   allowClear = false,
+  wrapLabels = false,
   className,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false);
@@ -73,11 +76,11 @@ export function SearchableSelect({
       <Button
         type="button"
         variant="outline"
-        className="w-full justify-between font-normal"
+        className={cn("w-full justify-between font-normal", wrapLabels && "h-auto min-h-10 gap-1 px-2 text-left")}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="truncate">{selected?.label ?? placeholder}</span>
+        <span className={wrapLabels ? "min-w-0 whitespace-normal break-words" : "truncate"}>{selected?.label ?? placeholder}</span>
         <Icons.ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-60" />
       </Button>
       {open ? (
@@ -114,7 +117,7 @@ export function SearchableSelect({
                     setOpen(false);
                   }}
                 >
-                  <span className="truncate">{option.label}</span>
+                  <span className={wrapLabels ? "min-w-0 whitespace-normal break-words" : "truncate"}>{option.label}</span>
                   {option.id === value ? <Icons.Check className="ml-2 h-4 w-4" /> : null}
                 </button>
               ))
