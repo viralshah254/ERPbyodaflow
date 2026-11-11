@@ -52,6 +52,7 @@ import { createScannerBuffer, formatPackQty, matchPackScan, pickedPiecesByLine, 
 import {
   createDistributionVehicle,
   fetchDistributionVehicles,
+  formatCapacityTons,
   type DistributionVehicleRow,
 } from "@/lib/api/logistics";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
@@ -249,6 +250,7 @@ export default function PickPackDetailPage() {
     code: "",
     name: "",
     registration: "",
+    capacityTons: "",
     monthlyCost: "",
   });
   const fleetVehicles = React.useMemo(
@@ -561,6 +563,7 @@ export default function PickPackDetailPage() {
       code: suggestFleetVehicleCode(),
       name: "",
       registration: "",
+      capacityTons: "",
       monthlyCost: "",
     });
     setAddVehicleOpen(true);
@@ -614,6 +617,7 @@ export default function PickPackDetailPage() {
         name: addVehicleForm.name.trim() || undefined,
         type: "LEASED",
         registration: addVehicleForm.registration.trim() || undefined,
+        capacityTons: addVehicleForm.capacityTons.trim() ? Number(addVehicleForm.capacityTons) : undefined,
         monthlyCost: addVehicleForm.monthlyCost.trim()
           ? Number(addVehicleForm.monthlyCost)
           : undefined,
@@ -1782,6 +1786,7 @@ export default function PickPackDetailPage() {
                           {v.code}
                           {v.name ? ` — ${v.name}` : ""}
                           {v.registration ? ` (${v.registration})` : ""}
+                          {formatCapacityTons(v.capacityTons) ? ` · ${formatCapacityTons(v.capacityTons)}` : ""}
                         </SelectItem>
                       ))}
                       <div className="border-t border-border mt-1 pt-1">
@@ -2350,6 +2355,18 @@ export default function PickPackDetailPage() {
                     setAddVehicleForm((f) => ({ ...f, registration: e.target.value }))
                   }
                   placeholder="e.g. KDA 123A"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pp-vehicle-capacity">Carry capacity (tons)</Label>
+                <Input
+                  id="pp-vehicle-capacity"
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={addVehicleForm.capacityTons}
+                  onChange={(e) => setAddVehicleForm((f) => ({ ...f, capacityTons: e.target.value }))}
+                  placeholder="e.g. 7"
                 />
               </div>
               <div className="space-y-2">

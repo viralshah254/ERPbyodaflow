@@ -3,6 +3,7 @@
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
 
@@ -16,6 +17,13 @@ type OdaflowApprovalConfirmDialogProps = {
   intent?: "submit" | "approve";
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  /** Joy SFA orders name the route store before approval can be requested. */
+  routeWarehouse?: {
+    options: Array<{ id: string; label: string }>;
+    value: string;
+    onChange: (id: string) => void;
+    loading?: boolean;
+  };
 };
 
 export function OdaflowApprovalConfirmDialog({
@@ -27,6 +35,7 @@ export function OdaflowApprovalConfirmDialog({
   intent = "approve",
   onConfirm,
   loading = false,
+  routeWarehouse,
 }: OdaflowApprovalConfirmDialogProps) {
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -41,6 +50,7 @@ export function OdaflowApprovalConfirmDialog({
   }
 
   const busy = loading || submitting;
+  const routeWarehouseMissing = Boolean(routeWarehouse) && !routeWarehouse?.value.trim();
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
@@ -81,13 +91,28 @@ export function OdaflowApprovalConfirmDialog({
                   before approving.
                 </p>
               )}
+              {routeWarehouse ? (
+                <div className="space-y-2 text-foreground">
+                  <p className="font-medium">Route warehouse</p>
+                  <p>This store is the route the order is delivered on.</p>
+                  <SearchableSelect
+                    value={routeWarehouse.value}
+                    onValueChange={routeWarehouse.onChange}
+                    options={routeWarehouse.options}
+                    placeholder={routeWarehouse.loading ? "Loading stores…" : "Select the route warehouse"}
+                    searchPlaceholder="Type to search stores"
+                    emptyMessage="No route stores found."
+                    disabled={busy || routeWarehouse.loading}
+                  />
+                </div>
+              ) : null}
             </div>
           </Dialog.Description>
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="button" disabled={busy} onClick={() => void handleConfirm()}>
+            <Button type="button" disabled={busy || routeWarehouseMissing} onClick={() => void handleConfirm()}>
               {busy ? (
                 <>
                   <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />

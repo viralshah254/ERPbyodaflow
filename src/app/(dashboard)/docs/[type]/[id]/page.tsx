@@ -325,6 +325,9 @@ export default function DocViewPage() {
   const [startPickPackLoading, setStartPickPackLoading] = React.useState(false);
   const [odaflowApprovalOpen, setOdaflowApprovalOpen] = React.useState(false);
   const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | "submit" | null>(null);
+  const [routeWarehouseChoice, setRouteWarehouseChoice] = React.useState("");
+  const [routeWarehouseOptions, setRouteWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+  const [routeWarehousesLoading, setRouteWarehousesLoading] = React.useState(false);
   /** True only for the very first fetch when document is still null — drives skeleton vs empty-state decisions. */
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [documentLoadError, setDocumentLoadError] = React.useState<string | null>(null);
@@ -647,6 +650,10 @@ export default function DocViewPage() {
   const canCancel = availableActions.includes("cancel") && !fiscallySigned && !fiscalUnresolved;
   const canReverse = availableActions.includes("reverse");
   const odaflowSalesOrder = type === "sales-order" && isOdaflowSalesOrder(document);
+  const needsRouteWarehouse =
+    odaflowSalesOrder &&
+    org?.orgId === JOY_SUPERBAKERS_ORG_ID &&
+    !document?.warehouseId?.trim();
   const odaflowSource = odaflowSourceFromDetail(document);
   const odaflowHeaderExtraFields =
     (odaflowSalesOrder && document?.odaflowSalesRepName ? 1 : 0) +
@@ -663,6 +670,13 @@ export default function DocViewPage() {
     if (!odaflowApprovalAction) return;
     setActionLoading(true);
     try {
+      if (needsRouteWarehouse) {
+        const warehouseId = routeWarehouseChoice.trim();
+        if (!warehouseId) {
+          throw new Error("Select the route warehouse. That store is the route this order is going to.");
+        }
+        await patchDocumentApi(type as DocTypeKey, id, { warehouseId });
+      }
       if (odaflowApprovalAction === "request" || odaflowApprovalAction === "submit") {
         const result = await requestDocumentApprovalApi(type as DocTypeKey, id);
         await refreshDocument(true);
@@ -1068,6 +1082,27 @@ export default function DocViewPage() {
       cancelled = true;
     };
   }, [type, document?.warehouseId, org?.orgId]);
+
+  React.useEffect(() => {
+    if (!odaflowApprovalOpen || !needsRouteWarehouse) return;
+    let cancelled = false;
+    setRouteWarehouseChoice("");
+    setRouteWarehousesLoading(true);
+    void fetchWarehouseOptions()
+      .then((options) => {
+        if (cancelled) return;
+        setRouteWarehouseOptions(options.filter((option) => !/dispatch/i.test(option.label)));
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("Route warehouses could not be loaded.");
+      })
+      .finally(() => {
+        if (!cancelled) setRouteWarehousesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [odaflowApprovalOpen, needsRouteWarehouse]);
 
   const [joyLoadNote, setJoyLoadNote] = React.useState<{ id: string; number: string; status: string } | null>(null);
   React.useEffect(() => {
@@ -3565,6 +3600,16 @@ export default function DocViewPage() {
         }
         intent={odaflowApprovalAction === "approve" ? "approve" : "submit"}
         loading={actionLoading}
+        routeWarehouse={
+          needsRouteWarehouse
+            ? {
+                options: routeWarehouseOptions,
+                value: routeWarehouseChoice,
+                onChange: setRouteWarehouseChoice,
+                loading: routeWarehousesLoading,
+              }
+            : undefined
+        }
         onConfirm={runOdaflowApprovalConfirm}
       />
     </DocumentPageShell>

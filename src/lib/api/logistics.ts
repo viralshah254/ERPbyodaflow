@@ -11,8 +11,18 @@ export type DistributionVehicleRow = {
   monthlyCost?: number;
   assumedTripsPerMonth?: number;
   registration?: string;
+  /** Carry capacity in metric tons. */
+  capacityTons?: number;
   currency?: string;
 };
+
+export function formatCapacityTons(tons?: number | null): string | undefined {
+  if (tons == null) return undefined;
+  const n = Number(tons);
+  if (!Number.isFinite(n) || n < 0) return undefined;
+  const text = Number.isInteger(n) ? String(n) : String(Number(n.toFixed(2)));
+  return `${text} t`;
+}
 
 export async function fetchDistributionVehicles(params?: {
   type?: string;
@@ -110,6 +120,7 @@ export async function createDistributionVehicle(body: {
   name?: string;
   type: "LEASED" | "SPOT";
   registration?: string;
+  capacityTons?: number | null;
   monthlyCost?: number;
   assumedTripsPerMonth?: number;
   currency?: string;
@@ -125,6 +136,7 @@ export async function updateDistributionVehicle(
     name: string;
     type: "LEASED" | "SPOT";
     registration: string;
+    capacityTons: number | null;
     monthlyCost: number;
     assumedTripsPerMonth: number;
     currency: string;

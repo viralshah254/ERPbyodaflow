@@ -32,6 +32,7 @@ import {
   uploadVehiclePeriodInvoice,
   markVehiclePeriodPaid,
   currentPeriodKey,
+  formatCapacityTons,
   type DistributionVehicleRow,
   type VehiclePeriodSummary,
 } from "@/lib/api/logistics";
@@ -45,6 +46,7 @@ type VehicleForm = {
   name: string;
   type: "LEASED" | "SPOT";
   registration: string;
+  capacityTons: string;
   monthlyCost: string;
   assumedTripsPerMonth: string;
   currency: string;
@@ -55,6 +57,7 @@ const emptyForm = (): VehicleForm => ({
   name: "",
   type: "SPOT",
   registration: "",
+  capacityTons: "",
   monthlyCost: "",
   assumedTripsPerMonth: "12",
   currency: "KES",
@@ -166,6 +169,7 @@ export default function FleetPage() {
       name: v.name ?? "",
       type: (v.type as "LEASED" | "SPOT") ?? "SPOT",
       registration: v.registration ?? "",
+      capacityTons: v.capacityTons != null ? String(v.capacityTons) : "",
       monthlyCost: v.monthlyCost != null ? String(v.monthlyCost) : "",
       assumedTripsPerMonth: v.assumedTripsPerMonth != null ? String(v.assumedTripsPerMonth) : "12",
       currency: v.currency ?? "KES",
@@ -185,6 +189,7 @@ export default function FleetPage() {
         name: form.name.trim() || undefined,
         type: form.type,
         registration: form.registration.trim() || undefined,
+        capacityTons: form.capacityTons.trim() ? parseFloat(form.capacityTons) : null,
         monthlyCost: form.monthlyCost.trim() ? parseFloat(form.monthlyCost) : undefined,
         assumedTripsPerMonth: form.assumedTripsPerMonth.trim() ? parseInt(form.assumedTripsPerMonth) : 12,
         currency: form.currency || "KES",
@@ -319,6 +324,9 @@ export default function FleetPage() {
                       </div>
                       <div className="mt-0.5 flex flex-wrap gap-x-4 text-xs text-muted-foreground">
                         {v.registration && <span>Reg: {v.registration}</span>}
+                        {formatCapacityTons(v.capacityTons) && (
+                          <span>Capacity: {formatCapacityTons(v.capacityTons)}</span>
+                        )}
                         {v.type === "LEASED" && v.monthlyCost != null && (
                           <span>
                             {formatMoney(v.monthlyCost, v.currency ?? "KES")} / month
@@ -526,13 +534,26 @@ export default function FleetPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Registration plate</Label>
-              <Input
-                placeholder="e.g. KDA 123A"
-                value={form.registration}
-                onChange={(e) => setForm((f) => ({ ...f, registration: e.target.value }))}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Registration plate</Label>
+                <Input
+                  placeholder="e.g. KDA 123A"
+                  value={form.registration}
+                  onChange={(e) => setForm((f) => ({ ...f, registration: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Carry capacity (tons)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  placeholder="e.g. 7"
+                  value={form.capacityTons}
+                  onChange={(e) => setForm((f) => ({ ...f, capacityTons: e.target.value }))}
+                />
+              </div>
             </div>
 
             {form.type === "LEASED" && (

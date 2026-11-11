@@ -26,7 +26,7 @@ import {
   type TripType,
   type OpenDeliveryNoteRow,
 } from "@/lib/api/trips";
-import { fetchDistributionVehicles, type DistributionVehicleRow } from "@/lib/api/logistics";
+import { fetchDistributionVehicles, formatCapacityTons, type DistributionVehicleRow } from "@/lib/api/logistics";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -200,6 +200,7 @@ export function NewTripSheet({ open, onOpenChange, defaultType, onCreated }: New
                       {v.code}
                       {v.name ? ` — ${v.name}` : ""}
                       {v.registration ? ` (${v.registration})` : ""}
+                      {formatCapacityTons(v.capacityTons) ? ` · ${formatCapacityTons(v.capacityTons)}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
