@@ -83,6 +83,7 @@ import {
 } from "@/lib/api/pricing";
 import { isPlantCatalogueTemplate } from "@/config/industry";
 import { usesInlineQuantitySheet, sameEditableLines, storedEditableUnitPrice } from "@/lib/docs/inline-quantity-sheet";
+import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
@@ -286,6 +287,7 @@ function WarehouseField({
   selectedWarehouseOption,
   optionsLoading = false,
   onCreateNewWarehouse,
+  hint,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
@@ -294,6 +296,7 @@ function WarehouseField({
   selectedWarehouseOption?: { id: string; label: string } | null;
   optionsLoading?: boolean;
   onCreateNewWarehouse?: () => void;
+  hint?: string;
 }) {
   const key = fieldIdToKey(field.id);
 
@@ -351,6 +354,7 @@ function WarehouseField({
           {form.formState.errors[key]?.message as string}
         </p>
       )}
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -367,6 +371,7 @@ function RenderField({
   onCreateNewSupplier,
   onCreateNewWarehouse,
   fmcgOrg = false,
+  hint,
 }: {
   field: FormFieldConfig;
   form: ReturnType<typeof useForm<FormValues>>;
@@ -379,6 +384,7 @@ function RenderField({
   onCreateNewSupplier?: (searchQuery: string) => void;
   onCreateNewWarehouse?: () => void;
   fmcgOrg?: boolean;
+  hint?: string;
 }) {
   const key = fieldIdToKey(field.id);
   const isDate = field.type === "date";
@@ -397,6 +403,7 @@ function RenderField({
         selectedWarehouseOption={selectedWarehouseOption}
         optionsLoading={warehouseOptionsLoading}
         onCreateNewWarehouse={onCreateNewWarehouse}
+        hint={hint}
       />
     );
   }
@@ -556,6 +563,7 @@ export function DocumentCreateWizard({
   const { settings: financialSettings } = useFinancialSettings();
   const baseCurrency = financialSettings.baseCurrency;
   const currentOrgId = useAuthStore((s) => s.org?.orgId);
+  const joyDeliveryWarehouse = currentOrgId === JOY_SUPERBAKERS_ORG_ID && type === "sales-order";
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -1612,6 +1620,17 @@ export function DocumentCreateWizard({
     setMaxStepReached((prev) => Math.max(prev, step));
   }, [step]);
 
+  const rejectMissingDeliveryWarehouse = React.useCallback(() => {
+    if (!joyDeliveryWarehouse) return false;
+    if (String(form.getValues("warehouse") ?? "").trim()) return false;
+    form.setError("warehouse", {
+      type: "required",
+      message: "Select the delivery warehouse. That store is the route this order is going to.",
+    });
+    toast.error("Select the delivery warehouse. That store is the route this order is going to.");
+    return true;
+  }, [form, joyDeliveryWarehouse]);
+
   const goToStep = React.useCallback(
     async (targetStep: number) => {
       if (targetStep === step || targetStep < 1 || targetStep > STEPS.length) return;
@@ -1621,6 +1640,8 @@ export function DocumentCreateWizard({
         setStep(targetStep);
         return;
       }
+
+      if (rejectMissingDeliveryWarehouse()) return;
 
       if (targetStep === 3) {
         if (explicitSheetEdit && step === 1) { setStep(2); return; }
@@ -1698,12 +1719,14 @@ export function DocumentCreateWizard({
       linesStepReady,
       maxStepReached,
       persistWizardProgress,
+      rejectMissingDeliveryWarehouse,
       step,
       type,
     ]
   );
 
   const onReview = async () => {
+    if (rejectMissingDeliveryWarehouse()) return;
     if (explicitSheetEdit && step === 1) { setStep(2); return; }
     if (!linesStepReady) {
       toast.error("Line items are still loading. Please wait a moment.");
@@ -1775,6 +1798,7 @@ export function DocumentCreateWizard({
   };
 
   const validateAndNext = async () => {
+    if (rejectMissingDeliveryWarehouse()) return;
     if (step === 1) {
       if (!headerStepReady) {
         toast.error("Header fields are still loading. Please wait a moment.");
@@ -2043,7 +2067,25 @@ export function DocumentCreateWizard({
   };
 
   const headerSection = config?.createFormSections.find((s) => s.id === "header");
-  const headerFields = headerSection?.fields ?? [];
+  const baseHeaderFields = headerSection?.fields ?? [];
+  const deliveryWarehouseField: FormFieldConfig = {
+    id: "warehouse",
+    label: "Delivery warehouse",
+    type: "select",
+    required: true,
+  };
+  const headerFields =
+    joyDeliveryWarehouse && !baseHeaderFields.some((field) => field.id === "warehouse")
+      ? (() => {
+          const branchIndex = baseHeaderFields.findIndex((field) => field.id === "branch");
+          if (branchIndex < 0) return [...baseHeaderFields, deliveryWarehouseField];
+          return [
+            ...baseHeaderFields.slice(0, branchIndex + 1),
+            deliveryWarehouseField,
+            ...baseHeaderFields.slice(branchIndex + 1),
+          ];
+        })()
+      : baseHeaderFields;
 
   React.useEffect(() => {
     if (
@@ -2673,7 +2715,12 @@ export function DocumentCreateWizard({
                       selectedPartyOption={selectedPartyOption}
                       selectedWarehouseOption={selectedWarehouseOption}
                       warehouseOptionsLoading={!branchWarehouseReady}
-                      branchId={watchedBranch}
+                      branchId={joyDeliveryWarehouse && f.id === "warehouse" ? undefined : watchedBranch}
+                      hint={
+                        joyDeliveryWarehouse && f.id === "warehouse"
+                          ? "This store is the route the order is delivered on."
+                          : undefined
+                      }
                       fmcgOrg={fmcgOrg}
                       onCreateNewCustomer={(query) => {
                         setQuickAddInitialName(query);
@@ -3037,6 +3084,16 @@ export function DocumentCreateWizard({
                         : "Tax-exclusive (VAT added on top)"}
                   </p>
                 </div>
+                {joyDeliveryWarehouse ? (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Delivery warehouse</span>
+                    <p className="font-medium">
+                      {(fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
+                        form.watch("warehouse") ||
+                        "—"}
+                    </p>
+                  </div>
+                ) : null}
                 {type === "delivery-note" ? (
                   <>
                     <div className="space-y-1">

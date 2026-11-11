@@ -54,9 +54,10 @@ vi.mock("@/components/docs/DocumentLineEditor", async (original) => {
 });
 function doc(type: "sales-order" | "invoice"): DocumentDetailRecord {
   return { attachments: [], comments: [], approvalHistory: [], auditHistory: [], id: "synthetic-doc", type, number: "QA-EDIT", status: "DRAFT", date: "2026-11-09", partyId: "customer", party: "Synthetic QA customer", currency: "KES", total: 86.2, priceListId: "stored", taxConfigId: "stored-tax", linesAreTaxInclusive: true,
+    ...(type === "sales-order" ? { warehouseId: "wh-c4-friday" } : {}),
     lines: [{ id: "original-line", productId: "queen", productSku: "1", description: "Queen cakes", qty: 2, unit: "PCS", unitPrice: 43.1, amount: 86.2, tax: 11.89, taxCodeId: "vat" }] };
 }
-beforeEach(() => { vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); });
+beforeEach(() => { vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; });
 it.each(["sales-order", "invoice"] as const)("opens existing %s inline without autosaving and saves only positive lines explicitly", async (type) => {
   render(<DocumentCreateWizard type={type} mode="edit" existingDocument={doc(type)} />);
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
@@ -98,4 +99,26 @@ it("changes price and VAT tags locally without changing customer defaults or aut
   expect(state.push).toHaveBeenCalledWith("/docs/invoice/synthetic-doc");
   expect(deleteDocumentDraftApi).not.toHaveBeenCalled();
   expect(patchDocumentApi).not.toHaveBeenCalled();
+});
+
+it("keeps a Joy sales order on the header until a delivery warehouse is selected", async () => {
+  render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{ ...doc("sales-order"), warehouseId: "" }} />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
+  expect(screen.getByText(/Delivery warehouse/)).toBeInTheDocument();
+  expect(screen.getByText("This store is the route the order is delivered on.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
+  expect(await screen.findByText("Select the delivery warehouse. That store is the route this order is going to.")).toBeInTheDocument();
+  expect(screen.getByText(/Step 1 of 3/)).toBeInTheDocument();
+  expect(screen.queryByTestId("edit-sheet")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Review & Submit" }));
+  expect(screen.getByText(/Step 1 of 3/)).toBeInTheDocument();
+});
+
+it("does not ask other organisations for a delivery warehouse on a sales order", async () => {
+  state.orgId = "org-other";
+  render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{ ...doc("sales-order"), warehouseId: "" }} />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).toBeEnabled());
+  expect(screen.queryByText(/Delivery warehouse/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
+  expect(await screen.findByTestId("edit-sheet")).toBeInTheDocument();
 });

@@ -114,6 +114,7 @@ import { OdaflowApprovalConfirmDialog } from "@/components/integrations/OdaflowA
 import { isOdaflowSalesOrder, odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
+import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
 import {
   FmcgPackagingConversionBlocker,
   packagingMissingLineLabel,
@@ -1043,7 +1044,11 @@ export default function DocViewPage() {
   }, [document, id, type]);
 
   React.useEffect(() => {
-    if (type !== "delivery-note" || !document?.warehouseId?.trim()) {
+    const showStoredWarehouse =
+      Boolean(document?.warehouseId?.trim()) &&
+      (type === "delivery-note" ||
+        (type === "sales-order" && org?.orgId === JOY_SUPERBAKERS_ORG_ID));
+    if (!showStoredWarehouse) {
       setDeliveryNoteWarehouseLabel(null);
       return;
     }
@@ -1051,16 +1056,16 @@ export default function DocViewPage() {
     fetchWarehouseOptions()
       .then((opts) => {
         if (cancelled) return;
-        const m = opts.find((o) => o.id === document.warehouseId);
-        setDeliveryNoteWarehouseLabel(m?.label ?? document.warehouseId ?? null);
+        const m = opts.find((o) => o.id === document?.warehouseId);
+        setDeliveryNoteWarehouseLabel(m?.label ?? document?.warehouseId ?? null);
       })
       .catch(() => {
-        if (!cancelled) setDeliveryNoteWarehouseLabel(document.warehouseId ?? null);
+        if (!cancelled) setDeliveryNoteWarehouseLabel(document?.warehouseId ?? null);
       });
     return () => {
       cancelled = true;
     };
-  }, [type, document?.warehouseId]);
+  }, [type, document?.warehouseId, org?.orgId]);
 
   const isUuidLike = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
@@ -1842,6 +1847,16 @@ export default function DocViewPage() {
                           : document?.status === "DRAFT"
                             ? "Not set — select below"
                             : "—"),
+                    },
+                  ]
+                : []),
+              ...(type === "sales-order" && org?.orgId === JOY_SUPERBAKERS_ORG_ID
+                ? [
+                    {
+                      label: "Delivery warehouse",
+                      value: document?.warehouseId?.trim()
+                        ? (deliveryNoteWarehouseLabel ?? document.warehouseId)
+                        : "Not selected",
                     },
                   ]
                 : []),
