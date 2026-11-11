@@ -14,8 +14,8 @@ export function WarehouseDispositionActions({ row, canWrite, onChanged }: { row:
     setBusy(true);
     try {
       if (approve) await approveWarehouseDispositionApi(row.id);
-      else await updateWarehouseApi(row.id, { stockDisposition: target });
-      toast.success(approve ? "Stock disposition approved." : "Disposition requested. A different authorized person must approve it.");
+      const updated = approve ? null : await updateWarehouseApi(row.id, { stockDisposition: target });
+      toast.success(approve || !updated?.dispositionPending ? "Stock disposition approved." : "Disposition requested. A different authorized person must approve it.");
       setTarget(""); await onChanged();
     } catch (error) { toast.error(error instanceof Error ? error.message : "The disposition could not be updated."); }
     finally { setBusy(false); }
