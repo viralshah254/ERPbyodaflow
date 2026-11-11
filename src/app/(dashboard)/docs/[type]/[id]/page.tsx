@@ -80,7 +80,7 @@ import {
 import { fetchLandedCostAllocation, type ExistingLandedCostAllocation } from "@/lib/api/landed-cost";
 import { CostImpactPanel } from "@/components/operational/CostImpactPanel";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
-import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
+import { fetchApBillsPageApi, searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import { fetchPartyByIdApi, formatPartyDisplayName, updatePartyApi, type PartyLookupOption } from "@/lib/api/parties";
 import { createPaymentTermApi, fetchPaymentTermsApi, type PaymentTermRow } from "@/lib/api/payment-terms";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -340,6 +340,28 @@ export default function DocViewPage() {
   const [extrasLoading, setExtrasLoading] = React.useState(true);
   const loading = initialLoading;
   const [document, setDocument] = React.useState<Awaited<ReturnType<typeof fetchDocumentDetailApi>>>(null);
+  const [billBalance, setBillBalance] = React.useState<{ id: string; outstanding: number } | null>(null);
+  const billNumber = document?.number;
+  const billId = document?.id;
+  const billPartyId = document?.partyId;
+  const showBillBalance = type === "bill" && document?.status === "POSTED" && can(authUser, "finance.ap.read");
+  React.useEffect(() => {
+    setBillBalance(null);
+    if (!showBillBalance || !billId || !billNumber) return;
+    let active = true;
+    void fetchApBillsPageApi({ search: billNumber, partyId: billPartyId })
+      .then(({ items }) => {
+        const bill = items.find((item) => item.id === billId);
+        if (active && bill?.outstanding != null) {
+          setBillBalance({ id: billId, outstanding: bill.outstanding });
+        }
+      })
+      .catch(() => {
+        // Users without AP access can still read the bill details.
+      });
+    return () => { active = false; };
+  }, [billId, billNumber, billPartyId, showBillBalance]);
+
   React.useEffect(() => {
     if (type !== "invoice" || !document?.partyId) {
       setPartyNeedsTerms(false);
@@ -908,7 +930,8 @@ export default function DocViewPage() {
     return (document.lines ?? []).some((line) => {
       if (!line.id) return false;
       const raw = creditQtyDraft[line.id];
-      if (raw == null || raw.trim() === "") return false;
+      if (raw == null) return false;
+      if (raw.trim() === "") return true;
       return Math.abs(Number(raw) - (line.qty ?? 0)) > 0.001;
     });
   }, [creditQtyDraft, document, type]);
@@ -1059,7 +1082,7 @@ export default function DocViewPage() {
   React.useEffect(() => {
     const showStoredWarehouse =
       Boolean(document?.warehouseId?.trim()) &&
-      (type === "delivery-note" ||
+      (type === "delivery-note" || type === "grn" ||
         (type === "sales-order" && org?.orgId === JOY_SUPERBAKERS_ORG_ID));
     if (!showStoredWarehouse) {
       setDeliveryNoteWarehouseLabel(null);
@@ -1381,8 +1404,18 @@ export default function DocViewPage() {
   }
 
   const compactInvoice = type === "invoice";
+  const isAdjustment = ["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type);
   const compactSalesDocument = compactInvoice || isFulfilmentDoc || type === "quote";
-  const canApplyPriceTagInDetails = type === "quote" || type === "sales-order";
+  const compactDocument = compactSalesDocument || isPurchaseDoc || isAdjustment;
+  const showReceiptVariance = isGrnDoc && (
+    document.sourceDocument?.typeKey === "purchase-order" ||
+    document.lines.some((line) =>
+      line.orderedWeightKg != null || line.orderedQuantity != null ||
+      line.sourceQuantity != null || line.receiptVarianceKg != null
+    )
+  );
+  const lineLayout = showReceiptVariance ? "document-lines-receipt" : isPurchaseDoc ? "document-lines-purchase" : "";
+  const canApplyPriceTagInDetails = type === "quote" || type === "sales-order" || type === "credit-note";
   const documentPriceTag = (
     <DocumentPriceTagControl
       docType={type as DocTypeKey}
@@ -1687,7 +1720,7 @@ export default function DocViewPage() {
       statusActor={document?.statusActor ?? null}
       createdByName={createdByDisplayName}
       rightSlot={rightSlot}
-      compact={compactSalesDocument}
+      compact={compactDocument}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <DocumentHubUploadButton
@@ -2043,21 +2076,21 @@ export default function DocViewPage() {
         </div>
       }
     >
-      <div className={compactSalesDocument ? "space-y-2.5" : "space-y-4"}>
+      <div className={compactDocument ? "space-y-2.5" : "space-y-4"}>
         {loading ? (
           <DocumentDetailHeaderSkeleton
             columns={type === "sales-order" || type === "delivery-note" ? 5 : 4}
           />
         ) : (
           <DocumentDetailHeader
-            compact={compactSalesDocument}
+            compact={compactDocument}
             fields={[
-              ...(!compactSalesDocument ? [{
+              ...(!compactDocument ? [{
                 label: "Number",
                 value: document?.number ? <DocumentNumberField number={document.number} /> : "—",
                 mono: true,
               }] : []),
-              ...(salesTaxDoc && (!compactInvoice || listedCuNumber(document.kraSigning))
+              ...(salesTaxDoc && (!compactDocument || listedCuNumber(document.kraSigning))
                 ? [
                     {
                       label: "KRA CU number",
@@ -2067,7 +2100,7 @@ export default function DocViewPage() {
                   ]
                 : []),
               ...(document?.accountingDate ? [{ label: "Accounting date", value: document.accountingDate.slice(0,10) }, { label: "Original invoice date", value: document.date?.slice(0,10) ?? "—" }, ...(document.costPostingDate ? [{ label: "Cost allocation date", value: document.costPostingDate.slice(0,10) }] : [])] : []),
-              ...(purchaseTaxDoc
+              ...((purchaseTaxDoc || isGrnDoc)
                 ? [
                     {
                       label: "Supplier invoice no.",
@@ -2149,16 +2182,24 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type) && document ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite && !fiscallySigned && !fiscalUnresolved} onSaved={() => refreshDocument(true)} /> }] : []),
-              ...(type === "credit-note" && document
-                ? [
-                    {
-                      label: "Price tag",
-                      value: documentPriceTag,
-                    },
-                  ]
-                : []),
-              ...(compactSalesDocument ? [{
+              ...(isAdjustment ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite && !fiscallySigned && !fiscalUnresolved} onSaved={() => refreshDocument(true)} /> }] : []),
+              ...((isAdjustment || isPurchaseDoc) && document.sourceDocument ? [{
+                label: isAdjustment ? "Original document" : "Source document",
+                value: <Link className="text-primary underline-offset-2 hover:underline" href={`/docs/${document.sourceDocument.typeKey}/${document.sourceDocument.id}`}>{document.sourceDocument.number}</Link>,
+              }] : []),
+              ...(type === "bill" && document.dueDate ? [{
+                label: "Due date",
+                value: document.dueDate.slice(0, 10),
+              }] : []),
+              ...(type === "bill" && billBalance?.id === document.id ? [{
+                label: "Balance due",
+                value: formatMoney(billBalance.outstanding, document.currency),
+              }] : []),
+              ...((isAdjustment || type === "bill") && document.tax != null ? [{
+                label: "VAT",
+                value: formatMoney(document.tax, document.currency),
+              }] : []),
+              ...((compactSalesDocument || (type === "credit-note" && document.priceListName)) ? [{
                 label: "Price list",
                 value: <span className="whitespace-normal [overflow-wrap:anywhere]">{document.priceListName?.trim() || (document.priceListId ? "Name unavailable" : "No price list recorded")}</span>,
               }] : []),
@@ -2178,10 +2219,10 @@ export default function DocViewPage() {
                   />
                 ),
               },
-              ...(type === "delivery-note"
+              ...(type === "delivery-note" || isGrnDoc
                 ? [
                     {
-                      label: "Warehouse",
+                      label: isGrnDoc ? "Receiving warehouse" : "Warehouse",
                       value:
                         deliveryNoteWarehouseLabel ??
                         (document?.warehouseId
@@ -2218,47 +2259,23 @@ export default function DocViewPage() {
             className="mt-4"
           />
         ) : null}
-        {!compactSalesDocument && documentContext}
-        {type === "bill" && landedAllocation && (() => {
-          const centreLabels: Record<string, string> = {
-            currency_conversion: "FX conversion",
-            permits: "Additional costs",
-            inbound_logistics: "Inbound logistics",
-            other: "Other charges",
-          };
-          const centreLines = Object.entries(landedAllocation.costCentreSummary ?? {}).map(
-            ([centre, data]) => ({
-              label: centreLabels[centre] ?? centre,
-              // costCentreSummary values are in original currency; use base KES total for display
-              amount: (data as { originalAmount: number }).originalAmount ?? 0,
-            })
-          );
-          const billKes =
-            (document?.currency ?? "KES").toUpperCase() === "KES"
-              ? (document?.total ?? 0)
-              : document?.exchangeRate
-              ? (document.total ?? 0) * document.exchangeRate
-              : (document?.total ?? 0);
-          return (
-            <CostImpactPanel
-              title="Additional costs breakdown"
-              currency="KES"
-              lines={[
-                { label: "Invoice value (KES)", amount: billKes },
-                ...centreLines,
-              ]}
-            />
-          );
-        })()}
-
-        {type === "purchase-request" ? <div className="mb-4 rounded border p-4"><p className="mb-2 text-sm">Match products and manually approve item quantities before creating draft purchase orders.</p><Button asChild><Link href={`/purchasing/requests/${id}/review`}>Review items / create purchase orders</Link></Button></div> : null}
-        {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
+        {!compactDocument && documentContext}
+        {type === "purchase-request" && (
+          <Button asChild size="sm">
+            <Link href={`/purchasing/requests/${id}/review`}>Review requested items</Link>
+          </Button>
+        )}
+        {type === "purchase-order" && (
+          <a href="#supplier-email" className="inline-flex text-sm font-medium text-primary underline-offset-2 hover:underline">
+            Review supplier email
+          </a>
+        )}
         <DocumentTabs
           key={`${type}-${id}`}
-          compact={compactSalesDocument}
+          compact={compactDocument}
           lines={
             <Card>
-              <CardContent className={compactSalesDocument ? "p-2 sm:p-3" : "pt-4"}>
+              <CardContent className={compactDocument ? "p-2 sm:p-3" : "pt-4"}>
                 {initialLoading && !document ? (
                   <div className="space-y-2 py-2">
                     {[1, 2, 3].map((n) => (
@@ -2298,9 +2315,10 @@ export default function DocViewPage() {
                   <>
                   {isCreditNoteDoc(type) && document?.status === "DRAFT" ? (
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-dashed px-3 py-2 text-sm">
-                      <p className="text-muted-foreground">
-                        This can be a partial credit note. Lower a quantity, or set it to 0 to leave that line off.
-                      </p>
+                      <div>
+                        <p className="font-medium">Credit quantities</p>
+                        <p className="text-muted-foreground">Enter 0 to leave a line off the credit.</p>
+                      </div>
                       <Button
                         size="sm"
                         disabled={creditQtySaving || !creditQtyDirty || Boolean(creditPreview.error) || creditPreview.selected === 0}
@@ -2308,41 +2326,25 @@ export default function DocViewPage() {
                       >
                         {creditQtySaving ? "Saving…" : "Save quantities"}
                       </Button>
-                      {creditQtyDirty ? <div className="basis-full" role={creditPreview.error ? "alert" : "status"}>{creditPreview.error || `Unsaved credit total ${formatMoney(creditPreview.total, document.currency ?? "KES")} · VAT ${formatMoney(creditPreview.tax, document.currency ?? "KES")}. The header shows the saved total until you save quantities.`}</div> : null}
+                      <div className="basis-full text-sm" role={creditPreview.error ? "alert" : "status"}>
+                        {creditPreview.error || `${creditQtyDirty ? "Unsaved credit total" : "Credit total"} ${formatMoney(creditPreview.total, document.currency)} · VAT ${formatMoney(creditPreview.tax, document.currency)}`}
+                      </div>
                     </div>
                   ) : null}
-                  <div className={compactSalesDocument ? "invoice-lines rounded border" : "rounded border overflow-x-auto"}>
-                    <div
-                      className={
-                        compactSalesDocument
-                          ? "invoice-line-grid invoice-line-head border-b px-2.5 py-2 text-xs font-medium text-muted-foreground"
-                          : isGrnDoc
-                          ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                          : showFulfilmentTable
-                          ? "min-w-[986px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                          : isPurchaseDoc
-                          ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                          : "min-w-[858px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
-                      }
-                    >
+                  <div className={`document-lines rounded border ${lineLayout}`}>
+                    <div className="document-line-grid document-line-head border-b px-2.5 py-2 text-xs font-medium text-muted-foreground">
                       <span>Description</span>
                       <span className="text-right">UOM</span>
                       {isGrnDoc ? (
                         <>
-                          <span className="text-right">Ordered</span>
+                          {showReceiptVariance && <span className="text-right">Ordered</span>}
                           <span className="text-right">Received</span>
-                          <span className="text-right">Variance</span>
-                        </>
-                      ) : showFulfilmentTable ? (
-                        <>
-                          <span className="text-right">Ordered</span>
-                          <span className="text-right">Shipped</span>
-                          <span className="text-right">Backorder</span>
+                          {showReceiptVariance && <span className="text-right">Variance</span>}
                         </>
                       ) : (
                         <span className="text-right">Qty</span>
                       )}
-                      <span className="text-right">{isGrnDoc ? "Unbilled" : "Remaining"}</span>
+                      <span className="text-right">{isGrnDoc ? "Unbilled" : isAdjustment ? "Source qty" : "Remaining"}</span>
                       {isPurchaseDoc ? <span className="text-right">Unit price</span> : null}
                       {!isPurchaseDoc && !isGrnDoc ? (
                         <span className="text-right whitespace-nowrap">Disc %</span>
@@ -2379,22 +2381,7 @@ export default function DocViewPage() {
                       return (
                         <div
                           key={line.id ?? line.description}
-                          className={
-                            compactSalesDocument
-                              ? "invoice-line-grid invoice-line-row border-b px-2.5 py-2 text-sm last:border-b-0"
-                              : isGrnDoc
-                              ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
-                              : showFulfilmentTable
-                              ? `min-w-[986px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_72px_72px_80px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0${
-                                  line.fulfilmentStatus === "NOT_PACKED" ||
-                                  line.fulfilmentStatus === "PARTIALLY_PACKED"
-                                    ? " bg-amber-50/80 dark:bg-amber-950/20"
-                                    : ""
-                                }`
-                              : isPurchaseDoc
-                              ? "min-w-[860px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
-                              : "min-w-[858px] grid grid-cols-[minmax(0,1.2fr)_118px_72px_80px_64px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
-                          }
+                          className="document-line-grid document-line-row border-b px-2.5 py-2 text-sm last:border-b-0"
                         >
                           <div className="min-w-0">
                             <DocumentLineProductDescription line={line} fmcgOrg={fmcgOrg} />
@@ -2433,11 +2420,14 @@ export default function DocViewPage() {
                           <LinePackingCell unit={line.unit} packing={line.packing} />
                           {isGrnDoc ? (
                             <>
-                              <span className="text-right">{orderedQty != null ? orderedQty.toLocaleString() : "—"}</span>
-                              <span className="text-right font-medium">
+                              {showReceiptVariance && (
+                                <span data-line-label="Ordered" className="text-right">{orderedQty?.toLocaleString() ?? "—"}</span>
+                              )}
+                              <span data-line-label="Received" className="text-right font-medium">
                                 {receivedQty != null ? receivedQty.toLocaleString() : "—"}
                               </span>
-                              <span
+                              {showReceiptVariance && <span
+                                data-line-label="Variance"
                                 className={`text-right ${
                                   varianceKg != null && Math.abs(varianceKg) > 0.05
                                     ? "text-amber-600 dark:text-amber-400"
@@ -2447,33 +2437,10 @@ export default function DocViewPage() {
                                 {varianceKg != null
                                   ? `${varianceKg > 0 ? "+" : ""}${varianceKg.toLocaleString()}`
                                   : "—"}
-                              </span>
-                            </>
-                          ) : showFulfilmentTable ? (
-                            <>
-                              <span className="text-right">
-                                {(line.orderedQuantity ?? line.sourceQuantity ?? line.qty)?.toLocaleString() ?? "—"}
-                              </span>
-                              <span className="text-right font-medium">
-                                {(line.shippedQuantity ?? line.convertedQuantity ?? 0).toLocaleString()}
-                              </span>
-                              <span
-                                className={`text-right ${
-                                  (line.backorderQuantity ?? 0) > 0.01 ||
-                                  line.fulfilmentStatus === "NOT_PACKED"
-                                    ? "text-amber-600 dark:text-amber-400 font-medium"
-                                    : ""
-                                }`}
-                              >
-                                {line.backorderQuantity != null && line.backorderQuantity > 0.01
-                                  ? line.backorderQuantity.toLocaleString()
-                                  : line.fulfilmentStatus === "NOT_PACKED"
-                                    ? (line.orderedQuantity ?? line.qty ?? "—").toLocaleString()
-                                    : "—"}
-                              </span>
+                              </span>}
                             </>
                           ) : isCreditNoteDoc(type) && document?.status === "DRAFT" && line.id ? (
-                            <div className="text-right">
+                            <div data-line-label="Qty to credit" className="text-right">
                               <Input
                                 type="number"
                                 min={0}
@@ -2495,18 +2462,15 @@ export default function DocViewPage() {
                                 }}
                                 aria-label={`Quantity to credit for ${line.description}`}
                               />
-                              {line.sourceQuantity != null && line.sourceQuantity > 0 ? (
-                                <p className="mt-0.5 text-[10px] text-muted-foreground">of {line.sourceQuantity}</p>
-                              ) : null}
                             </div>
                           ) : (
-                            <span data-invoice-label="Qty" className="text-right">{line.qty ?? "—"}</span>
+                            <span data-line-label="Qty" className="text-right">{line.qty ?? "—"}</span>
                           )}
-                          <span data-invoice-label="Remaining" className="text-right">
-                            {line.remainingQuantity != null ? line.remainingQuantity.toLocaleString() : "—"}
+                          <span data-line-label={isGrnDoc ? "Unbilled" : isAdjustment ? "Source qty" : "Remaining"} className="text-right">
+                            {(isAdjustment ? line.sourceQuantity : line.remainingQuantity)?.toLocaleString() ?? "—"}
                           </span>
                           {isPurchaseDoc ? (
-                            <span className="text-right">
+                            <span data-line-label="Unit price" className="text-right">
                               {unitPrice != null ? (
                                 formatMoney(unitPrice, document?.currency ?? "KES")
                               ) : (
@@ -2515,14 +2479,14 @@ export default function DocViewPage() {
                             </span>
                           ) : null}
                           {!isPurchaseDoc && !isGrnDoc ? (
-                            <span data-invoice-label="Discount" className="text-right tabular-nums text-muted-foreground text-xs">
+                            <span data-line-label="Discount" className="text-right tabular-nums text-muted-foreground text-xs">
                               {(line.discount ?? 0) > 0 ? `${line.discount}%` : "—"}
                             </span>
                           ) : null}
-                          <span data-invoice-label="Tax" className={compactSalesDocument ? "break-words text-xs text-muted-foreground" : "text-xs text-muted-foreground truncate"} title={taxTitle}>
+                          <span data-line-label="Tax" className="break-words text-xs text-muted-foreground" title={taxTitle}>
                             {taxLabel}
                           </span>
-                          <div data-invoice-label="Amount" className="flex min-w-0 justify-end">
+                          <div data-line-label="Amount" className="flex min-w-0 justify-end">
                             {line.amount != null ? (
                               <DualCurrencyAmount
                                 amount={
@@ -2633,12 +2597,15 @@ export default function DocViewPage() {
             </Card>
           }
         />
-        {compactSalesDocument && (
+        {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
+        {compactDocument && (
           <details className="rounded-md border bg-card px-3 py-2">
             <summary className="cursor-pointer text-sm font-medium">
               {type === "delivery-note"
                 ? "Warehouse, delivery details and history"
-                : canApplyPriceTagInDetails ? "Pricing, address, notes and history" : "Address, notes and history"}
+                : type === "bill" && landedAllocation ? "Additional costs, references and history"
+                  : isPurchaseDoc ? "References, notes and history"
+                  : canApplyPriceTagInDetails ? "Pricing, address, notes and history" : "Address, notes and history"}
             </summary>
             <div className="mt-2 space-y-3">
               {canApplyPriceTagInDetails && document.status === "DRAFT" && (
@@ -2647,6 +2614,37 @@ export default function DocViewPage() {
                   {documentPriceTag}
                 </div>
               )}
+              {type === "bill" && landedAllocation && (() => {
+                const centreLabels: Record<string, string> = {
+                  currency_conversion: "FX conversion",
+                  permits: "Additional costs",
+                  inbound_logistics: "Inbound logistics",
+                  other: "Other charges",
+                };
+                const centreLines = Object.entries(landedAllocation.costCentreSummary ?? {}).map(
+                  ([centre, data]) => ({
+                    label: centreLabels[centre] ?? centre,
+                    // costCentreSummary values are in original currency; use base KES total for display
+                    amount: (data as { originalAmount: number }).originalAmount ?? 0,
+                  })
+                );
+                const billKes =
+                  (document?.currency ?? "KES").toUpperCase() === "KES"
+                    ? (document?.total ?? 0)
+                    : document?.exchangeRate
+                    ? (document.total ?? 0) * document.exchangeRate
+                    : (document?.total ?? 0);
+                return (
+                  <CostImpactPanel
+                    title="Additional costs breakdown"
+                    currency="KES"
+                    lines={[
+                      { label: "Invoice value (KES)", amount: billKes },
+                      ...centreLines,
+                    ]}
+                  />
+                );
+              })()}
               {documentContext}
             </div>
           </details>

@@ -160,51 +160,59 @@ html[data-erp-guide-open="true"] [data-gaia-widget] {
   pointer-events: none;
 }
 
-.invoice-lines {
-  container: invoice-lines / inline-size;
+.document-lines {
+  container: document-lines / inline-size;
 }
 
-.invoice-line-grid {
+.document-line-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 3rem 3rem 4.25rem 3.25rem minmax(4.5rem, 0.35fr) 8rem;
   column-gap: 0.5rem;
   align-items: start;
 }
 
-.invoice-line-grid > * {
+.document-line-grid > * {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-@container invoice-lines (width < 37rem) {
-  .invoice-line-head {
+.document-lines-purchase .document-line-grid {
+  grid-template-columns: minmax(0, 1fr) 3rem 3.5rem 4.25rem minmax(5rem, 0.4fr) minmax(4.5rem, 0.35fr) 8rem;
+}
+
+.document-lines-receipt .document-line-grid {
+  grid-template-columns: minmax(0, 1fr) 3rem repeat(4, 4rem) minmax(5rem, 0.4fr) minmax(4.5rem, 0.35fr) 8rem;
+}
+
+@container document-lines (width < 46rem) {
+  .document-line-head {
     display: none;
   }
 
-  .invoice-line-row {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .document-lines .document-line-row {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 6rem), 1fr));
     row-gap: 0.5rem;
   }
 
-  .invoice-line-row > :first-child {
+  .document-line-row > :first-child {
     grid-column: 1 / -1;
   }
 
-  .invoice-line-row > [data-invoice-label],
-  .invoice-line-row > :nth-child(2) {
+  .document-line-row > [data-line-label],
+  .document-line-row > :nth-child(2) {
     display: block;
     text-align: left;
   }
 
-  .invoice-line-row > [data-invoice-label]::before,
-  .invoice-line-row > :nth-child(2)::before {
-    content: attr(data-invoice-label);
+  .document-line-row > [data-line-label]::before,
+  .document-line-row > :nth-child(2)::before {
+    content: attr(data-line-label);
     display: block;
     font-size: 0.6875rem;
     color: hsl(var(--muted-foreground));
   }
 
-  .invoice-line-row > :nth-child(2)::before {
+  .document-line-row > :nth-child(2)::before {
     content: "UOM";
   }
 }
@@ -259,5 +267,36 @@ html[data-erp-guide-open="true"] [data-gaia-widget] {
     display: block;
     font-size: 0.6875rem;
     color: hsl(var(--muted-foreground));
+  }
+}
+
+.requisition-review {
+  container: requisition-review / inline-size;
+}
+
+.requisition-field-title {
+  display: none;
+}
+
+@container requisition-review (width < 55rem) {
+  .requisition-review thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .requisition-review :is(table, tbody, td) {
+    display: block;
+  }
+
+  .requisition-review tbody tr {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  }
+
+  .requisition-field-title {
+    display: block;
   }
 }

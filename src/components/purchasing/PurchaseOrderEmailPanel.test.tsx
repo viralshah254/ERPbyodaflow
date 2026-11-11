@@ -129,7 +129,7 @@ it("resends only after review and an explicit reason", async () => {
   const resend = await screen.findByRole("button", {
     name: "Resend same approved PO",
   });
-  expect(screen.getByText(/To: supplier@example.test/)).toBeInTheDocument();
+  expect(screen.getByText("To", { selector: "dt" }).nextElementSibling).toHaveTextContent("supplier@example.test");
   fireEvent.click(screen.getByRole("checkbox"));
   expect(resend).toBeDisabled();
   fireEvent.change(screen.getByRole("textbox"), {

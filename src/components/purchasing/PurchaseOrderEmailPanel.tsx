@@ -94,7 +94,9 @@ export function PurchaseOrderEmailPanel({
   );
   return (
     <section
-      className="mb-5 space-y-3 rounded border p-4"
+      id="supplier-email"
+      tabIndex={-1}
+      className="scroll-mt-36 space-y-2 rounded-md border p-3"
       aria-label="Supplier email delivery"
       data-tutorial-hint="purchase-order-email"
     >
@@ -110,7 +112,7 @@ export function PurchaseOrderEmailPanel({
             void load();
           }}
         >
-          Refresh delivery status
+          Refresh status
         </Button>
       </div>
       {error ? (
@@ -122,12 +124,22 @@ export function PurchaseOrderEmailPanel({
         <p>Loading supplier and company sender…</p>
       ) : (
         <>
-          <p className="text-sm">
-            Supplier: <b>{data.supplier?.name || "Select a supplier"}</b> · To:{" "}
-            {canResend ? data.jobs.find(job => ["ACCEPTED", "DELIVERED"].includes(job.status))?.to : data.supplier?.email || "Supplier email missing"}
-            <br />
-            From: {data.sender || "Company sender not verified"}
-          </p>
+          <dl className="grid gap-2 text-sm sm:grid-cols-3">
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">Supplier</dt>
+              <dd className="font-medium [overflow-wrap:anywhere]">{data.supplier?.name || "Select a supplier"}</dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">To</dt>
+              <dd className="font-medium [overflow-wrap:anywhere]">
+                {canResend ? data.jobs.find(job => ["ACCEPTED", "DELIVERED"].includes(job.status))?.to : data.supplier?.email || "Supplier email missing"}
+              </dd>
+            </div>
+            <div className="min-w-0">
+              <dt className="text-xs text-muted-foreground">From</dt>
+              <dd className="font-medium [overflow-wrap:anywhere]">{data.sender || "Company sender not verified"}</dd>
+            </div>
+          </dl>
           {!data.sender ? (
             <Link
               className="text-primary underline"
@@ -136,12 +148,10 @@ export function PurchaseOrderEmailPanel({
               Set up company email
             </Link>
           ) : null}
-          <p className="text-xs text-muted-foreground">
-            The attached PDF freezes the reviewed order. To change supplier,
-            edit the draft before approval. After sending, use a controlled
-            cancellation/replacement PO; this screen cannot send the same
-            commitment to another supplier.
-          </p>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Changing the supplier</summary>
+            <p className="mt-1">Edit the supplier while the PO is a draft. After sending, use cancellation and replacement to issue a new commitment.</p>
+          </details>
           {(status === "PENDING_APPROVAL" || status === "APPROVED") &&
           (!active || canResend) ? (
             <>
@@ -167,7 +177,7 @@ export function PurchaseOrderEmailPanel({
                   />
                 </label>
               ) : null}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {status === "PENDING_APPROVAL" && canApprove ? (
                   <Button
                     disabled={
@@ -204,7 +214,7 @@ export function PurchaseOrderEmailPanel({
           {data.jobs.map((job) => (
             <div
               key={job._id}
-              className="space-y-1 rounded bg-muted p-3 text-sm"
+              className="space-y-1 rounded bg-muted p-3 text-sm [overflow-wrap:anywhere]"
             >
               <p>
                 {job.status === "ACCEPTED"

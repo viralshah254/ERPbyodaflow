@@ -241,13 +241,13 @@ export default function PurchaseRequestReviewPage() {
             ? `Review requisition ${data.request.number}`
             : "Review requisition"
         }
-        description="Match products, manually approve quantities, then create draft orders grouped by supplier, currency and tax basis."
+        description="Match products and approve quantities before creating draft purchase orders."
         breadcrumbs={[
           { label: "Purchase requests", href: "/purchasing/requests" },
           { label: "Item review" },
         ]}
       />
-      <div className="space-y-4 p-6">
+      <div className="min-w-0 space-y-3 p-3 sm:p-5">
         {error ? (
           <div role="alert" className="rounded border border-destructive p-3">
             {error}{" "}
@@ -261,36 +261,33 @@ export default function PurchaseRequestReviewPage() {
           <p role="status">Loading requisition and last purchase evidence…</p>
         ) : data ? (
           <>
-            <p className="text-sm text-muted-foreground">
-              1. Select each item decision and quantity. 2. Save item review. 3.
-              Submit and approve the requisition using its document page. 4.
-              Create draft POs below. PO approval and supplier delivery are
-              separate.
-            </p>
-            <Button variant="outline" asChild>
-              <Link href={`/docs/purchase-request/${id}`}>
-                Open requisition / approval
-              </Link>
-            </Button>
-            <div className="overflow-x-auto rounded border">
-              <table className="w-full text-sm" data-tutorial-hint="purchase-request-item-review">
-                <thead>
-                  <tr className="border-b text-left">
-                    <th className="p-3">Requested / matched item</th>
-                    <th className="p-3">Manual decision / quantity</th>
-                    <th className="p-3">Supplier and purchase price</th>
-                    <th className="p-3">Tax / remaining to order</th>
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="rounded border px-2 py-1">{data.request.status.replaceAll("_", " ")}</span>
+              <span>{rows.length} items · {rows.filter((row) => row.decision === "APPROVED").length} approved</span>
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/docs/purchase-request/${id}`}>Open requisition</Link>
+              </Button>
+            </div>
+            <div className="requisition-review rounded border">
+              <table role="table" className="w-full table-fixed text-sm" data-tutorial-hint="purchase-request-item-review">
+                <thead role="rowgroup">
+                  <tr role="row" className="border-b text-left">
+                    <th role="columnheader" scope="col" className="p-3">Requested / matched item</th>
+                    <th role="columnheader" scope="col" className="p-3">Manual decision / quantity</th>
+                    <th role="columnheader" scope="col" className="p-3">Supplier and purchase price</th>
+                    <th role="columnheader" scope="col" className="p-3">Tax / remaining to order</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {rows.map((row, index) => {
                     const source = data.request.lines.find(
                       (l) => l.lineId === row.lineId,
                     )!;
                     const editable = canEdit && row.orderedQuantity === 0;
                     return (
-                      <tr key={row.lineId} className="border-b align-top">
-                        <td className="min-w-[240px] space-y-2 p-3">
+                      <tr role="row" key={row.lineId} className="border-b align-top last:border-b-0">
+                        <td role="cell" className="min-w-0 space-y-2 p-3 [overflow-wrap:anywhere]">
+                          <p className="requisition-field-title text-xs font-medium text-muted-foreground">Requested item</p>
                           <p className="font-medium">
                             {source.description || `Item ${index + 1}`}
                           </p>
@@ -298,6 +295,8 @@ export default function PurchaseRequestReviewPage() {
                             Requested: {source.quantity} {source.unit}
                           </p>
                           <AsyncSearchableSelect
+                            wrapLabels
+                            triggerClassName="[&>span>span]:line-clamp-none"
                             value={row.productId}
                             selectedOption={row.productOption}
                             disabled={!editable}
@@ -355,7 +354,8 @@ export default function PurchaseRequestReviewPage() {
                             }}
                           />
                         </td>
-                        <td className="min-w-[185px] space-y-2 p-3">
+                        <td role="cell" className="min-w-0 space-y-2 p-3 [overflow-wrap:anywhere]">
+                          <p className="requisition-field-title text-xs font-medium text-muted-foreground">Decision and quantity</p>
                           <select
                             aria-label={`Decision for item ${index + 1}`}
                             className="w-full rounded border bg-background p-2"
@@ -400,8 +400,11 @@ export default function PurchaseRequestReviewPage() {
                             }
                           />
                         </td>
-                        <td className="min-w-[260px] space-y-2 p-3">
+                        <td role="cell" className="min-w-0 space-y-2 p-3 [overflow-wrap:anywhere]">
+                          <p className="requisition-field-title text-xs font-medium text-muted-foreground">Supplier and price</p>
                           <AsyncSearchableSelect
+                            wrapLabels
+                            triggerClassName="[&>span>span]:line-clamp-none"
                             value={row.supplierId}
                             selectedOption={row.supplierOption}
                             disabled={!editable || !row.defaultsReady}
@@ -496,7 +499,8 @@ export default function PurchaseRequestReviewPage() {
                             </Button>
                           ) : null}
                         </td>
-                        <td className="min-w-[215px] space-y-2 p-3">
+                        <td role="cell" className="min-w-0 space-y-2 p-3 [overflow-wrap:anywhere]">
+                          <p className="requisition-field-title text-xs font-medium text-muted-foreground">Tax and ordering</p>
                           <select
                             aria-label={`Tax basis for item ${index + 1}`}
                             className="w-full rounded border bg-background p-2"
