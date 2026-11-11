@@ -230,6 +230,7 @@ type BackendDocumentDetail = {
   odaflowCustomerId?: string;
   odaflowCustomerName?: string;
   deliveryAddress?: string;
+  shipToSiteId?: string;
   createdAt?: string;
 };
 
@@ -347,6 +348,7 @@ export type DocumentDraftPayload = {
   currency?: string;
   /** Deliver-to text. Modern trade: the branch. Direct: the customer location. */
   deliveryAddress?: string;
+  shipToSiteId?: string | null;
   /** Document currency → base currency. From exchange rate API or user override. */
   exchangeRate?: number;
   linesAreTaxInclusive?: boolean;
@@ -662,6 +664,7 @@ function mapDocumentDetail(
     ...(payload.odaflowCustomerId ? { odaflowCustomerId: payload.odaflowCustomerId } : {}),
     ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
     ...(payload.deliveryAddress ? { deliveryAddress: payload.deliveryAddress } : {}),
+    ...(payload.shipToSiteId ? { shipToSiteId: payload.shipToSiteId } : {}),
     ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
 }

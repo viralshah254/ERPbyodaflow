@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -723,6 +724,33 @@ export function DocumentCreateWizard({
 
   const watchedBranch = form.watch("branch");
   const selectedPartyId = form.watch("party");
+  const showShipTo = ["sales-order", "invoice", "delivery-note"].includes(type);
+  const [deliverySites, setDeliverySites] = React.useState<{ partyId: string; rows: PartySiteRow[] }>();
+  const [deliverySiteError, setDeliverySiteError] = React.useState("");
+  const [deliverySiteSelection, setDeliverySiteSelection] = React.useState<{ partyId: string; id: string | null }>();
+  const selectedDeliverySite = deliverySiteSelection?.partyId === selectedPartyId
+    ? deliverySiteSelection?.id
+    : existingDocument?.partyId === selectedPartyId ? existingDocument?.shipToSiteId : undefined;
+  const selectedSiteAddress = selectedDeliverySite
+    ? deliverySites?.rows.find((site) => site.id === selectedDeliverySite)?.address
+    : selectedPartyDetail?.id === selectedPartyId ? selectedPartyDetail?.address : undefined;
+  const shipToPreview = selectedSiteAddress && [
+    selectedSiteAddress.line1, selectedSiteAddress.line2, selectedSiteAddress.city,
+    selectedSiteAddress.region, selectedSiteAddress.postalCode, selectedSiteAddress.country,
+  ].filter(Boolean).join(", ");
+  const hasDeliverySiteChange = deliverySiteSelection?.partyId === selectedPartyId &&
+    deliverySiteSelection?.id !== (existingDocument?.shipToSiteId ?? null);
+
+  React.useEffect(() => {
+    if (!showShipTo || !selectedPartyId || !isApiConfigured()) return;
+    let active = true;
+    setDeliverySiteError("");
+    void fetchPartySitesApi({ partyId: selectedPartyId, status: "ACTIVE", limit: 2000 })
+      .then(({ items }) => { if (active) setDeliverySites({ partyId: selectedPartyId, rows: items }); })
+      .catch(() => { if (active) setDeliverySiteError("Delivery locations could not load."); });
+    return () => { active = false; };
+  }, [showShipTo, selectedPartyId]);
+
   const watchedWarehouse = form.watch("warehouse");
 
   React.useEffect(() => {
@@ -1460,6 +1488,7 @@ export function DocumentCreateWizard({
         date: form.getValues("date"),
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
+        ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
         warehouseId: form.getValues("warehouse") || undefined,
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
@@ -1541,6 +1570,9 @@ export function DocumentCreateWizard({
       };
     },
     [
+      showShipTo,
+      hasDeliverySiteChange,
+      selectedDeliverySite,
       baseCurrency,
       form,
       billableLines,
@@ -2427,13 +2459,13 @@ export function DocumentCreateWizard({
   const formDirty = form.formState.isDirty;
   const partyValue = (form.getValues("party") || "").trim();
   const hasInlineEditChanges = explicitSheetEdit && existingDocument && (
-    formDirty || selectedPartyId !== (existingDocument.partyId ?? "") ||
+    formDirty || hasDeliverySiteChange || selectedPartyId !== (existingDocument.partyId ?? "") ||
     (overridePriceListId ?? existingDocument.priceListId) !== existingDocument.priceListId ||
     (overrideTaxConfigId ?? existingDocument.taxConfigId) !== existingDocument.taxConfigId ||
     !sameEditableLines(existingDocument.lines, billableLines, existingDocument.linesAreTaxInclusive ?? false)
   );
   const hasUserEntries = Boolean(hasInlineEditChanges) || !isEditMode &&
-    (formDirty ||
+    (formDirty || hasDeliverySiteChange ||
       lines.some((line) => Number.isFinite(line.qty) && line.qty > 0) ||
       Boolean(partyValue && partyValue !== autoFilledPartyRef.current) ||
       Boolean((form.getValues("reference") || "").trim()) ||
@@ -2740,6 +2772,24 @@ export function DocumentCreateWizard({
                     />
                 ))}
               </div>
+              {showShipTo && selectedPartyId && (
+                <div className="mt-3 max-w-xl space-y-1">
+                  <Label htmlFor="ship-to-site">Ship to</Label>
+                  <select id="ship-to-site" className="block min-h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    value={selectedDeliverySite ?? ""}
+                    onChange={(event) => setDeliverySiteSelection({ partyId: selectedPartyId, id: event.target.value || null })}>
+                    <option value="">Customer’s main address</option>
+                    {selectedDeliverySite && !deliverySites?.rows.some((site) => site.id === selectedDeliverySite) && (
+                      <option value={selectedDeliverySite}>Saved delivery location</option>
+                    )}
+                    {deliverySites?.partyId === selectedPartyId && deliverySites.rows.map((site) => (
+                      <option key={site.id} value={site.id}>{site.name}{site.code ? ` · ${site.code}` : ""}</option>
+                    ))}
+                  </select>
+                  {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}
+                  {deliverySiteError && <p className="text-xs text-destructive">{deliverySiteError}</p>}
+                </div>
+              )}
               {type === "delivery-note" ? (
                 <p className="text-xs text-muted-foreground mt-2">
                   Warehouse is optional. If unset, stock and pick-pack use your branch&apos;s default fulfilment warehouse (HQ / Main).

@@ -377,6 +377,7 @@ export type DocumentDetailRecord = {
   odaflowCustomerName?: string;
   /** SFA branch deliver-to. The invoice customer is the supermarket party. */
   deliveryAddress?: string;
+  shipToSiteId?: string;
   createdAt?: string;
 };
 

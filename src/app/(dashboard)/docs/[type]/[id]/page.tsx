@@ -1544,7 +1544,7 @@ export default function DocViewPage() {
                   )}
                 {(type === "sales-order" || type === "delivery-note" || type === "invoice") && document ? (
                   <div className="mt-4 pt-4 border-t space-y-2">
-                    <Label htmlFor="document-delivery-address">Delivery address</Label>
+                    <Label htmlFor="document-delivery-address">{type === "invoice" || type === "delivery-note" ? "Ship to" : "Delivery address"}</Label>
                     <p className="text-xs text-muted-foreground">
                       {document.odaflowChannel === "modern_trade"
                         ? "Branch the goods go to. The customer on this order is who the invoice goes to, unless the LPO was for head office."
