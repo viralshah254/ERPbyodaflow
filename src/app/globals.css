@@ -208,3 +208,56 @@ html[data-erp-guide-open="true"] [data-gaia-widget] {
     content: "UOM";
   }
 }
+
+.fulfilment-lines {
+  container: fulfilment-lines / inline-size;
+}
+
+.fulfilment-lines :is(th, td) {
+  overflow-wrap: anywhere;
+}
+
+.fulfilment-lines th:first-child {
+  width: 24%;
+}
+
+@container fulfilment-lines (width < 58rem) {
+  .fulfilment-lines thead:not(:focus-within) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .fulfilment-lines thead:focus-within tr {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .fulfilment-lines :is(table, tbody) {
+    display: block;
+  }
+
+  .fulfilment-lines tbody tr {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding: 0.25rem;
+  }
+
+  .fulfilment-lines td:first-child {
+    grid-column: span 2;
+  }
+
+  .fulfilment-lines td {
+    min-width: 0;
+    text-align: left;
+  }
+
+  .fulfilment-lines td:nth-child(n+3)::before {
+    content: attr(data-line-label);
+    display: block;
+    font-size: 0.6875rem;
+    color: hsl(var(--muted-foreground));
+  }
+}

@@ -160,25 +160,8 @@ function LineProgressBar({ pct, state }: { pct: number; state: LineState }) {
   );
 }
 
-const FULFIL_COLGROUP = (
-  <colgroup>
-    <col style={{ width: "14%" }} />
-    <col style={{ width: "9%" }} />
-    <col style={{ width: "12%" }} />
-    <col style={{ width: "6%" }} />
-    <col style={{ width: "6%" }} />
-    <col style={{ width: "6%" }} />
-    <col style={{ width: "11%" }} />
-    <col style={{ width: "8%" }} />
-    <col style={{ width: "5%" }} />
-    <col style={{ width: "10%" }} />
-    <col style={{ width: "13%" }} />
-  </colgroup>
-);
-
-const thClass =
-  "px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground align-middle whitespace-nowrap";
-const tdClass = "px-3 py-3 align-middle";
+const thClass = "px-2 py-2 text-xs font-medium text-muted-foreground align-middle";
+const tdClass = "px-2 py-2 align-middle";
 
 export function DocumentFulfilmentLinesTable({
   lines,
@@ -220,15 +203,15 @@ export function DocumentFulfilmentLinesTable({
   const issueLines = resolved.filter((r) => r.state === "NOT_PACKED" || r.state === "PARTIALLY_PACKED");
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       {/* Summary dashboard */}
-      <div className="rounded-xl border bg-gradient-to-br from-slate-50 to-white p-4 shadow-sm dark:from-slate-900/40 dark:to-background dark:border-slate-800">
-        <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div className="rounded-md border bg-muted/20 p-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {isDn ? "Delivery fulfilment" : "Fulfilment overview"}
             </p>
-            <p className="text-2xl font-semibold tabular-nums mt-0.5">
+            <p className="text-base font-semibold tabular-nums mt-0.5">
               {summary.pct}% {isDn ? "on this truck" : "shipped"}
             </p>
             <p className="text-sm text-muted-foreground mt-0.5">
@@ -255,7 +238,7 @@ export function DocumentFulfilmentLinesTable({
 
         {/* Stacked unit bar */}
         <div className="space-y-1.5">
-          <div className="flex h-3 w-full overflow-hidden rounded-full bg-muted">
+          <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted">
             {summary.totalShipped > 0 ? (
               <div
                 className="h-full bg-emerald-500 transition-all"
@@ -286,11 +269,10 @@ export function DocumentFulfilmentLinesTable({
 
       {/* Issue callout */}
       {issueLines.length > 0 ? (
-        <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 px-4 py-3 dark:border-amber-800/60 dark:bg-amber-950/30">
-          <p className="text-sm font-medium text-amber-950 dark:text-amber-100 flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
-            {issueLines.length} line{issueLines.length === 1 ? "" : "s"} not fully packed — stock was unavailable at the warehouse
-          </p>
+        <details className="rounded-md border border-amber-300/60 bg-amber-50/80 px-3 py-2 dark:border-amber-800/60 dark:bg-amber-950/30">
+          <summary className="cursor-pointer text-sm font-medium text-amber-950 dark:text-amber-100">
+            {issueLines.length} line{issueLines.length === 1 ? "" : "s"} with shortages
+          </summary>
           <ul className="mt-2 space-y-1.5 pl-6 text-sm text-amber-900/90 dark:text-amber-100/90 list-disc">
             {issueLines.map((r) => (
               <li key={r.line.id ?? r.label}>
@@ -305,30 +287,27 @@ export function DocumentFulfilmentLinesTable({
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ) : null}
 
-      {/* Table — table-fixed keeps header and body columns aligned */}
-      <div className="rounded-xl border overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-          <InteractiveTable className="w-full min-w-[1120px] table-fixed border-collapse">
-            {FULFIL_COLGROUP}
-            <thead className="border-b bg-muted/40">
-              <tr>
-                <th className={cn(thClass, "text-left")}>Product</th>
-                <th className={cn(thClass, "text-left")}>Status</th>
-                <th className={cn(thClass, "text-right")}>UOM</th>
-                <th className={cn(thClass, "text-right")}>Ordered</th>
-                <th className={cn(thClass, "text-right")}>{isDn ? "On truck" : "Shipped"}</th>
-                <th className={cn(thClass, "text-right")}>{isDn ? "Not packed" : "Backorder"}</th>
-                <th className={cn(thClass, "text-left")}>Progress</th>
-                <th className={cn(thClass, "text-right")}>{isDn ? "Uninvoiced" : "Open"}</th>
-                <th className={cn(thClass, "text-right whitespace-nowrap")}>Disc %</th>
-                <th className={cn(thClass, "text-left")}>Tax</th>
-                <th className={cn(thClass, "text-right")}>Amount</th>
+      <div className="fulfilment-lines rounded-md border">
+          <InteractiveTable className="w-full table-fixed border-collapse" role="table">
+            <thead role="rowgroup" className="border-b bg-muted/40">
+              <tr role="row">
+                <th scope="col" role="columnheader" className={cn(thClass, "text-left")}>Product</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-left")}>Status</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>UOM</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>Ordered</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>{isDn ? "On truck" : "Shipped"}</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>{isDn ? "Not packed" : "Backorder"}</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-left")}>Progress</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>{isDn ? "Uninvoiced" : "Open"}</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right whitespace-nowrap")}>Disc %</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-left")}>Tax</th>
+                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>Amount</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody role="rowgroup">
               {resolved.map((r) => {
                 const meta = STATE_META[r.state];
                 const taxLabel =
@@ -339,27 +318,27 @@ export function DocumentFulfilmentLinesTable({
                     : "—";
 
                 return (
-                  <tr key={r.line.id ?? r.label} className={cn("border-b last:border-b-0 text-sm", meta.row)}>
-                    <td className={cn(tdClass, "border-l-4", meta.border)}>
+                  <tr role="row" key={r.line.id ?? r.label} className={cn("border-b last:border-b-0 text-sm", meta.row)}>
+                    <td role="cell" data-line-label="Product" className={cn(tdClass, "border-l-4", meta.border)}>
                       <DocumentLineProductDescription
                         line={r.line}
                         fmcgOrg={fmcgOrg}
-                        nameClassName="font-medium leading-snug truncate"
+                        nameClassName="font-medium leading-snug [overflow-wrap:anywhere]"
                       />
                     </td>
 
-                    <td className={tdClass}>
-                      <Badge variant="outline" className={cn("gap-1 text-[10px] font-semibold whitespace-nowrap", meta.badge)}>
+                    <td role="cell" data-line-label="Status" className={tdClass}>
+                      <Badge variant="outline" className={cn("gap-1 text-[10px] font-semibold whitespace-normal", meta.badge)}>
                         {meta.icon}
                         {stateLabel(r.state, docType)}
                       </Badge>
                     </td>
 
-                    <td className={cn(tdClass, "text-right")}>
+                    <td role="cell" data-line-label="UOM" className={cn(tdClass, "text-right")}>
                       <LinePackingCell unit={r.line.unit} packing={r.line.packing} />
                     </td>
-                    <td className={cn(tdClass, "text-right tabular-nums")}>{fmtQty(r.ordered)}</td>
-                    <td
+                    <td role="cell" data-line-label="Ordered" className={cn(tdClass, "text-right tabular-nums")}>{fmtQty(r.ordered)}</td>
+                    <td role="cell" data-line-label={isDn ? "On truck" : "Shipped"}
                       className={cn(
                         tdClass,
                         "text-right tabular-nums font-semibold",
@@ -368,7 +347,7 @@ export function DocumentFulfilmentLinesTable({
                     >
                       {fmtQty(r.shipped)}
                     </td>
-                    <td
+                    <td role="cell" data-line-label={isDn ? "Not packed" : "Backorder"}
                       className={cn(
                         tdClass,
                         "text-right tabular-nums font-semibold",
@@ -378,7 +357,7 @@ export function DocumentFulfilmentLinesTable({
                       {r.backorder > 0 ? fmtQty(r.backorder) : "—"}
                     </td>
 
-                    <td className={tdClass}>
+                    <td role="cell" data-line-label="Progress" className={tdClass}>
                       <div className="min-w-0 space-y-1">
                         <LineProgressBar pct={r.pct} state={r.state} />
                         <p className="text-[10px] text-muted-foreground tabular-nums">
@@ -387,19 +366,19 @@ export function DocumentFulfilmentLinesTable({
                       </div>
                     </td>
 
-                    <td className={cn(tdClass, "text-right tabular-nums text-muted-foreground")}>
+                    <td role="cell" data-line-label={isDn ? "Uninvoiced" : "Open"} className={cn(tdClass, "text-right tabular-nums text-muted-foreground")}>
                       {r.remaining != null ? fmtQty(r.remaining) : "—"}
                     </td>
 
-                    <td className={cn(tdClass, "text-right tabular-nums text-muted-foreground text-xs")}>
+                    <td role="cell" data-line-label="Discount" className={cn(tdClass, "text-right tabular-nums text-muted-foreground text-xs")}>
                       {(r.line.discount ?? 0) > 0 ? `${r.line.discount}%` : "—"}
                     </td>
 
-                    <td className={cn(tdClass, "text-xs text-muted-foreground truncate")} title={r.line.taxCodeName}>
+                    <td role="cell" data-line-label="Tax" className={cn(tdClass, "text-xs text-muted-foreground")} title={r.line.taxCodeName}>
                       {taxLabel}
                     </td>
 
-                    <td className={cn(tdClass, "text-right")}>
+                    <td role="cell" data-line-label="Amount" className={cn(tdClass, "text-right")}>
                       {r.line.amount != null ? (
                         <DualCurrencyAmount
                           amount={r.line.amount}
@@ -418,7 +397,6 @@ export function DocumentFulfilmentLinesTable({
               })}
             </tbody>
           </InteractiveTable>
-        </div>
       </div>
 
       <p className="text-xs text-muted-foreground px-1">

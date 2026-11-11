@@ -30,7 +30,9 @@ export function DocumentDetailHeader({
   return (
     <div
       className={cn(
-        DETAIL_GRID,
+        compact
+          ? "grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,8.5rem),1fr))] gap-2"
+          : DETAIL_GRID,
         className
       )}
     >
@@ -40,7 +42,7 @@ export function DocumentDetailHeader({
           <div
             className={cn(
               "h-full min-w-0 rounded-lg border bg-gradient-to-b from-card to-muted/20 shadow-sm transition-shadow hover:shadow-md",
-              compact ? "p-3" : "rounded-xl p-4"
+              compact ? "px-2.5 py-2" : "rounded-xl p-4"
             )}
           >
             <div className={cn("flex items-center gap-2 text-muted-foreground", compact ? "mb-1" : "mb-2")}>

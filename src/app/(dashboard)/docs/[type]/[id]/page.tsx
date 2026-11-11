@@ -1381,6 +1381,8 @@ export default function DocViewPage() {
   }
 
   const compactInvoice = type === "invoice";
+  const compactSalesDocument = compactInvoice || isFulfilmentDoc || type === "quote";
+  const canApplyPriceTagInDetails = type === "quote" || type === "sales-order";
   const documentPriceTag = (
     <DocumentPriceTagControl
       docType={type as DocTypeKey}
@@ -1404,7 +1406,7 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
-                      Draft lines are editable via Edit below. Once this delivery note is approved and dispatched, you cannot amend shipped quantities here; POD (what the customer received) is recorded in the Odaflow mobile app and becomes the invoicing basis.
+                      Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery.
                     </p>
                   </div>
                 ) : null}
@@ -1685,7 +1687,7 @@ export default function DocViewPage() {
       statusActor={document?.statusActor ?? null}
       createdByName={createdByDisplayName}
       rightSlot={rightSlot}
-      compact={compactInvoice}
+      compact={compactSalesDocument}
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <DocumentHubUploadButton
@@ -2041,16 +2043,16 @@ export default function DocViewPage() {
         </div>
       }
     >
-      <div className={compactInvoice ? "space-y-2.5" : "space-y-4"}>
+      <div className={compactSalesDocument ? "space-y-2.5" : "space-y-4"}>
         {loading ? (
           <DocumentDetailHeaderSkeleton
             columns={type === "sales-order" || type === "delivery-note" ? 5 : 4}
           />
         ) : (
           <DocumentDetailHeader
-            compact={compactInvoice}
+            compact={compactSalesDocument}
             fields={[
-              ...(!compactInvoice ? [{
+              ...(!compactSalesDocument ? [{
                 label: "Number",
                 value: document?.number ? <DocumentNumberField number={document.number} /> : "—",
                 mono: true,
@@ -2148,7 +2150,7 @@ export default function DocViewPage() {
                   ]
                 : []),
               ...(["credit-note", "debit-note", "purchase-credit-note", "purchase-debit-note"].includes(type) && document ? [{ label: "Stock effect", value: <DocumentAdjustmentEffect document={document} canEdit={canWrite && !fiscallySigned && !fiscalUnresolved} onSaved={() => refreshDocument(true)} /> }] : []),
-              ...(["quote", "sales-order", "delivery-note", "credit-note"].includes(type) && document
+              ...(type === "credit-note" && document
                 ? [
                     {
                       label: "Price tag",
@@ -2156,7 +2158,7 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(compactInvoice ? [{
+              ...(compactSalesDocument ? [{
                 label: "Price list",
                 value: <span className="whitespace-normal [overflow-wrap:anywhere]">{document.priceListName?.trim() || (document.priceListId ? "Name unavailable" : "No price list recorded")}</span>,
               }] : []),
@@ -2185,7 +2187,7 @@ export default function DocViewPage() {
                         (document?.warehouseId
                           ? document.warehouseId
                           : document?.status === "DRAFT"
-                            ? "Not set — select below"
+                            ? "Not selected"
                             : "—"),
                     },
                   ]
@@ -2216,7 +2218,7 @@ export default function DocViewPage() {
             className="mt-4"
           />
         ) : null}
-        {!compactInvoice && documentContext}
+        {!compactSalesDocument && documentContext}
         {type === "bill" && landedAllocation && (() => {
           const centreLabels: Record<string, string> = {
             currency_conversion: "FX conversion",
@@ -2253,10 +2255,10 @@ export default function DocViewPage() {
         {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
         <DocumentTabs
           key={`${type}-${id}`}
-          compact={compactInvoice}
+          compact={compactSalesDocument}
           lines={
             <Card>
-              <CardContent className={compactInvoice ? "p-2 sm:p-3" : "pt-4"}>
+              <CardContent className={compactSalesDocument ? "p-2 sm:p-3" : "pt-4"}>
                 {initialLoading && !document ? (
                   <div className="space-y-2 py-2">
                     {[1, 2, 3].map((n) => (
@@ -2309,10 +2311,10 @@ export default function DocViewPage() {
                       {creditQtyDirty ? <div className="basis-full" role={creditPreview.error ? "alert" : "status"}>{creditPreview.error || `Unsaved credit total ${formatMoney(creditPreview.total, document.currency ?? "KES")} · VAT ${formatMoney(creditPreview.tax, document.currency ?? "KES")}. The header shows the saved total until you save quantities.`}</div> : null}
                     </div>
                   ) : null}
-                  <div className={compactInvoice ? "invoice-lines rounded border" : "rounded border overflow-x-auto"}>
+                  <div className={compactSalesDocument ? "invoice-lines rounded border" : "rounded border overflow-x-auto"}>
                     <div
                       className={
-                        compactInvoice
+                        compactSalesDocument
                           ? "invoice-line-grid invoice-line-head border-b px-2.5 py-2 text-xs font-medium text-muted-foreground"
                           : isGrnDoc
                           ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground"
@@ -2378,7 +2380,7 @@ export default function DocViewPage() {
                         <div
                           key={line.id ?? line.description}
                           className={
-                            compactInvoice
+                            compactSalesDocument
                               ? "invoice-line-grid invoice-line-row border-b px-2.5 py-2 text-sm last:border-b-0"
                               : isGrnDoc
                               ? "min-w-[980px] grid grid-cols-[minmax(0,1.2fr)_52px_72px_72px_72px_80px_96px_minmax(100px,0.9fr)_120px] gap-3 border-b px-4 py-3 text-sm last:border-b-0"
@@ -2517,7 +2519,7 @@ export default function DocViewPage() {
                               {(line.discount ?? 0) > 0 ? `${line.discount}%` : "—"}
                             </span>
                           ) : null}
-                          <span data-invoice-label="Tax" className={compactInvoice ? "break-words text-xs text-muted-foreground" : "text-xs text-muted-foreground truncate"} title={taxTitle}>
+                          <span data-invoice-label="Tax" className={compactSalesDocument ? "break-words text-xs text-muted-foreground" : "text-xs text-muted-foreground truncate"} title={taxTitle}>
                             {taxLabel}
                           </span>
                           <div data-invoice-label="Amount" className="flex min-w-0 justify-end">
@@ -2631,10 +2633,20 @@ export default function DocViewPage() {
             </Card>
           }
         />
-        {compactInvoice && (
+        {compactSalesDocument && (
           <details className="rounded-md border bg-card px-3 py-2">
-            <summary className="cursor-pointer text-sm font-medium">Address, notes and history</summary>
+            <summary className="cursor-pointer text-sm font-medium">
+              {type === "delivery-note"
+                ? "Warehouse, delivery details and history"
+                : canApplyPriceTagInDetails ? "Pricing, address, notes and history" : "Address, notes and history"}
+            </summary>
             <div className="mt-2 space-y-3">
+              {canApplyPriceTagInDetails && document.status === "DRAFT" && (
+                <div className="max-w-sm">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">Apply a price list</p>
+                  {documentPriceTag}
+                </div>
+              )}
               {documentContext}
             </div>
           </details>
@@ -3877,24 +3889,26 @@ function DynamicNextStepsPanel({
       }
     }
   } else if (type === "delivery-note") {
-    steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this delivery note", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
     const st = status.toUpperCase();
     const hasPod = !!document?.podConfirmation?.confirmedAt;
+    const source = document?.sourceDocument;
     if (status === "DRAFT") {
       if (warehouseTaskLink) {
         steps.push({
           icon: <Icons.Package className="h-4 w-4" />,
-          text: "Use Open pick-pack (header or below) to confirm pick & pack, then dispatch.",
+          text: "Confirm pick & pack, then dispatch.",
         });
       } else if (!document?.warehouseId?.trim()) {
         steps.push({
           icon: <Icons.Warehouse className="h-4 w-4 text-amber-500" />,
-          text: "Select a fulfilment warehouse on this delivery note (above) so pick & pack can run.",
+          text: "Open Warehouse, delivery details and history to select a fulfilment warehouse.",
         });
       } else {
         steps.push({
           icon: <Icons.Info className="h-4 w-4 text-amber-500" />,
-          text: "Pick-pack link missing — refresh the page. If it persists, ensure your organisation has an active warehouse for this branch.",
+          text: "No pick & pack task is linked. Check fulfilment before dispatching.",
+          href: source ? `/docs/${source.typeKey}/${source.id}` : undefined,
+          actionLabel: source ? `Open ${source.number}` : undefined,
         });
       }
     } else if (["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) {
@@ -3943,6 +3957,7 @@ function DynamicNextStepsPanel({
     if (warehouseTaskLink && dnNeedsFulfilment) {
       steps.push({ icon: <Icons.Warehouse className="h-4 w-4" />, text: warehouseTaskLink.label, href: warehouseTaskLink.href });
     }
+    steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this delivery note", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
   } else if (type === "invoice") {
     if (status === "DRAFT") {
       const undelivered = (document?.linkedDeliveries ?? []).filter(
