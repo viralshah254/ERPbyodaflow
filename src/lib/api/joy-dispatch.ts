@@ -184,6 +184,14 @@ export type JoyLoadNote = {
     deliveryNoteNumber?: string;
     stockIssued?: boolean;
   }>;
+  mappingIssues?: Array<{
+    productId: string;
+    productSku?: string;
+    productName?: string;
+    description?: string;
+    unit: string;
+    orders: Array<{ id: string; number: string }>;
+  }>;
   lastError?: string;
   loadedAt?: string;
   invoicedAt?: string;

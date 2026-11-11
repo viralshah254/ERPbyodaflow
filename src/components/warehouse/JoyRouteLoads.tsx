@@ -276,41 +276,84 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
   });
   const ready = lines.every((line) => !line.invalid && Math.abs(line.gap) < 0.0001);
   const shortLines = lines.filter((line) => line.short);
-  const shortSummary = shortLines
-    .map((row) => `${row.line.name} short ${roundQty(row.line.orderedQty - row.loaded)}`)
-    .join("; ");
+  const fullLines = lines.filter((line) => !line.short);
+  const mappingIssues = note.mappingIssues ?? [];
+  const mappingError = /UOM Mapping Required/i.test(note.lastError ?? "");
+  const showPreviousError = note.lastError && (!mappingError || note.mappingIssues === undefined);
+  const allocationChanged = lines.some(({ allocations }) =>
+    allocations.some(({ row, value }) => Math.abs(row.invoiceQty - value) >= 0.0001)
+  );
+  const canSubmit = ready && (!mappingIssues.length || allocationChanged);
+  const completed = note.results.filter((row) => row.stockIssued).length;
   return (
     <Card id={`note-${note.id}`}>
       <CardHeader className="space-y-1">
-        <CardTitle>
-          {note.number} · {note.truck}
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {placeLabel(note.routeWarehouseName)} · short — waiting for finance
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>{note.number} · {note.truck}</CardTitle>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mappingIssues.length
+            ? "bg-amber-500/15 text-amber-900 dark:text-amber-200"
+            : "bg-muted text-muted-foreground"}`}>
+            {mappingIssues.length ? "Mapping needed" : shortLines.length ? "Finance review" : "Ready to retry"}
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)}</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        {shortLines.length ? (
-          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
-            Truck short — finance must choose which orders to reduce. {shortSummary}
+        {mappingIssues.length ? (
+          <section aria-label="SKU mapping issues" className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="font-semibold">{mappingIssues.length} SKU mapping{mappingIssues.length === 1 ? "" : "s"} needed</p>
+                <p className="text-sm text-muted-foreground">Verify the sales unit against the SKU’s stock unit, then recheck this load.</p>
+              </div>
+              <Button variant="outline" size="sm" disabled={busy} onClick={async () => {
+                setBusy(true);
+                try { await onChanged(); }
+                finally { setBusy(false); }
+              }}>Recheck mappings</Button>
+            </div>
+            <ul className="divide-y divide-border">
+              {mappingIssues.map((issue) => (
+                <li key={`${issue.productId}:${issue.unit}`} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+                  <div>
+                    <p className="font-medium">
+                      {issue.productSku ? `${issue.productSku} · ` : ""}{issue.productName || issue.description || issue.productId}
+                    </p>
+                    <p className="flex flex-wrap gap-x-2 text-muted-foreground">
+                      <span>Sales unit <strong className="text-foreground">{issue.unit}</strong></span>
+                      {issue.orders.map((order) => (
+                        <Link key={order.id} className="text-primary underline underline-offset-2" href={`/docs/sales-order/${encodeURIComponent(order.id)}`}>{order.number}</Link>
+                      ))}
+                    </p>
+                  </div>
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/master/products/${encodeURIComponent(issue.productId)}?tab=packaging`} target="_blank" rel="noopener noreferrer">Open SKU units</Link>
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
+        {showPreviousError ? (
+          <div role="status" className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+            {note.lastError}
           </div>
         ) : null}
-        {note.lastError ? (
-          <div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
-            <p className="font-medium">The last attempt did not finish.</p>
-            <p>{note.lastError}</p>
-          </div>
+        {completed > 0 && <p className="text-sm text-muted-foreground">{completed} order{completed === 1 ? "" : "s"} already invoiced and issued.</p>}
+        {fullLines.length ? (
+          <details className="rounded-lg border px-3 py-2 text-sm">
+            <summary className="cursor-pointer font-medium">Loaded in full · {fullLines.length} SKU{fullLines.length === 1 ? "" : "s"}</summary>
+            <ul className="mt-2 grid gap-1 text-muted-foreground sm:grid-cols-2">
+              {fullLines.map(({ line, loaded }) => (
+                <li key={line.productId} className="flex justify-between gap-2">
+                  <span>{line.name}</span><span className="shrink-0 tabular-nums">{loaded} {line.unit}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
         ) : null}
-        {lines.some((line) => !line.short) ? (
-          <p className="text-sm text-muted-foreground">
-            Loaded in full:{" "}
-            <span className={CAPS_ON_PRODUCT_CLASS}>
-              {lines.filter((line) => !line.short).map((line) => line.line.name).join(", ")}
-            </span>
-          </p>
-        ) : null}
-        {shortLines.map(({ line, loaded, allocations, gap }) => {
-          const matched = Math.abs(gap) < 0.0001;
+        {shortLines.map(({ line, loaded, allocations, gap, invalid }) => {
+          const matched = !invalid && Math.abs(gap) < 0.0001;
           return (
             <div key={line.productId} className="overflow-hidden rounded-md border">
               <div className="flex flex-wrap items-baseline justify-between gap-2 bg-muted/50 px-3 py-2">
@@ -319,10 +362,10 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                   {line.name}
                 </p>
                 <p className="text-sm tabular-nums">
-                  Ordered {line.orderedQty} · loaded <span className="font-semibold">{loaded}</span> · to invoice
+                  Ordered {line.orderedQty} · loaded <span className="font-semibold">{loaded} {line.unit}</span>
                 </p>
               </div>
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full min-w-[26rem] text-sm">
                 <thead className="text-left text-xs text-muted-foreground">
                   <tr>
                     <th className="px-3 py-1.5 font-normal">Order</th>
@@ -350,7 +393,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                             className={QTY_INPUT}
                             inputMode="decimal"
                             aria-label={`Invoice quantity for ${row.salesOrderNumber}`}
-                            disabled={!canFinance || invoiced.has(row.salesOrderId)}
+                            disabled={busy || !canFinance || invoiced.has(row.salesOrderId)}
                             value={qty[key] ?? String(row.invoiceQty)}
                             onChange={(event) => setQty((current) => ({ ...current, [key]: event.target.value }))}
                           />
@@ -359,20 +402,20 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
               <p
                 className={`border-t px-3 py-2 text-sm font-medium ${
                   matched ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"
                 }`}
               >
-                {gapText(gap)}
+                {invalid ? "Enter a quantity between zero and the ordered amount for each order." : gapText(gap)}
               </p>
             </div>
           );
         })}
         {canFinance ? (
           <Button
-            disabled={!ready || busy || note.status !== "AWAITING_FINANCE"}
+            disabled={!canSubmit || busy || note.status !== "AWAITING_FINANCE"}
             onClick={() => {
               setBusy(true);
               void allocateJoyLoad(
@@ -392,7 +435,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 .finally(() => setBusy(false));
             }}
           >
-            Create invoices
+            {busy ? "Working…" : note.results.some((row) => row.invoiceId) ? "Resume invoicing" : "Create invoices"}
           </Button>
         ) : (
           <p className="text-sm text-muted-foreground">Finance chooses which orders to reduce, then creates the invoices.</p>
@@ -597,7 +640,7 @@ function JoyRouteLoadsInner() {
   const financeBlock =
     showFinance && (!hideEmpty || finance.length)
       ? [
-          <Section key="finance" id="step-finance" title="3. Short loads for finance" empty="No short loads are waiting.">
+          <Section key="finance" id="step-finance" title="3. Finance review" empty="No loads need finance review.">
             {finance.map((note) => (
               <FinanceNoteCard key={`${note.id}:${note.status}`} note={note} canFinance={canFinance} onChanged={reload} />
             ))}
