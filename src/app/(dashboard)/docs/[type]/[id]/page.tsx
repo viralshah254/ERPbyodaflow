@@ -21,6 +21,7 @@ import { DocumentComments } from "@/components/docs/DocumentComments";
 import { DocumentTaxesPanel } from "@/components/docs/DocumentTaxesPanel";
 import { DocumentTabLoading } from "@/components/docs/DocumentTabLoading";
 import { PodSignaturePad } from "@/components/docs/PodSignaturePad";
+import { SfaDeliveryAddress } from "@/components/location/SfaDeliveryAddress";
 import { DeliveryEvidencePanel } from "@/components/docs/DeliveryEvidencePanel";
 import { PrintPreviewDrawer } from "@/components/docs/PrintPreviewDrawer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -1991,42 +1992,48 @@ export default function DocViewPage() {
                           ? "Customer location for this delivery."
                           : "Where these goods are delivered."}
                     </p>
-                    {document.status === "DRAFT" ? (
-                      <>
-                        <Textarea
-                          id="document-delivery-address"
-                          value={deliveryDraft}
-                          onChange={(e) => setDeliveryDraft(e.target.value)}
-                          placeholder="Branch, shop, or customer location"
-                          rows={2}
-                          className="resize-y min-h-[60px] max-w-3xl"
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={deliverySaving || deliveryDraft === (document.deliveryAddress ?? "")}
-                          onClick={async () => {
-                            setDeliverySaving(true);
-                            try {
-                              await patchDocumentApi(type as DocTypeKey, id, {
-                                deliveryAddress: deliveryDraft.trim(),
-                              });
-                              await refreshDocument(true);
-                              toast.success("Delivery address saved.");
-                            } catch (e) {
-                              toast.error((e as Error).message);
-                            } finally {
-                              setDeliverySaving(false);
-                            }
-                          }}
-                        >
-                          {deliverySaving ? "Saving…" : "Save address"}
-                        </Button>
-                      </>
-                    ) : (
-                      <p className="text-sm font-medium max-w-3xl">{document.deliveryAddress?.trim() || "—"}</p>
-                    )}
+                    <SfaDeliveryAddress
+                      address={document.deliveryAddress}
+                      isSfaOrder={document.externalSource === "odaflow" || Boolean(document.odaflowChannel)}
+                      editable={document.status === "DRAFT"}
+                    >
+                      {document.status === "DRAFT" ? (
+                        <>
+                          <Textarea
+                            id="document-delivery-address"
+                            value={deliveryDraft}
+                            onChange={(e) => setDeliveryDraft(e.target.value)}
+                            placeholder="Branch, shop, or customer location"
+                            rows={2}
+                            className="resize-y min-h-[60px] max-w-3xl"
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            disabled={deliverySaving || deliveryDraft === (document.deliveryAddress ?? "")}
+                            onClick={async () => {
+                              setDeliverySaving(true);
+                              try {
+                                await patchDocumentApi(type as DocTypeKey, id, {
+                                  deliveryAddress: deliveryDraft.trim(),
+                                });
+                                await refreshDocument(true);
+                                toast.success("Delivery address saved.");
+                              } catch (e) {
+                                toast.error((e as Error).message);
+                              } finally {
+                                setDeliverySaving(false);
+                              }
+                            }}
+                          >
+                            {deliverySaving ? "Saving…" : "Save address"}
+                          </Button>
+                        </>
+                      ) : (
+                        <p className="text-sm font-medium max-w-3xl">{document.deliveryAddress?.trim() || "—"}</p>
+                      )}
+                    </SfaDeliveryAddress>
                   </div>
                 ) : null}
                 {/* Invoice payment status bar */}
