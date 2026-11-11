@@ -348,3 +348,50 @@ html[data-erp-guide-open="true"] [data-gaia-widget] {
     color: hsl(var(--muted-foreground));
   }
 }
+
+.credit-note-lines {
+  container: credit-note-lines / inline-size;
+}
+
+.credit-note-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.4fr) minmax(5rem, 0.8fr) minmax(5rem, 0.8fr) minmax(5rem, 0.8fr) minmax(7rem, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.credit-note-row > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.credit-note-amount {
+  text-align: right;
+}
+
+@container credit-note-lines (width < 39rem) {
+  .credit-note-head {
+    display: none;
+  }
+
+  .credit-note-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .credit-note-row > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .credit-note-row > [data-credit-label]::before {
+    content: attr(data-credit-label);
+    display: block;
+    color: hsl(var(--muted-foreground));
+    font-size: 0.75rem;
+    font-weight: 400;
+  }
+
+  .credit-note-amount {
+    text-align: left;
+  }
+}

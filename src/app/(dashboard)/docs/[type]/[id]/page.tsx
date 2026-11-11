@@ -11,6 +11,7 @@ import { linkHubDocument } from "@/lib/api/document-hub";
 import { DocumentFulfilmentLinesTable } from "@/components/docs/DocumentFulfilmentLinesTable";
 import { LinePackingCell } from "@/components/docs/LinePackingCell";
 import { PurchaseOrderEmailPanel } from "@/components/purchasing/PurchaseOrderEmailPanel";
+import { CreditNoteEditor } from "@/components/docs/CreditNoteEditor";
 import { DocumentTabs } from "@/components/docs/DocumentTabs";
 import { DocumentRightPanel } from "@/components/docs/DocumentRightPanel";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
@@ -407,6 +408,8 @@ export default function DocViewPage() {
   const [convertCreditQtys, setConvertCreditQtys] = React.useState<Record<string, string>>({});
   const [creditQtyDraft, setCreditQtyDraft] = React.useState<Record<string, string>>({});
   const [creditQtySaving, setCreditQtySaving] = React.useState(false);
+  const [creditEffectOverride, setCreditEffectOverride] = React.useState<DocumentDetailRecord["adjustmentEffect"]>();
+  const [creditWarehouseOverride, setCreditWarehouseOverride] = React.useState<string>();
   const [convertPartyId, setConvertPartyId] = React.useState("");
   const [convertWarehouseId, setConvertWarehouseId] = React.useState("");
   const [outputTemplateId, setOutputTemplateId] = React.useState("");
@@ -921,16 +924,20 @@ export default function DocViewPage() {
   }, [fmcgOrg, type, document?.id, document?.status, document?.salesFlow]);
 
   const savedCreditQtyKey = (document?.lines ?? []).map((line) => `${line.id}:${line.qty}`).join("|");
+  React.useEffect(() => { setCreditQtyDraft({}); }, [id, savedCreditQtyKey]);
   React.useEffect(() => {
-    if (!initialLoading && document && isCreditNoteDoc(type) && document.status === "DRAFT") {
-      const next: Record<string, string> = {};
-      for (const line of document.lines ?? []) {
-        if (!line.id) continue;
-        next[line.id] = String(line.qty ?? 0);
-      }
-      setCreditQtyDraft(next);
-    }
-  }, [initialLoading, document, document?.status, savedCreditQtyKey, type]);
+    setCreditEffectOverride(undefined);
+    setCreditWarehouseOverride(undefined);
+  }, [id, document?.adjustmentEffect, document?.warehouseId]);
+
+  const draftCredit = isCreditNoteDoc(type) && document?.status === "DRAFT";
+  const creditEditable = draftCredit && canWrite && !fiscallySigned && !fiscalUnresolved;
+  const creditEffect = creditEffectOverride ?? document?.adjustmentEffect ?? "";
+  const creditWarehouse = creditWarehouseOverride ?? document?.warehouseId ?? "";
+  const creditEffectDirty = draftCredit && (
+    creditEffect !== (document?.adjustmentEffect ?? "") ||
+    (creditEffect === "SUPPLIER_RETURN" && creditWarehouse !== (document?.warehouseId ?? ""))
+  );
 
   React.useEffect(() => {
     if (!initialLoading && document) setNotesDraft(document.notes ?? "");
@@ -954,7 +961,8 @@ export default function DocViewPage() {
   const creditPreview = React.useMemo(() => creditQuantityPreview(document?.lines ?? [], creditQtyDraft), [document?.lines, creditQtyDraft]);
 
   const saveCreditQuantities = React.useCallback(async () => {
-    if (!document || !isCreditNoteDoc(type)) return;
+    if (!document || !creditEditable) return;
+    if (document.stockAccountingVersion === 1 && (!creditEffect || (creditEffect === "SUPPLIER_RETURN" && !creditWarehouse))) return;
     if (creditPreview.error) { toast.error(creditPreview.error); return; }
     setCreditQtySaving(true);
     try {
@@ -988,15 +996,25 @@ export default function DocViewPage() {
         toast.error("Enter a quantity on at least one line. Zero leaves that line off the credit note.");
         return;
       }
-      await patchDocumentApi(type as DocTypeKey, id, { lines, total: creditPreview.total, ...(typeof document.linesAreTaxInclusive === "boolean" ? { linesAreTaxInclusive: document.linesAreTaxInclusive } : {}) });
-      toast.success("Credit note quantities updated.");
+      await patchDocumentApi(type as DocTypeKey, id, {
+        ...(creditQtyDirty ? { lines, total: creditPreview.total } : {}),
+        ...(creditQtyDirty && typeof document.linesAreTaxInclusive === "boolean" ? { linesAreTaxInclusive: document.linesAreTaxInclusive } : {}),
+        ...(creditEffectDirty && creditEffect ? { adjustmentEffect: creditEffect } : {}),
+        ...(creditEffectDirty && creditEffect === "SUPPLIER_RETURN" ? { warehouseId: creditWarehouse } : {}),
+      });
+      toast.success("Credit draft saved.");
       await refreshDocument(true);
     } catch (e) {
       toastDocumentActionError(e);
     } finally {
       setCreditQtySaving(false);
     }
-  }, [creditQtyDraft, creditPreview, document, id, refreshDocument, type]);
+  }, [creditQtyDraft, creditPreview, creditEditable, creditEffect, creditEffectDirty, creditQtyDirty, creditWarehouse, document, id, refreshDocument, type]);
+
+  const creditDraftNeedsSave = draftCredit && (
+    creditQtyDirty || creditEffectDirty || creditQtySaving ||
+    (document.stockAccountingVersion === 1 && !document.adjustmentEffect)
+  );
 
   // For bills: fetch the GRN's landed cost allocation so we can show the breakdown card
   React.useEffect(() => {
@@ -1734,7 +1752,7 @@ export default function DocViewPage() {
       status={document.status}
       statusActor={document?.statusActor ?? null}
       createdByName={createdByDisplayName}
-      rightSlot={rightSlot}
+      rightSlot={draftCredit ? undefined : rightSlot}
       compact={compactDocument}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -1838,7 +1856,7 @@ export default function DocViewPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={actionLoading}
+              disabled={actionLoading || creditDraftNeedsSave}
               onClick={() => {
                 if (odaflowSalesOrder) {
                   openOdaflowApproval("request");
@@ -1874,7 +1892,7 @@ export default function DocViewPage() {
               <Button
                 variant="outline"
                 size="sm"
-                disabled={actionLoading}
+                disabled={actionLoading || creditDraftNeedsSave}
                 onClick={() => {
                   if (odaflowSalesOrder) {
                     openOdaflowApproval("approve");
@@ -1901,7 +1919,7 @@ export default function DocViewPage() {
               {canPost && (
               <Button
                 size="sm"
-                disabled={actionLoading}
+                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned)}
                 onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
@@ -2092,7 +2110,7 @@ export default function DocViewPage() {
       }
     >
       <div className={compactDocument ? "space-y-2.5" : "space-y-4"}>
-        {loading ? (
+        {!draftCredit && (loading ? (
           <DocumentDetailHeaderSkeleton
             columns={type === "sales-order" || type === "delivery-note" ? 5 : 4}
           />
@@ -2264,7 +2282,7 @@ export default function DocViewPage() {
                 : []),
             ]}
           />
-        )}
+        ))}
         {odaflowSource ? (
           <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} pdfInAttachments />
         ) : null}
@@ -2285,10 +2303,29 @@ export default function DocViewPage() {
             Review supplier email
           </a>
         )}
+        {draftCredit && (
+          <CreditNoteEditor
+            document={document}
+            partyName={displayPartyName}
+            quantities={creditQtyDraft}
+            onQuantity={(lineId, value) => setCreditQtyDraft((prev) => ({ ...prev, [lineId]: value }))}
+            effect={creditEffect}
+            onEffect={setCreditEffectOverride}
+            warehouse={creditWarehouse}
+            onWarehouse={setCreditWarehouseOverride}
+            editable={creditEditable}
+            busy={creditQtySaving}
+            dirty={creditQtyDirty || creditEffectDirty}
+            onSave={() => void saveCreditQuantities()}
+            formatAmount={(value) => formatMoney(value, document.currency)}
+            fmcgOrg={fmcgOrg}
+          />
+        )}
         <DocumentTabs
           key={`${type}-${id}`}
           compact={compactDocument}
-          lines={
+          detailsOnly={draftCredit}
+          lines={draftCredit ? null :
             <Card>
               <CardContent className={compactDocument ? "p-2 sm:p-3" : "pt-4"}>
                 {initialLoading && !document ? (
@@ -2328,24 +2365,6 @@ export default function DocViewPage() {
                   />
                 ) : (
                   <>
-                  {isCreditNoteDoc(type) && document?.status === "DRAFT" ? (
-                    <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-dashed px-3 py-2 text-sm">
-                      <div>
-                        <p className="font-medium">Credit quantities</p>
-                        <p className="text-muted-foreground">Enter 0 to leave a line off the credit.</p>
-                      </div>
-                      <Button
-                        size="sm"
-                        disabled={creditQtySaving || !creditQtyDirty || Boolean(creditPreview.error) || creditPreview.selected === 0}
-                        onClick={() => void saveCreditQuantities()}
-                      >
-                        {creditQtySaving ? "Saving…" : "Save quantities"}
-                      </Button>
-                      <div className="basis-full text-sm" role={creditPreview.error ? "alert" : "status"}>
-                        {creditPreview.error || `${creditQtyDirty ? "Unsaved credit total" : "Credit total"} ${formatMoney(creditPreview.total, document.currency)} · VAT ${formatMoney(creditPreview.tax, document.currency)}`}
-                      </div>
-                    </div>
-                  ) : null}
                   <div className={`document-lines rounded border ${lineLayout}`}>
                     <div className="document-line-grid document-line-head border-b px-2.5 py-2 text-xs font-medium text-muted-foreground">
                       <span>Description</span>
@@ -2400,9 +2419,6 @@ export default function DocViewPage() {
                         >
                           <div className="min-w-0">
                             <DocumentLineProductDescription line={line} fmcgOrg={fmcgOrg} />
-                            {isCreditNoteDoc(type) && document.status === "DRAFT" && (
-                              <CreditLineCapacity capacity={line.creditCapacity} unit={line.unit} />
-                            )}
                             {line.sourceDocumentType && line.sourceDocumentId ? (
                               <p className="text-xs text-muted-foreground">
                                 From {line.sourceDocumentType.replace(/-/g, " ")}
@@ -2457,31 +2473,6 @@ export default function DocViewPage() {
                                   : "—"}
                               </span>}
                             </>
-                          ) : isCreditNoteDoc(type) && document?.status === "DRAFT" && line.id ? (
-                            <div data-line-label="Qty to credit" className="text-right">
-                              <Input
-                                type="number"
-                                min={0}
-                                step="any"
-                                max={line.creditCapacity?.available ?? (line.sourceQuantity && line.sourceQuantity > 0 ? line.sourceQuantity : undefined)}
-                                className="h-8 px-1 text-right tabular-nums"
-                                value={creditQtyDraft[line.id] ?? String(line.qty ?? "")}
-                                onChange={(e) => {
-                                  const lineId = line.id;
-                                  if (!lineId) return;
-                                  const raw = e.target.value;
-                                  const cap =
-                                    line.creditCapacity?.available ??
-                                    (line.sourceQuantity != null && line.sourceQuantity > 0
-                                      ? line.sourceQuantity
-                                      : undefined);
-                                  const next =
-                                    raw !== "" && cap != null && Number(raw) > cap ? String(cap) : raw;
-                                  setCreditQtyDraft((prev) => ({ ...prev, [lineId]: next }));
-                                }}
-                                aria-label={`Quantity to credit for ${line.description}`}
-                              />
-                            </div>
                           ) : (
                             <span data-line-label="Qty" className="text-right">{line.qty ?? "—"}</span>
                           )}
@@ -2508,18 +2499,7 @@ export default function DocViewPage() {
                           <div data-line-label="Amount" className="flex min-w-0 justify-end">
                             {line.amount != null ? (
                               <DualCurrencyAmount
-                                amount={
-                                  isCreditNoteDoc(type) &&
-                                  document?.status === "DRAFT" &&
-                                  line.id &&
-                                  (line.qty ?? 0) > 0
-                                    ? roundCreditQty(
-                                        line.amount *
-                                          (Number(creditQtyDraft[line.id] ?? line.qty) || 0) /
-                                          (line.qty ?? 1)
-                                      )
-                                    : line.amount
-                                }
+                                amount={line.amount}
                                 currency={document?.currency ?? "KES"}
                                 exchangeRate={document?.exchangeRate}
                                 align="right"
@@ -2622,12 +2602,13 @@ export default function DocViewPage() {
             <summary className="cursor-pointer text-sm font-medium">
               {type === "delivery-note"
                 ? "Warehouse, delivery details and history"
-                : type === "bill" && landedAllocation ? "Additional costs, references and history"
+                : draftCredit ? "Notes and document history"
+                  : type === "bill" && landedAllocation ? "Additional costs, references and history"
                   : isPurchaseDoc ? "References, notes and history"
                   : canApplyPriceTagInDetails ? "Pricing, address, notes and history" : "Address, notes and history"}
             </summary>
             <div className="mt-2 space-y-3">
-              {canApplyPriceTagInDetails && document.status === "DRAFT" && (
+              {canApplyPriceTagInDetails && document.status === "DRAFT" && !draftCredit && (
                 <div className="max-w-sm">
                   <p className="mb-1 text-xs font-medium text-muted-foreground">Apply a price list</p>
                   {documentPriceTag}
@@ -2698,9 +2679,11 @@ export default function DocViewPage() {
         >
           <div ref={setConvertSheetHostRef} className="flex min-h-0 flex-col">
           <SheetHeader>
-            <SheetTitle>Convert document</SheetTitle>
+            <SheetTitle>{isCreditNoteDoc(convertType) ? "Create credit draft" : "Convert document"}</SheetTitle>
             <SheetDescription>
-              Confirm downstream details before creating the next linked document.
+              {isCreditNoteDoc(convertType)
+                ? "Choose quantities to credit. Review the draft and select its stock effect before posting."
+                : "Confirm downstream details before creating the next linked document."}
               {type === "grn" && convertType === "bill" && (
                 <span className="mt-1 block text-xs text-amber-600 dark:text-amber-400">
                   If this GRN has not been posted yet, it will be posted automatically to update stock before the bill is created.
@@ -2719,7 +2702,7 @@ export default function DocViewPage() {
               <div className="space-y-2">
                 <Label>Quantities to credit</Label>
                 <p className="text-xs text-muted-foreground">
-                  Credit the whole line, part of it, or 0 to leave it off. The credit note does not have to match the invoice total.
+                  Quantities start at the available balance. Enter 0 to leave a line off.
                 </p>
                 <div className="max-h-64 space-y-2 overflow-y-auto rounded border p-2">
                   {(document?.lines ?? []).map((line) => {
@@ -2816,7 +2799,10 @@ export default function DocViewPage() {
               disabled={
                 actionLoading ||
                 !convertType ||
-                (convertType === "delivery-note" && packagingBlocksConversion)
+                (convertType === "delivery-note" && packagingBlocksConversion) ||
+                (isCreditNoteDoc(convertType) && !document.lines.some((line) =>
+                  line.id && openCreditQty(line) > 0 && Number(convertCreditQtys[line.id] ?? openCreditQty(line)) > 0
+                ))
               }
               onClick={async () => {
                 if (!convertType) return;
@@ -2826,7 +2812,7 @@ export default function DocViewPage() {
                     if (!line.id) return [];
                     const open = openCreditQty(line);
                     const qty = roundCreditQty(Number(convertCreditQtys[line.id] ?? open));
-                    if (!Number.isFinite(qty) || qty <= 0) return [];
+                    if (!Number.isFinite(qty) || qty <= 0 || open <= 0) return [];
                     return [{ sourceLineId: line.id, quantity: Math.min(qty, open) }];
                   });
                   if (!creditLines.length) {
@@ -2862,7 +2848,7 @@ export default function DocViewPage() {
                 }
               }}
             >
-              Create linked document
+              {isCreditNoteDoc(convertType) ? "Create credit draft" : "Create linked document"}
             </Button>
           </SheetFooter>
           </div>

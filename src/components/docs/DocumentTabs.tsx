@@ -7,6 +7,7 @@ export const DOC_TAB_IDS = ["lines", "taxes", "attachments", "comments", "approv
 
 interface DocumentTabsProps {
   compact?: boolean;
+  detailsOnly?: boolean;
   defaultTab?: (typeof DOC_TAB_IDS)[number];
   lines: React.ReactNode;
   taxes?: React.ReactNode;
@@ -20,6 +21,7 @@ interface DocumentTabsProps {
 export function DocumentTabs({
   defaultTab = "lines",
   compact = false,
+  detailsOnly = false,
   lines,
   taxes,
   attachments,
@@ -27,19 +29,19 @@ export function DocumentTabs({
   approval,
   audit,
 }: DocumentTabsProps) {
-  return (
-    <Tabs defaultValue={defaultTab} className="w-full">
+  const tabs = (
+    <Tabs defaultValue={detailsOnly ? "taxes" : defaultTab} className="w-full">
       <TabsList className="flex w-full flex-wrap gap-1 h-auto p-1">
-        <TabsTrigger value="lines">Lines</TabsTrigger>
+        {!detailsOnly && <TabsTrigger value="lines">Lines</TabsTrigger>}
         <TabsTrigger value="taxes">Taxes/Charges</TabsTrigger>
         <TabsTrigger value="attachments">Attachments</TabsTrigger>
         <TabsTrigger value="comments">Comments</TabsTrigger>
         <TabsTrigger value="approval">Approval</TabsTrigger>
         <TabsTrigger value="audit">Audit</TabsTrigger>
       </TabsList>
-      <TabsContent value="lines" className={compact ? "mt-2" : "mt-4"}>
+      {!detailsOnly && <TabsContent value="lines" className={compact ? "mt-2" : "mt-4"}>
         {lines}
-      </TabsContent>
+      </TabsContent>}
       <TabsContent value="taxes" className="mt-4">
         {taxes ?? <div className="rounded border p-4 text-sm text-muted-foreground">Taxes and charges will appear here for this document.</div>}
       </TabsContent>
@@ -57,4 +59,10 @@ export function DocumentTabs({
       </TabsContent>
     </Tabs>
   );
+  return detailsOnly ? (
+    <details className="rounded-md border bg-card px-3 py-2">
+      <summary className="cursor-pointer text-sm font-medium">Taxes, attachments, comments and audit</summary>
+      <div className="mt-2">{tabs}</div>
+    </details>
+  ) : tabs;
 }
