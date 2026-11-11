@@ -60,6 +60,7 @@ function WaitingRouteCard({
   canLoad,
   dispatchName,
   onCreated,
+  activeNote,
 }: {
   route: JoyWaitingRoute;
   trucks: string[];
@@ -67,6 +68,7 @@ function WaitingRouteCard({
   canLoad: boolean;
   dispatchName: string;
   onCreated: () => Promise<void>;
+  activeNote?: JoyLoadNote;
 }) {
   const [truck, setTruck] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -98,7 +100,14 @@ function WaitingRouteCard({
             ))}
           </tbody>
         </table>
-        {canLoad ? (
+        {activeNote ? (
+          <p className="rounded-md border bg-muted/50 p-3 text-sm">
+            Waiting for {activeNote.number} to clear.{" "}
+            <Link className="text-primary underline" href={`/warehouse/route-pick-lists#note-${activeNote.id}`}>
+              Open loading note
+            </Link>
+          </p>
+        ) : canLoad ? (
           <div className="flex flex-wrap items-end gap-3">
             <div className="w-56 space-y-1">
               <Label>Truck</Label>
@@ -278,27 +287,56 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
   const shortLines = lines.filter((line) => line.short);
   const fullLines = lines.filter((line) => !line.short);
   const mappingIssues = note.mappingIssues ?? [];
+  const valuationIssues = note.valuationIssues ?? [];
+  const routeNeedsReview = !!note.fulfilmentWarehouseId && note.routeWarehouseId === note.fulfilmentWarehouseId;
+  const valuationError = /opening (company-average valuation|stock value)/i.test(note.lastError ?? "");
   const mappingError = /UOM Mapping Required/i.test(note.lastError ?? "");
-  const showPreviousError = note.lastError && (!mappingError || note.mappingIssues === undefined);
+  const showPreviousError = note.lastError &&
+    (!mappingError || note.mappingIssues === undefined) &&
+    (!valuationError || note.valuationIssues === undefined);
   const allocationChanged = lines.some(({ allocations }) =>
     allocations.some(({ row, value }) => Math.abs(row.invoiceQty - value) >= 0.0001)
   );
-  const canSubmit = ready && (!mappingIssues.length || allocationChanged);
+  const canSubmit = ready && ((!mappingIssues.length && !valuationIssues.length) || allocationChanged);
   const completed = note.results.filter((row) => row.stockIssued).length;
   return (
     <Card id={`note-${note.id}`}>
       <CardHeader className="space-y-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>{note.number} · {note.truck}</CardTitle>
-          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${mappingIssues.length
+          <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${(mappingIssues.length || valuationIssues.length || routeNeedsReview)
             ? "bg-amber-500/15 text-amber-900 dark:text-amber-200"
             : "bg-muted text-muted-foreground"}`}>
-            {mappingIssues.length ? "Mapping needed" : shortLines.length ? "Finance review" : "Ready to retry"}
+            {valuationIssues.length ? "Opening value needed" : mappingIssues.length ? "Mapping needed" :
+              routeNeedsReview ? "Check route" : shortLines.length ? "Finance review" : "Ready to retry"}
           </span>
         </div>
         <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)}</p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {routeNeedsReview && (
+          <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            DISPATCH is listed as the route for this load. Confirm the delivery route before the truck leaves.
+          </p>
+        )}
+        {valuationIssues.length > 0 && (
+          <section aria-label="Opening stock values" className="space-y-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+            <p className="font-semibold">Finance needs to reconcile opening stock values</p>
+            <ul className="list-disc pl-5">
+              {valuationIssues.map((issue) => (
+                <li key={issue.productId}>{[issue.sku, issue.name].filter(Boolean).join(" · ")}</li>
+              ))}
+            </ul>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link href="/settings/fmcg-setup" className="text-primary underline">Open FMCG setup</Link>
+              <Button variant="outline" size="sm" disabled={busy} onClick={async () => {
+                setBusy(true);
+                try { await onChanged(); }
+                finally { setBusy(false); }
+              }}>Recheck opening values</Button>
+            </div>
+          </section>
+        )}
         {mappingIssues.length ? (
           <section aria-label="SKU mapping issues" className="space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
             <div className="flex flex-wrap items-start justify-between gap-2">
@@ -339,6 +377,15 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
             {note.lastError}
           </div>
         ) : null}
+        {note.results.some((result) => result.invoiceId || result.deliveryNoteId) && (
+          <div className="flex flex-wrap gap-3 text-sm">
+            <span className="text-muted-foreground">Existing documents</span>
+            {note.results.flatMap((result) => [
+              result.invoiceId && <Link key={result.invoiceId} className="text-primary underline" href={`/docs/invoice/${encodeURIComponent(result.invoiceId)}`}>{result.invoiceNumber || "Invoice"}</Link>,
+              result.deliveryNoteId && <Link key={result.deliveryNoteId} className="text-primary underline" href={`/docs/delivery-note/${encodeURIComponent(result.deliveryNoteId)}`}>{result.deliveryNoteNumber || "Delivery note"}</Link>,
+            ])}
+          </div>
+        )}
         {completed > 0 && <p className="text-sm text-muted-foreground">{completed} order{completed === 1 ? "" : "s"} already invoiced and issued.</p>}
         {fullLines.length ? (
           <details className="rounded-lg border px-3 py-2 text-sm">
@@ -620,6 +667,8 @@ function JoyRouteLoadsInner() {
                 busyTrucks={data.busyTrucks}
                 canLoad={canLoad}
                 dispatchName={data.dispatchWarehouseName}
+                activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
+                  (note.status === "OPEN" || note.status === "AWAITING_FINANCE" || note.status === "INVOICING"))}
                 onCreated={reload}
               />
             ))}

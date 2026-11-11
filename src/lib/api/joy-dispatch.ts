@@ -166,6 +166,7 @@ export type JoyLoadNote = {
   routeWarehouseId: string;
   routeWarehouseName: string;
   fulfilmentWarehouseName: string;
+  fulfilmentWarehouseId?: string;
   salesOrderIds: string[];
   lines: Array<{
     productId: string;
@@ -192,6 +193,7 @@ export type JoyLoadNote = {
     unit: string;
     orders: Array<{ id: string; number: string }>;
   }>;
+  valuationIssues?: Array<{ productId: string; name: string; sku?: string }>;
   lastError?: string;
   loadedAt?: string;
   invoicedAt?: string;
