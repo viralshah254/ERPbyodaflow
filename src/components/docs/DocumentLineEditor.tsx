@@ -202,12 +202,12 @@ function mergeLineUomOptions(
   packagingForProduct: ProductPackaging[] | undefined,
   catalogUomCodes: string[],
   currentValue?: string,
-  opts?: { fmcgOrg?: boolean; baseUom?: string }
+  opts?: { fmcgOrg?: boolean; baseUom?: string; joyRetailPack?: boolean }
 ): string[] {
   if (opts?.fmcgOrg) {
     const base = String(opts.baseUom ?? "PCS").trim().toUpperCase() || "PCS";
     const merged = new Set<string>([base, ...configuredPackUoms(packagingForProduct)]);
-    if (!isPieceUom(base) && base !== "PACK") merged.add("PCS");
+    if (!isPieceUom(base) && !opts.joyRetailPack) merged.add("PCS");
     if (currentValue) merged.add(String(currentValue).trim().toUpperCase());
     const arr = [...merged].filter(Boolean);
     arr.sort((a, b) => {
@@ -1531,6 +1531,9 @@ export function DocumentLineEditor({
               <tbody>
           {displayedLines.map((l) => {
             const product = products.find((p) => p.id === l.productId);
+            const joyUnit = joyFinishedGoods && product
+              ? joyFinishedGoodSalesUnit(product, packagingByProductId?.[l.productId])
+              : undefined;
             const taxCode = taxCodes.find((t) => t.id === l.taxCodeId);
             const baseQtyShown = lineColumnLabels?.baseQtyBasis === "stock" ? l.baseQty : (l.poQty ?? l.baseQty);
             const baseUnitPrice = computeBaseUnitPrice(l);
@@ -1617,7 +1620,8 @@ export function DocumentLineEditor({
                       packagingForProduct={packagingByProductId?.[l.productId]}
                       catalogUomCodes={catalogUomCodes}
                       fmcgOrg={fmcgOrg}
-                      baseUom={(joyFinishedGoods && product ? joyFinishedGoodSalesUnit(product, packagingByProductId?.[l.productId]) : undefined) ?? documentLineBaseUom(
+                      joyRetailPack={joyUnit === "PACK"}
+                      baseUom={joyUnit ?? documentLineBaseUom(
                         {
                           baseUom: product?.baseUom,
                           unit: product?.unit,
@@ -1786,6 +1790,7 @@ function UomSelect({
   packagingForProduct = [],
   catalogUomCodes = [],
   fmcgOrg = false,
+  joyRetailPack = false,
   baseUom = "PCS",
   onPackagingUpdated,
 }: {
@@ -1797,6 +1802,7 @@ function UomSelect({
   packagingForProduct?: ProductPackaging[];
   catalogUomCodes?: string[];
   fmcgOrg?: boolean;
+  joyRetailPack?: boolean;
   baseUom?: string;
   onPackagingUpdated?: (productId: string, items: ProductPackaging[]) => void;
 }) {
@@ -1806,7 +1812,7 @@ function UomSelect({
     packagingForProduct,
     catalogUomCodes,
     value,
-    { fmcgOrg, baseUom }
+    { fmcgOrg, baseUom, joyRetailPack }
   );
   const normalizedValue = String(value ?? "").trim().toUpperCase();
   const selectValue = options.includes(normalizedValue)
