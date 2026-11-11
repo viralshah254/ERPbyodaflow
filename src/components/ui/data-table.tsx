@@ -231,7 +231,7 @@ export function DataTable<T extends object>({
         className,
       )}
     >
-      {searchable && <div className="flex shrink-0 items-center gap-3 border-b p-3 print:hidden"><Input type="search" aria-label="Search table" placeholder={dataScope === "page" ? "Search this page…" : searchPlaceholder} value={search} onChange={event => { setInternalSearch(event.target.value); onPageOffsetChange?.(0); onSearchChange?.(event.target.value); }} className="max-w-sm" /><span className="text-xs text-muted-foreground" role="status">{displayData.length} of {data.length} rows</span></div>}
+      {searchable && <div className="flex shrink-0 flex-wrap items-center gap-3 border-b p-3 print:hidden"><Input type="search" aria-label="Search table" placeholder={dataScope === "page" ? "Search this page…" : searchPlaceholder} value={search} onChange={event => { setInternalSearch(event.target.value); onPageOffsetChange?.(0); onSearchChange?.(event.target.value); }} className="max-w-sm" /><span className="text-xs text-muted-foreground" role="status">{displayData.length} of {data.length} rows</span></div>}
       {dataScope === "page" && <p className="shrink-0 px-3 py-2 text-xs text-muted-foreground print:hidden">Column sorting applies to the loaded page.</p>}
       <div
         className={scrollClassName}

@@ -5,6 +5,8 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ChevronRight, PanelLeftOpen, PanelRightClose } from "lucide-react";
+import { SheetTrigger } from "@/components/ui/sheet";
+import { DocumentSummaryDrawer } from "./document-panel";
 import { useUIStore } from "@/stores/ui-store";
 import { CommandPaletteHint } from "@/components/command/CommandPaletteHint";
 import { PageHelp } from "@/components/tutorial/PageHelp";
@@ -31,6 +33,7 @@ interface PageHeaderProps {
   /** Extra-tight padding; default chrome is already compact. */
   dense?: boolean;
   className?: string;
+  actionsBelow?: boolean;
   titleClassName?: string;
 }
 
@@ -45,9 +48,11 @@ export function PageHeader({
   showRightPanelToggle = false,
   dense = false,
   className,
+  actionsBelow = false,
   titleClassName,
 }: PageHeaderProps) {
   const { rightPanelOpen, toggleRightPanel } = useUIStore();
+  const summaryInDrawer = React.useContext(DocumentSummaryDrawer);
   const visibleCrumbs = (breadcrumbs ?? []).filter((crumb, i, all) => {
     const isLast = i === all.length - 1;
     return !(isLast && crumb.label === title);
@@ -56,14 +61,14 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "shrink-0 border-b bg-card px-4 sm:px-5",
+        "min-w-0 shrink-0 border-b bg-card px-3 sm:px-5 [container-type:inline-size]",
         dense ? "py-2" : "py-2.5",
         sticky && "sticky top-0 z-30 bg-card shadow-sm",
         className
       )}
     >
       {visibleCrumbs.length > 0 && (
-        <nav className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+        <nav className="mb-1 flex flex-wrap items-center gap-1 break-words text-xs text-muted-foreground">
           {visibleCrumbs.map((crumb, i) => (
             <React.Fragment key={`${crumb.label}-${i}`}>
               {i > 0 && <ChevronRight className="h-3 w-3 shrink-0" />}
@@ -78,9 +83,14 @@ export function PageHeader({
           ))}
         </nav>
       )}
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className={cn(
+        "flex flex-col gap-2",
+        actionsBelow
+          ? "flex-row flex-wrap items-start justify-between"
+          : "[@container_(min-width:56rem)]:flex-row [@container_(min-width:56rem)]:items-start [@container_(min-width:56rem)]:justify-between",
+      )}>
         <div className="min-w-0 flex-1" data-tutorial-hint="page-title">
-          <h1 className={cn("text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl", titleClassName)}>
+          <h1 className={cn("break-words text-lg font-semibold leading-snug tracking-tight text-foreground sm:text-xl", titleClassName)}>
             {title}
           </h1>
           {description ? (
@@ -89,16 +99,27 @@ export function PageHeader({
             </div>
           ) : null}
         </div>
-        <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end lg:max-w-[55%] lg:shrink-0 [&>div]:max-w-full" data-tutorial-hint="page-actions">
+        <div className={cn(
+          "flex min-w-0 flex-wrap items-center gap-2 [&>div]:max-w-full",
+          !actionsBelow && "[@container_(min-width:56rem)]:max-w-[60%] [@container_(min-width:56rem)]:justify-end",
+        )} data-tutorial-hint={actionsBelow ? undefined : "page-actions"}>
           {help === undefined ? <PageHelp compact /> : help}
           {showCommandHint ? <CommandPaletteHint /> : null}
-          {showRightPanelToggle && (
+          {showRightPanelToggle && (summaryInDrawer ? (
+            <SheetTrigger asChild>
+              <Button variant="outline" size="sm">
+                <PanelLeftOpen className="mr-1.5 h-4 w-4" /> Summary
+              </Button>
+            </SheetTrigger>
+          ) : (
             <Button
               variant="ghost"
               size="icon"
               className="h-8 w-8"
               onClick={toggleRightPanel}
-              title={rightPanelOpen ? "Hide right panel" : "Show right panel"}
+              aria-expanded={rightPanelOpen}
+              aria-label={rightPanelOpen ? "Hide summary" : "Show summary"}
+              title={rightPanelOpen ? "Hide summary" : "Show summary"}
             >
               {rightPanelOpen ? (
                 <PanelRightClose className="h-4 w-4" />
@@ -106,10 +127,11 @@ export function PageHeader({
                 <PanelLeftOpen className="h-4 w-4" />
               )}
             </Button>
-          )}
-          {actions}
+          ))}
+          {!actionsBelow && actions}
         </div>
       </div>
+      {actionsBelow && actions && <div className="mt-2 min-w-0" data-tutorial-hint="page-actions">{actions}</div>}
     </div>
   );
 }

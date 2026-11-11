@@ -35,7 +35,9 @@ export function DocumentPageShell({
         breadcrumbs={breadcrumbs}
         actions={actions}
         sticky
-        showCommandHint
+        actionsBelow
+        dense
+        showCommandHint={false}
         showRightPanelToggle={!!rightSlot}
       />
       {status != null && (
@@ -45,7 +47,7 @@ export function DocumentPageShell({
           createdByName={createdByName}
         />
       )}
-      <div className="flex-1 p-6">{children}</div>
+      <div className="min-w-0 flex-1 p-3 sm:p-5">{children}</div>
     </PageShell>
   );
 }

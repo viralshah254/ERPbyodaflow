@@ -43,7 +43,7 @@ export function DocumentStatusBar({
   return (
     <div data-guide-status
       className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/30 px-6 py-2 text-sm shrink-0",
+        "flex flex-wrap items-center gap-x-3 gap-y-1 border-b bg-muted/30 px-3 py-2 text-sm shrink-0 sm:px-5",
         className
       )}
     >

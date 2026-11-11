@@ -101,6 +101,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { downloadProgressLabel } from "@/lib/api/client";
 import SignatureCanvas from "react-signature-canvas";
+import { useDockedDocumentSummary } from "@/components/layout/document-panel";
 import { useUIStore } from "@/stores/ui-store";
 import { useCanWriteDocType, useCanWriteFinance } from "@/lib/rbac/use-write-guard";
 import { can, Permissions } from "@/lib/permissions";
@@ -301,7 +302,8 @@ export default function DocViewPage() {
     amendSheetContentRef.current = node;
     setAmendSelectPortalHost(node);
   }, []);
-  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const summaryDocked = useDockedDocumentSummary();
+  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen) && summaryDocked;
   const [printOpen, setPrintOpen] = React.useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
   const [emailTo, setEmailTo] = React.useState("");
@@ -655,11 +657,6 @@ export default function DocViewPage() {
     org?.orgId === JOY_SUPERBAKERS_ORG_ID &&
     !document?.warehouseId?.trim();
   const odaflowSource = odaflowSourceFromDetail(document);
-  const odaflowHeaderExtraFields =
-    (odaflowSalesOrder && document?.odaflowSalesRepName ? 1 : 0) +
-    (["quote", "sales-order", "delivery-note", "invoice", "credit-note"].includes(type) ? 1 : 0) +
-    (type === "delivery-note" ? 1 : 0);
-  const detailHeaderColumns = Math.min(4 + odaflowHeaderExtraFields, 6);
 
   function openOdaflowApproval(action: "request" | "approve" | "submit") {
     setOdaflowApprovalAction(action);
@@ -1647,7 +1644,7 @@ export default function DocViewPage() {
           )}
           {type === "delivery-note" || type === "invoice" || type === "credit-note" || type === "debit-note" ? (
             <>
-              <Button variant="outline" size="sm" onClick={() => setPrintOpen(true)}>
+              <Button variant="outline" size="sm" className="hidden 2xl:inline-flex" onClick={() => setPrintOpen(true)}>
                 <Icons.Printer className="mr-2 h-4 w-4" />
                 {type === "delivery-note"
                   ? "Print DN"
@@ -1658,6 +1655,7 @@ export default function DocViewPage() {
               <Button
                 variant="outline"
                 size="sm"
+                className="hidden 2xl:inline-flex"
                 disabled={pdfDownloading}
                 onClick={() => void handleDownloadPdf()}
               >
@@ -1763,11 +1761,6 @@ export default function DocViewPage() {
           />
         ) : (
           <DocumentDetailHeader
-            className={
-              detailHeaderColumns >= 5
-                ? "sm:grid-cols-2 lg:grid-cols-5"
-                : undefined
-            }
             fields={[
               {
                 label: "Number",

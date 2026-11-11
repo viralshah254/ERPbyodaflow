@@ -2,8 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import * as Icons from "lucide-react";
-import { PageHelp } from "@/components/tutorial/PageHelp";
+import { PageHeader } from "./page-header";
 
 interface PageLayoutProps {
   title: string;
@@ -24,42 +23,14 @@ export function PageLayout({
 }: PageLayoutProps) {
   return (
     <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-      {/* Header */}
-      <div className="shrink-0 border-b bg-card px-4 py-2.5">
-        {breadcrumbs && breadcrumbs.length > 0 && (
-          <nav className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
-            {breadcrumbs.map((crumb, i) => (
-              <React.Fragment key={i}>
-                {i > 0 && <Icons.ChevronRight className="h-3 w-3" />}
-                {crumb.href ? (
-                  <a
-                    href={crumb.href}
-                    className="hover:text-foreground transition-colors"
-                  >
-                    {crumb.label}
-                  </a>
-                ) : (
-                  <span>{crumb.label}</span>
-                )}
-              </React.Fragment>
-            ))}
-          </nav>
-        )}
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0" data-tutorial-hint="page-title">
-            <h1 className="text-lg font-semibold tracking-tight text-foreground sm:text-xl">{title}</h1>
-            {description ? (
-              <p className="mt-0.5 hidden text-xs text-muted-foreground sm:line-clamp-1 sm:block">
-                {description}
-              </p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-1.5" data-tutorial-hint="page-actions">
-            {actions}
-            <PageHelp compact />
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title={title}
+        description={description}
+        breadcrumbs={breadcrumbs}
+        actions={actions}
+        showCommandHint={false}
+        sticky={false}
+      />
       {/* Content — scroll inside page card/sections, not the app chrome */}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 sm:p-4">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">

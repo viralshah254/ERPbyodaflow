@@ -28,25 +28,27 @@ export function Header() {
   const canSeeOrgProfile = permissions.includes("settings.org.read") || permissions.includes("*");
   const openDrawer = useCopilotStore((s) => s.openDrawer);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
 
   const displayName = getUserDisplayName(user);
   const userInitials = getUserInitials(user);
 
   return (
-    <header className="z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 md:gap-4">
+    <header className="z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-2 sm:px-4 md:gap-4">
       <Button
         type="button"
         variant="ghost"
         size="icon"
-        className="md:hidden"
-        aria-label="Open menu"
+        className={sidebarOpen ? "shrink-0 lg:hidden" : "shrink-0"}
+        aria-expanded={sidebarOpen}
+        aria-label={sidebarOpen ? "Close menu" : "Open menu"}
         onClick={() => toggleSidebar()}
       >
         <Menu className="h-5 w-5" />
       </Button>
       {/* Command palette trigger / Search */}
-      <div className="flex-1 max-w-md">
+      <div className="min-w-0 flex-1 max-w-md">
         <button
           type="button"
           data-tutorial-hint="command-search"
@@ -54,14 +56,14 @@ export function Header() {
           className="flex w-full items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/50"
         >
           <Search className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Search or run...</span>
+          <span className="min-w-0 flex-1 truncate">Search or run...</span>
           <kbd className="hidden sm:inline-flex h-5 items-center rounded border bg-background px-1.5 font-mono text-xs">⌘K</kbd>
         </button>
       </div>
 
       {/* Branch Selector */}
       {currentBranch && (
-        <div className="text-sm text-muted-foreground">
+        <div className="hidden max-w-40 truncate text-sm text-muted-foreground sm:block">
           {currentBranch.name}
         </div>
       )}

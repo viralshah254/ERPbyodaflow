@@ -2,14 +2,16 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { DocumentSummaryDrawer, useDockedDocumentSummary } from "./document-panel";
 import { useUIStore } from "@/stores/ui-store";
 
 /** List pages: constrain height so tables scroll inside the shell, not the window. */
-export const LIST_PAGE_SHELL_CLASS = "min-h-0 flex-1 overflow-hidden";
+export const LIST_PAGE_SHELL_CLASS = "min-h-0 min-w-0 flex-1 overflow-hidden";
 
 /** Toolbar + table column below PageHeader. */
 export const LIST_PAGE_BODY_CLASS =
-  "flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6";
+  "flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6";
 
 /** Bordered surface wrapping DataTable scrollMode="fill" (scroll inside the card). */
 export const LIST_TABLE_SURFACE_CLASS =
@@ -28,7 +30,7 @@ export const LIST_TABLE_WORKLIST_CLASS =
 
 /** Compact body under PageHeader when the table uses LIST_TABLE_VIEWPORT_CLASS. */
 export const LIST_PAGE_BODY_VIEWPORT_CLASS =
-  "flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-0 py-3";
+  "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden px-0 py-3";
 
 /** Flex child between LIST_TABLE_SURFACE and DataTable — scrolls when rows overflow. */
 export const LIST_TABLE_SCROLL_BODY_CLASS =
@@ -43,7 +45,7 @@ export const LIST_TABLE_STATIC_CLASS =
 
 /** Body for paginated list pages — page scrolls; table does not. */
 export const LIST_PAGE_BODY_PAGINATED_CLASS =
-  "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6";
+  "flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6";
 
 interface PageShellProps {
   children: React.ReactNode;
@@ -55,6 +57,12 @@ interface PageShellProps {
 /** Outer container for app pages: flex column inside dashboard scroll area (see MainLayout). Supports optional right panel. */
 export function PageShell({ children, rightSlot, className }: PageShellProps) {
   const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const docked = useDockedDocumentSummary();
+  const [drawerOpen, setDrawerOpen] = React.useState(false);
+  const hasRightSlot = rightSlot != null;
+  React.useEffect(() => {
+    if (docked || !hasRightSlot) setDrawerOpen(false);
+  }, [docked, hasRightSlot]);
 
   if (rightSlot == null) {
     return (
@@ -71,22 +79,25 @@ export function PageShell({ children, rightSlot, className }: PageShellProps) {
   }
 
   return (
-    <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", className)}>
-      <div className="flex min-h-0 flex-1 flex-row overflow-hidden">
-        <div data-guide-scroll className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-6 pt-0 sm:px-6">
-          {children}
-        </div>
-        <div
-          className={cn(
-            "shrink-0 border-l bg-card transition-all overflow-auto",
-            rightPanelOpen
-              ? "w-[min(100%,16rem)] lg:w-[18rem] max-w-[18rem]"
-              : "w-0 border-0 overflow-hidden",
+    <Sheet open={!docked && drawerOpen} onOpenChange={setDrawerOpen}>
+      <DocumentSummaryDrawer.Provider value={!docked}>
+        <div className={cn("flex min-h-0 min-w-0 flex-1 overflow-hidden", className)}>
+          <div data-guide-scroll className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
+            {children}
+          </div>
+          {docked && rightPanelOpen && (
+            <aside aria-label="Document summary" className="w-72 shrink-0 overflow-auto border-l bg-card">
+              {rightSlot}
+            </aside>
           )}
-        >
-          {rightPanelOpen ? rightSlot : null}
         </div>
-      </div>
-    </div>
+        {!docked && (
+          <SheetContent className="w-full max-w-md overflow-y-auto p-0 pt-12 sm:w-[24rem]" aria-describedby={undefined}>
+            <SheetTitle className="sr-only">Document summary</SheetTitle>
+            {rightSlot}
+          </SheetContent>
+        )}
+      </DocumentSummaryDrawer.Provider>
+    </Sheet>
   );
 }

@@ -24,7 +24,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   // Apply persisted UI preferences after hydration to avoid SSR mismatch.
   // The store initializes with safe SSR defaults; this runs only on the client.
   useEffect(() => {
-    if (window.matchMedia("(max-width: 767px)").matches) setSidebarOpen(false);
+    if (window.matchMedia("(max-width: 1023px)").matches) setSidebarOpen(false);
     const panel = localStorage.getItem("odaflow_right_panel");
     if (panel !== null) setRightPanelOpen(panel === "true");
     const compact = localStorage.getItem("odaflow_compact_mode");
@@ -78,16 +78,16 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 w-full overflow-hidden">
+    <div className="flex min-h-0 min-w-0 flex-1 w-full overflow-hidden">
       {sidebarOpen ? (
         <>
           <button
             type="button"
-            className="fixed inset-0 z-30 bg-black/40 md:hidden"
+            className="fixed inset-0 z-30 bg-black/40 lg:hidden"
             aria-label="Close menu"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="z-40 h-full shrink-0 max-md:fixed max-md:inset-y-0 max-md:left-0">
+          <div className="z-40 h-full shrink-0 max-lg:fixed max-lg:inset-y-0 max-lg:left-0">
             <AppSidebar />
           </div>
         </>
@@ -102,7 +102,7 @@ export function MainLayout({ children }: { children: React.ReactNode }) {
             <PageHelpFallback />
           </div>
           <div
-            className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-4 pb-6 pt-0 md:px-6"
+            className="box-border flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-2 pb-3 pt-0 sm:px-4 lg:px-5"
             data-tutorial-hint="page-main"
           >
             {children}
