@@ -185,6 +185,9 @@ export type JoyLoadNote = {
     stockIssued?: boolean;
   }>;
   lastError?: string;
+  loadedAt?: string;
+  invoicedAt?: string;
+  departedAt?: string;
 };
 export type JoyLoadNotes = {
   trucks: string[];
@@ -229,6 +232,11 @@ export async function allocateJoyLoad(
 export async function cancelJoyLoadNote(id: string): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
   return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} });
+}
+
+export async function markJoyLoadDeparted(id: string): Promise<JoyLoadNote> {
+  requireLiveApi(LOADS);
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/depart`, { method: "POST", body: {} });
 }
 
 export async function downloadJoyLoadNotePdf(note: { id: string; number: string }, onNotAvailable: (message: string) => void) {

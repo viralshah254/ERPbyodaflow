@@ -35,11 +35,12 @@ const PICK_PACK_FIRST_STEPS = [
 ];
 
 const JOY_DISPATCH_STEPS = [
-  "Approved sales orders",
-  "Pick list",
-  "Verify and transfer to the route warehouse",
-  "Dispatch note",
-  "Invoice from the route warehouse",
+  "Approved sales orders by delivery route",
+  "Loading note on one truck",
+  "Confirm load from DISPATCH",
+  "Finance settles shorts if needed",
+  "Invoice and delivery note for the loaded quantity",
+  "Truck left",
 ];
 
 const OPTIONS: Array<{ key: keyof SalesDocumentFlowSettings; label: string; hint: string }> = [
@@ -251,7 +252,7 @@ export default function SalesDocumentFlowPage() {
                   [
                     ["classic", "Current flow", "Delivery note first, then pick & pack, then invoice after the signed note."],
                     ["pick_pack_first", "Pick & pack first", "Pick from the sales order, then invoice and delivery note, then proof of delivery."],
-                    ["joy_dispatch", "Route dispatch", "One pick list for many orders, transfer from DISPATCH, then the invoice reduces the route warehouse."],
+                    ["joy_dispatch", "Route dispatch", "Group orders by delivery route, load one truck from DISPATCH, invoice the loaded quantity, then mark the truck as left."],
                   ] as Array<[SalesDocumentFlowMode, string, string]>
                 ).map(([mode, label, hint]) => (
                   <button

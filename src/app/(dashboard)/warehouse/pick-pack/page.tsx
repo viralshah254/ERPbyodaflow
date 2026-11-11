@@ -52,6 +52,25 @@ export default function PickPackPage() {
   const pickPackFirst = flowMode === "pick_pack_first";
 
   React.useEffect(() => {
+    let cancelled = false;
+    void fetchSalesDocumentFlowApi()
+      .then((flow) => {
+        if (cancelled) return;
+        if (flow.mode === "joy_dispatch") {
+          router.replace("/warehouse/route-pick-lists?step=load");
+          return;
+        }
+        setFlowMode(flow.mode);
+      })
+      .catch(() => {
+        if (!cancelled) setFlowMode("classic");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  React.useEffect(() => {
     const id = window.setTimeout(() => {
       setDebouncedSearch(search.trim());
       setPageOffset(0);
@@ -60,6 +79,7 @@ export default function PickPackPage() {
   }, [search]);
 
   React.useEffect(() => {
+    if (flowMode === null || flowMode === "joy_dispatch") return;
     let cancelled = false;
     if (!hasLoaded.current) setInitialLoading(true);
     else setFetching(true);
@@ -219,6 +239,14 @@ export default function PickPackPage() {
       : pickPackFirst
         ? "No sales orders match your filters."
         : "No delivery notes match your filters.";
+
+  if (flowMode === null) {
+    return (
+      <PageShell className={LIST_PAGE_SHELL_CLASS}>
+        <PageHeader title="Pick & Pack" description="Opening route loads…" sticky />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>

@@ -15,6 +15,7 @@ import {
   createJoyLoadNote,
   downloadJoyLoadNotePdf,
   fetchJoyLoadNotes,
+  markJoyLoadDeparted,
   recordJoyLoaded,
   type JoyLoadNote,
   type JoyLoadNotes,
@@ -50,28 +51,33 @@ function placeLabel(label: string): string {
 
 const QTY_INPUT = "h-8 w-24 border-muted-foreground/40 text-right tabular-nums";
 
+type BoardStep = "all" | "load" | "finance" | "leave";
+
 function WaitingRouteCard({
   route,
   trucks,
   busyTrucks,
   canLoad,
+  dispatchName,
   onCreated,
 }: {
   route: JoyWaitingRoute;
   trucks: string[];
   busyTrucks: string[];
   canLoad: boolean;
+  dispatchName: string;
   onCreated: () => Promise<void>;
 }) {
   const [truck, setTruck] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   return (
     <Card id={`route-${route.warehouseId}`}>
-      <CardHeader>
+      <CardHeader className="space-y-1">
         <CardTitle>{placeLabel(route.warehouseName)}</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {route.orderCount} order{route.orderCount === 1 ? "" : "s"}: {route.orders.map((order) => order.number).join(", ")}
+          {route.orderCount} order{route.orderCount === 1 ? "" : "s"} · picked from {placeLabel(dispatchName)}
         </p>
+        <p className="text-xs text-muted-foreground">{route.orders.map((order) => order.number).join(", ")}</p>
       </CardHeader>
       <CardContent className="space-y-4">
         <table className="w-full text-sm">
@@ -79,8 +85,7 @@ function WaitingRouteCard({
             <tr>
               <th className="py-1 pr-3">SKU</th>
               <th className="py-1 pr-3">Product</th>
-              <th className="py-1 pr-3">Unit</th>
-              <th className="py-1 text-right">Total to load</th>
+              <th className="py-1 pr-3 text-right">Ordered</th>
             </tr>
           </thead>
           <tbody>
@@ -88,8 +93,7 @@ function WaitingRouteCard({
               <tr key={product.productId} className="border-t">
                 <td className="py-1 pr-3">{product.sku ?? ""}</td>
                 <td className={`py-1 pr-3 ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
-                <td className="py-1 pr-3">{product.unit ?? ""}</td>
-                <td className="py-1 text-right font-medium">{product.orderedQty}</td>
+                <td className="py-1 text-right font-medium tabular-nums">{product.orderedQty}</td>
               </tr>
             ))}
           </tbody>
@@ -128,13 +132,25 @@ function WaitingRouteCard({
               Create loading note
             </Button>
           </div>
-        ) : null}
+        ) : (
+          <p className="text-sm text-muted-foreground">Warehouse staff choose the truck and create the note.</p>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canLoad: boolean; onChanged: () => Promise<void> }) {
+function LoadingNoteCard({
+  note,
+  canLoad,
+  dispatchName,
+  onChanged,
+}: {
+  note: JoyLoadNote;
+  canLoad: boolean;
+  dispatchName: string;
+  onChanged: () => Promise<void>;
+}) {
   const [loaded, setLoaded] = React.useState<Record<string, string>>({});
   const [busy, setBusy] = React.useState(false);
   const rows = note.lines.map((line) => {
@@ -145,18 +161,16 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
   const full = !invalid && rows.every((row) => Math.abs(row.short) < 0.0001);
   return (
     <Card id={`note-${note.id}`}>
-      <CardHeader>
+      <CardHeader className="space-y-1">
         <CardTitle>
           {note.number} · {note.truck}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          {placeLabel(note.routeWarehouseName)} · loaded from {placeLabel(note.fulfilmentWarehouseName)} ·{" "}
-          {note.salesOrderIds.length} order
-          {note.salesOrderIds.length === 1 ? "" : "s"}
+          {placeLabel(note.routeWarehouseName)} · picked from {placeLabel(dispatchName || note.fulfilmentWarehouseName)}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <Button variant="outline" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
+        <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loading note
         </Button>
         <table className="w-full text-sm">
@@ -164,8 +178,8 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
             <tr>
               <th className="py-1 pr-3">SKU</th>
               <th className="py-1 pr-3">Product</th>
-              <th className="py-1 pr-3 text-right">Total</th>
-              <th className="py-1 pr-3">Loaded</th>
+              <th className="py-1 pr-3 text-right">Ordered</th>
+              <th className="py-1 pr-3 text-right">Loaded</th>
               <th className="py-1" />
             </tr>
           </thead>
@@ -174,23 +188,25 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
               <tr key={line.productId} className={`border-t ${Math.abs(short) > 0.0001 ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}>
                 <td className="py-1 pr-3">{line.sku ?? ""}</td>
                 <td className={`py-1 pr-3 ${CAPS_ON_PRODUCT_CLASS}`}>{line.name}</td>
-                <td className="py-1 pr-3 text-right">{line.orderedQty}</td>
+                <td className="py-1 pr-3 text-right tabular-nums">{line.orderedQty}</td>
                 <td className="py-1 pr-3">
-                  <Input
-                    className={QTY_INPUT}
-                    inputMode="decimal"
-                    disabled={!canLoad}
-                    value={loaded[line.productId] ?? String(line.orderedQty)}
-                    onChange={(event) => setLoaded((current) => ({ ...current, [line.productId]: event.target.value }))}
-                  />
+                  <div className="flex justify-end">
+                    <Input
+                      className={QTY_INPUT}
+                      inputMode="decimal"
+                      disabled={!canLoad}
+                      value={loaded[line.productId] ?? String(line.orderedQty)}
+                      onChange={(event) => setLoaded((current) => ({ ...current, [line.productId]: event.target.value }))}
+                    />
+                  </div>
                 </td>
-                <td className="py-1 text-xs text-muted-foreground">{short > 0.0001 ? `Short ${short}` : ""}</td>
+                <td className="py-1 text-xs text-amber-700 dark:text-amber-400">{short > 0.0001 ? `Short ${short}` : ""}</td>
               </tr>
             ))}
           </tbody>
         </table>
         {canLoad ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-3">
             <Button
               disabled={invalid || busy}
               onClick={() => {
@@ -202,7 +218,7 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
                   .then(async (result) => {
                     toast.success(
                       result.status === "INVOICED"
-                        ? `${note.number} loaded in full. Invoices and delivery notes are created.`
+                        ? `${note.number} loaded in full. Invoices are ready.`
                         : `${note.number} is short. Finance will choose which orders to reduce.`
                     );
                     await onChanged();
@@ -214,10 +230,11 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
                   .finally(() => setBusy(false));
               }}
             >
-              {full ? "Confirm full load and invoice" : "Send short load to finance"}
+              {full ? "Confirm load" : "Confirm short load"}
             </Button>
-            <Button
-              variant="outline"
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
               disabled={busy}
               onClick={() => {
                 setBusy(true);
@@ -230,11 +247,11 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
                   .finally(() => setBusy(false));
               }}
             >
-              Cancel loading note
-            </Button>
+              Cancel
+            </button>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">The warehouse records what was loaded.</p>
+          <p className="text-sm text-muted-foreground">The warehouse records what went on the truck.</p>
         )}
       </CardContent>
     </Card>
@@ -259,18 +276,25 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
   });
   const ready = lines.every((line) => !line.invalid && Math.abs(line.gap) < 0.0001);
   const shortLines = lines.filter((line) => line.short);
+  const shortSummary = shortLines
+    .map((row) => `${row.line.name} short ${roundQty(row.line.orderedQty - row.loaded)}`)
+    .join("; ");
   return (
     <Card id={`note-${note.id}`}>
-      <CardHeader>
+      <CardHeader className="space-y-1">
         <CardTitle>
           {note.number} · {note.truck}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          {placeLabel(note.routeWarehouseName)} ·{" "}
-          {note.status === "INVOICING" ? "invoicing now" : "short load, waiting for finance"}
+          {placeLabel(note.routeWarehouseName)} · short — waiting for finance
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        {shortLines.length ? (
+          <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200">
+            Truck short — finance must choose which orders to reduce. {shortSummary}
+          </div>
+        ) : null}
         {note.lastError ? (
           <div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
             <p className="font-medium">The last attempt did not finish.</p>
@@ -285,9 +309,6 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
             </span>
           </p>
         ) : null}
-        {shortLines.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing is short. Create the invoices to finish this load.</p>
-        ) : null}
         {shortLines.map(({ line, loaded, allocations, gap }) => {
           const matched = Math.abs(gap) < 0.0001;
           return (
@@ -298,7 +319,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                   {line.name}
                 </p>
                 <p className="text-sm tabular-nums">
-                  Ordered {line.orderedQty} · loaded <span className="font-semibold">{loaded}</span>
+                  Ordered {line.orderedQty} · loaded <span className="font-semibold">{loaded}</span> · to invoice
                 </p>
               </div>
               <table className="w-full text-sm">
@@ -307,7 +328,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                     <th className="px-3 py-1.5 font-normal">Order</th>
                     <th className="px-3 py-1.5 font-normal">Customer</th>
                     <th className="px-3 py-1.5 text-right font-normal">Ordered</th>
-                    <th className="px-3 py-1.5 text-right font-normal">Invoice</th>
+                    <th className="px-3 py-1.5 text-right font-normal">To invoice</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -361,45 +382,101 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 )
               )
                 .then(async () => {
-                  toast.success(`${note.number} invoiced. Delivery notes are created.`);
+                  toast.success(`${note.number} invoiced. Ready for the truck to leave.`);
                   await onChanged();
                 })
                 .catch(async (error) => {
-                  toast.error(errorMessage(error, "Could not invoice this load"));
+                  toast.error(errorMessage(error, "Could not create the invoices"));
                   await onChanged();
                 })
                 .finally(() => setBusy(false));
             }}
           >
-            Create invoices and delivery notes
+            Create invoices
           </Button>
         ) : (
-          <p className="text-sm text-muted-foreground">Finance chooses which orders to reduce.</p>
+          <p className="text-sm text-muted-foreground">Finance chooses which orders to reduce, then creates the invoices.</p>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function InvoicedNoteCard({ note }: { note: JoyLoadNote }) {
+function ReadyToLeaveCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canLoad: boolean; onChanged: () => Promise<void> }) {
+  const [busy, setBusy] = React.useState(false);
   return (
     <Card id={`note-${note.id}`}>
-      <CardHeader>
+      <CardHeader className="space-y-1">
         <CardTitle>
           {note.number} · {note.truck}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)}</p>
+        <p className="text-sm text-muted-foreground">
+          {placeLabel(note.routeWarehouseName)} · ready to leave
+        </p>
       </CardHeader>
-      <CardContent className="space-y-1 text-sm">
+      <CardContent className="space-y-3">
+        <div className="space-y-1 text-sm">
+          {note.results.map((row) => (
+            <div key={row.salesOrderId} className="flex flex-wrap gap-3">
+              {row.invoiceId ? (
+                <Link className="text-primary hover:underline" href={`/docs/invoice/${row.invoiceId}`}>
+                  {row.invoiceNumber}
+                </Link>
+              ) : null}
+              {row.deliveryNoteId ? (
+                <Link className="text-primary hover:underline" href={`/docs/delivery-note/${row.deliveryNoteId}`}>
+                  {row.deliveryNoteNumber}
+                </Link>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Sales orders keep the ordered quantities. Invoices show what was loaded.
+        </p>
+        {canLoad ? (
+          <Button
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void markJoyLoadDeparted(note.id)
+                .then(async () => {
+                  toast.success(`${note.truck} marked as left.`);
+                  await onChanged();
+                })
+                .catch((error) => toast.error(errorMessage(error, "Could not mark the truck as left")))
+                .finally(() => setBusy(false));
+            }}
+          >
+            Truck left
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">Warehouse marks when the truck leaves.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function LeftTodayCard({ note }: { note: JoyLoadNote }) {
+  return (
+    <Card id={`note-${note.id}`}>
+      <CardHeader className="space-y-1 py-4">
+        <CardTitle className="text-base">
+          {note.number} · {note.truck}
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)} · left today</p>
+      </CardHeader>
+      <CardContent className="space-y-1 pb-4 text-sm">
         {note.results.map((row) => (
           <div key={row.salesOrderId} className="flex flex-wrap gap-3">
             {row.invoiceId ? (
-              <Link className="text-primary" href={`/docs/invoice/${row.invoiceId}`}>
+              <Link className="text-primary hover:underline" href={`/docs/invoice/${row.invoiceId}`}>
                 {row.invoiceNumber}
               </Link>
             ) : null}
             {row.deliveryNoteId ? (
-              <Link className="text-primary" href={`/docs/delivery-note/${row.deliveryNoteId}`}>
+              <Link className="text-primary hover:underline" href={`/docs/delivery-note/${row.deliveryNoteId}`}>
                 {row.deliveryNoteNumber}
               </Link>
             ) : null}
@@ -410,11 +487,29 @@ function InvoicedNoteCard({ note }: { note: JoyLoadNote }) {
   );
 }
 
-function Section({ title, empty, children }: { title: string; empty: string; children: React.ReactNode[] }) {
+function Section({
+  id,
+  title,
+  empty,
+  children,
+}: {
+  id: string;
+  title: string;
+  empty: string;
+  children: React.ReactNode[];
+}) {
+  if (!children.length) {
+    return (
+      <section id={id} className="space-y-2">
+        <h2 className="text-lg font-semibold">{title}</h2>
+        <p className="text-sm text-muted-foreground">{empty}</p>
+      </section>
+    );
+  }
   return (
-    <section className="space-y-3">
+    <section id={id} className="space-y-3">
       <h2 className="text-lg font-semibold">{title}</h2>
-      {children.length ? children : <p className="text-sm text-muted-foreground">{empty}</p>}
+      {children}
     </section>
   );
 }
@@ -423,6 +518,7 @@ function JoyRouteLoadsInner() {
   const params = useSearchParams();
   const focusWarehouse = params.get("warehouse") ?? "";
   const focusNote = params.get("note") ?? "";
+  const step = (params.get("step") as BoardStep | null) ?? "all";
   const canLoad = useHasPermission("inventory.write");
   const canFinance = useHasPermission("finance.write");
   const [data, setData] = React.useState<JoyLoadNotes | null>(null);
@@ -444,48 +540,101 @@ function JoyRouteLoadsInner() {
     const note = focusNote
       ? data.notes.find((row) => row.id === focusNote)
       : data.notes.find((row) => row.routeWarehouseId === focusWarehouse && row.status !== "INVOICED");
-    const target = note ? `note-${note.id}` : focusWarehouse ? `route-${focusWarehouse}` : "";
+    const target = note
+      ? `note-${note.id}`
+      : focusWarehouse
+        ? `route-${focusWarehouse}`
+        : step === "load"
+          ? "step-load"
+          : step === "finance"
+            ? "step-finance"
+            : step === "leave"
+              ? "step-leave"
+              : "";
     if (target) document.getElementById(target)?.scrollIntoView({ block: "start" });
-  }, [data, focusNote, focusWarehouse]);
+  }, [data, focusNote, focusWarehouse, step]);
 
   if (!data) return <p className="text-sm text-muted-foreground">Loading routes…</p>;
 
   const loading = data.notes.filter((note) => note.status === "OPEN");
   const finance = data.notes.filter((note) => note.status === "AWAITING_FINANCE" || note.status === "INVOICING");
-  const invoiced = data.notes.filter((note) => note.status === "INVOICED");
+  const ready = data.notes.filter((note) => note.status === "INVOICED" && !note.departedAt);
+  const left = data.notes.filter((note) => note.status === "INVOICED" && note.departedAt);
+  const showLoad = step === "all" || step === "load";
+  const showFinance = step === "all" || step === "finance";
+  const showLeave = step === "all" || step === "leave";
+  const hideEmpty = step === "all";
+
+  const loadBlocks =
+    showLoad && (!hideEmpty || data.waiting.length || loading.length)
+      ? [
+          <Section key="waiting" id="step-load" title="1. Choose a truck" empty="No approved orders are waiting for a truck.">
+            {data.waiting.map((route) => (
+              <WaitingRouteCard
+                key={route.warehouseId}
+                route={route}
+                trucks={data.trucks}
+                busyTrucks={data.busyTrucks}
+                canLoad={canLoad}
+                dispatchName={data.dispatchWarehouseName}
+                onCreated={reload}
+              />
+            ))}
+          </Section>,
+          <Section key="loading" id="step-loading" title="2. Confirm load" empty="No truck is being loaded.">
+            {loading.map((note) => (
+              <LoadingNoteCard
+                key={note.id}
+                note={note}
+                canLoad={canLoad}
+                dispatchName={data.dispatchWarehouseName}
+                onChanged={reload}
+              />
+            ))}
+          </Section>,
+        ]
+      : [];
+  const financeBlock =
+    showFinance && (!hideEmpty || finance.length)
+      ? [
+          <Section key="finance" id="step-finance" title="3. Short loads for finance" empty="No short loads are waiting.">
+            {finance.map((note) => (
+              <FinanceNoteCard key={`${note.id}:${note.status}`} note={note} canFinance={canFinance} onChanged={reload} />
+            ))}
+          </Section>,
+        ]
+      : [];
+  const leaveBlocks =
+    showLeave && (!hideEmpty || ready.length || left.length)
+      ? [
+          <Section key="ready" id="step-leave" title="4. Ready to leave" empty="No invoiced loads are waiting to leave.">
+            {ready.map((note) => (
+              <ReadyToLeaveCard key={note.id} note={note} canLoad={canLoad} onChanged={reload} />
+            ))}
+          </Section>,
+          <Section key="left" id="step-left" title="5. Left today" empty="No trucks have left yet today.">
+            {left.map((note) => (
+              <LeftTodayCard key={note.id} note={note} />
+            ))}
+          </Section>,
+        ]
+      : [];
+
+  // Put the section with outstanding work first so the next action is obvious.
+  const sections =
+    finance.length && step === "all"
+      ? [...financeBlock, ...loadBlocks, ...leaveBlocks]
+      : ready.length && !loading.length && !data.waiting.length && step === "all"
+        ? [...leaveBlocks, ...loadBlocks, ...financeBlock]
+        : [...loadBlocks, ...financeBlock, ...leaveBlocks];
 
   return (
     <div className="space-y-8">
       <p className="text-sm text-muted-foreground">
-        Goods are picked from {data.dispatchWarehouseName}. Each delivery warehouse goes on one truck.
+        Sales orders keep what was ordered. The loading note records what went on the truck. Invoices bill the loaded
+        quantity. Goods are picked from {placeLabel(data.dispatchWarehouseName)}.
       </p>
-      <Section title="Waiting for a truck" empty="No approved orders are waiting for a truck.">
-        {data.waiting.map((route) => (
-          <WaitingRouteCard
-            key={route.warehouseId}
-            route={route}
-            trucks={data.trucks}
-            busyTrucks={data.busyTrucks}
-            canLoad={canLoad}
-            onCreated={reload}
-          />
-        ))}
-      </Section>
-      <Section title="Loading" empty="No truck is being loaded.">
-        {loading.map((note) => (
-          <LoadingNoteCard key={note.id} note={note} canLoad={canLoad} onChanged={reload} />
-        ))}
-      </Section>
-      <Section title="Short loads for finance" empty="No short loads are waiting.">
-        {finance.map((note) => (
-          <FinanceNoteCard key={`${note.id}:${note.status}`} note={note} canFinance={canFinance} onChanged={reload} />
-        ))}
-      </Section>
-      <Section title="Invoiced this week" empty="Nothing invoiced in the last 7 days.">
-        {invoiced.map((note) => (
-          <InvoicedNoteCard key={note.id} note={note} />
-        ))}
-      </Section>
+      {sections.length ? sections : <p className="text-sm text-muted-foreground">Nothing needs attention on this step.</p>}
     </div>
   );
 }

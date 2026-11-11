@@ -22,6 +22,7 @@ import {
   type DispatchBatchRow,
   type DistributionVehicleRow,
 } from "@/lib/api/logistics";
+import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -106,9 +107,29 @@ function rowQty(row: WarehousePickPackRow): string {
 export default function WarehouseDispatchPage() {
   const router = useRouter();
   const canWrite = useCanWriteInventory();
+  const [joyRedirecting, setJoyRedirecting] = React.useState(true);
   const [rows, setRows] = React.useState<WarehousePickPackRow[]>([]);
   const [runs, setRuns] = React.useState<DispatchBatchRow[]>([]);
   const [notesLoading, setNotesLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void fetchSalesDocumentFlowApi()
+      .then((flow) => {
+        if (cancelled) return;
+        if (flow.mode === "joy_dispatch") {
+          router.replace("/warehouse/route-pick-lists?step=leave");
+          return;
+        }
+        setJoyRedirecting(false);
+      })
+      .catch(() => {
+        if (!cancelled) setJoyRedirecting(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
   const [runsLoading, setRunsLoading] = React.useState(true);
   const [selected, setSelected] = React.useState<Map<string, WarehousePickPackRow>>(new Map());
   const [noteSearchInput, setNoteSearchInput] = React.useState("");
@@ -180,6 +201,7 @@ export default function WarehouseDispatchPage() {
   }, [runSearchInput]);
 
   React.useEffect(() => {
+    if (joyRedirecting) return;
     let cancelled = false;
     setNotesLoading(true);
     void fetchPickPackPage({ status: "PACKED", search: noteSearch, limit: notePageSize, offset: noteOffset })
@@ -203,9 +225,10 @@ export default function WarehouseDispatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [noteSearch, noteOffset, notePageSize, listVersion]);
+  }, [joyRedirecting, noteSearch, noteOffset, notePageSize, listVersion]);
 
   React.useEffect(() => {
+    if (joyRedirecting) return;
     let cancelled = false;
     setRunsLoading(true);
     void fetchDispatchBatchPage({ search: runSearch, date: runDate, limit: runPageSize, offset: runOffset })
@@ -228,11 +251,12 @@ export default function WarehouseDispatchPage() {
     return () => {
       cancelled = true;
     };
-  }, [runSearch, runDate, runOffset, runPageSize, listVersion]);
+  }, [joyRedirecting, runSearch, runDate, runOffset, runPageSize, listVersion]);
 
   React.useEffect(() => {
+    if (joyRedirecting) return;
     void loadVehicles();
-  }, [loadVehicles]);
+  }, [joyRedirecting, loadVehicles]);
 
   const selectedRows = React.useMemo(() => [...selected.values()], [selected]);
   const fleetByCode = React.useMemo(() => {
@@ -383,6 +407,14 @@ export default function WarehouseDispatchPage() {
         router.push("/docs/delivery-note?status=IN_TRANSIT");
       }
     }
+  }
+
+  if (joyRedirecting) {
+    return (
+      <PageShell className={LIST_PAGE_SHELL_CLASS}>
+        <PageHeader title="Dispatch" description="Opening route loads…" sticky />
+      </PageShell>
+    );
   }
 
   return (
