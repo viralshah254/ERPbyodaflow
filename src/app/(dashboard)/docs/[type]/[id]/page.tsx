@@ -260,8 +260,23 @@ function roundCreditQty(value: number): number {
 }
 
 /** Quantity on this document that is not already on another credit note. */
-function openCreditQty(line: { qty?: number; convertedQuantity?: number }): number {
-  return Math.max(0, roundCreditQty((line.qty ?? 0) - (line.convertedQuantity ?? 0)));
+function openCreditQty(line: { qty?: number; convertedQuantity?: number; creditCapacity?: { available: number } }): number {
+  return line.creditCapacity?.available ?? Math.max(0, roundCreditQty((line.qty ?? 0) - (line.convertedQuantity ?? 0)));
+}
+
+function CreditLineCapacity({ capacity, unit }: {
+  capacity?: { credited: number; reserved: number; available: number };
+  unit?: string;
+}) {
+  if (!capacity) return <p className="text-xs text-muted-foreground">Credit availability unavailable</p>;
+  const quantity = (value: number) => `${value.toLocaleString()}${unit ? ` ${unit}` : ""}`;
+  return (
+    <dl className="flex flex-wrap gap-x-3 gap-y-1 text-xs tabular-nums">
+      <div><dt className="inline text-muted-foreground">Already credited </dt><dd className="inline">{quantity(capacity.credited)}</dd></div>
+      {capacity.reserved > 0 && <div><dt className="inline text-muted-foreground">On other credits </dt><dd className="inline">{quantity(capacity.reserved)}</dd></div>}
+      <div><dt className="inline text-muted-foreground">Available to credit </dt><dd className="inline font-semibold">{quantity(capacity.available)}</dd></div>
+    </dl>
+  );
 }
 
 export default function DocViewPage() {
@@ -948,7 +963,7 @@ export default function DocViewPage() {
         const raw = creditQtyDraft[line.id] ?? String(line.qty ?? 0);
         const qty = roundCreditQty(Number(raw));
         if (!Number.isFinite(qty) || !(qty > 0)) return [];
-        const cap = line.sourceQuantity != null && line.sourceQuantity > 0 ? line.sourceQuantity : undefined;
+        const cap = line.creditCapacity?.available ?? (line.sourceQuantity != null && line.sourceQuantity > 0 ? line.sourceQuantity : undefined);
         if (cap != null && qty > cap + 0.001) {
           throw new Error(`${line.description} can be credited up to ${cap}.`);
         }
@@ -2385,6 +2400,9 @@ export default function DocViewPage() {
                         >
                           <div className="min-w-0">
                             <DocumentLineProductDescription line={line} fmcgOrg={fmcgOrg} />
+                            {isCreditNoteDoc(type) && document.status === "DRAFT" && (
+                              <CreditLineCapacity capacity={line.creditCapacity} unit={line.unit} />
+                            )}
                             {line.sourceDocumentType && line.sourceDocumentId ? (
                               <p className="text-xs text-muted-foreground">
                                 From {line.sourceDocumentType.replace(/-/g, " ")}
@@ -2445,7 +2463,7 @@ export default function DocViewPage() {
                                 type="number"
                                 min={0}
                                 step="any"
-                                max={line.sourceQuantity && line.sourceQuantity > 0 ? line.sourceQuantity : undefined}
+                                max={line.creditCapacity?.available ?? (line.sourceQuantity && line.sourceQuantity > 0 ? line.sourceQuantity : undefined)}
                                 className="h-8 px-1 text-right tabular-nums"
                                 value={creditQtyDraft[line.id] ?? String(line.qty ?? "")}
                                 onChange={(e) => {
@@ -2453,9 +2471,10 @@ export default function DocViewPage() {
                                   if (!lineId) return;
                                   const raw = e.target.value;
                                   const cap =
-                                    line.sourceQuantity != null && line.sourceQuantity > 0
+                                    line.creditCapacity?.available ??
+                                    (line.sourceQuantity != null && line.sourceQuantity > 0
                                       ? line.sourceQuantity
-                                      : undefined;
+                                      : undefined);
                                   const next =
                                     raw !== "" && cap != null && Number(raw) > cap ? String(cap) : raw;
                                   setCreditQtyDraft((prev) => ({ ...prev, [lineId]: next }));
@@ -2709,11 +2728,8 @@ export default function DocViewPage() {
                     return (
                       <div key={lineId || line.description} className="grid grid-cols-[minmax(0,1fr)_88px] items-center gap-2 text-sm">
                         <div className="min-w-0">
-                          <p className={`truncate ${CAPS_ON_PRODUCT_CLASS}`}>{line.description}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {open > 0 ? `${open} still open` : "No quantity available (credits or linked drafts)"}
-                            {line.unit ? ` ${line.unit}` : ""}
-                          </p>
+                          <p className={`break-words ${CAPS_ON_PRODUCT_CLASS}`}>{line.description}</p>
+                          <CreditLineCapacity capacity={line.creditCapacity} unit={line.unit} />
                         </div>
                         <Input
                           type="number"

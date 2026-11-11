@@ -37,6 +37,7 @@ type BackendDocumentLine = {
   sourceDocumentType?: DocTypeKey;
   sourceLineId?: string;
   sourceQuantity?: number;
+  creditCapacity?: { credited: number; reserved: number; available: number };
   convertedQuantity?: number;
   remainingQuantity?: number;
   taxCodeId?: string;
@@ -510,6 +511,7 @@ function mapDocumentDetail(
       sourceDocumentType: line.sourceDocumentType,
       sourceLineId: line.sourceLineId,
       sourceQuantity: line.sourceQuantity,
+      creditCapacity: line.creditCapacity,
       orderedQuantity: line.orderedQuantity ?? line.orderedWeightKg ?? line.sourceQuantity,
       ...(typeof line.receivedWeightKg === "number" ? { receivedWeightKg: line.receivedWeightKg } : {}),
       ...(typeof line.orderedWeightKg === "number" ? { orderedWeightKg: line.orderedWeightKg } : {}),

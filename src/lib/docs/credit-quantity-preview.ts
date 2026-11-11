@@ -9,7 +9,8 @@ export function creditQuantityPreview(lines: DocumentDetailRecord["lines"], quan
     const input = Number(raw);
     if (!raw.trim() || !Number.isFinite(input) || input < 0) return { total, tax, selected, error: "Enter a valid non-negative quantity on every line. Use 0 to leave a line off." };
     const qty = Math.round(input * 100) / 100;
-    if (line.sourceQuantity != null && line.sourceQuantity > 0 && qty > line.sourceQuantity + 0.001) return { total, tax, selected, error: `${line.description} exceeds its original source quantity.` };
+    if (line.creditCapacity && qty > line.creditCapacity.available + 0.001) return { total, tax, selected, error: `${line.description} has only ${line.creditCapacity.available} available to credit.` };
+    if (!line.creditCapacity && line.sourceQuantity != null && line.sourceQuantity > 0 && qty > line.sourceQuantity + 0.001) return { total, tax, selected, error: `${line.description} exceeds its original source quantity.` };
     if (!qty) continue;
     const original = line.qty ?? 0;
     if (!(original > 0)) return { total, tax, selected, error: "Reload this credit from its original document before increasing a zero-quantity line." };

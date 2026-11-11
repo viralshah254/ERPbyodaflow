@@ -267,6 +267,7 @@ export type DocumentDetailRecord = {
     sourceDocumentType?: DocTypeKey;
     sourceLineId?: string;
     sourceQuantity?: number;
+    creditCapacity?: { credited: number; reserved: number; available: number };
     orderedQuantity?: number;
     shippedQuantity?: number;
     backorderQuantity?: number;
