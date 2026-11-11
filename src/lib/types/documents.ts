@@ -340,7 +340,7 @@ export type DocumentDetailRecord = {
   kraSigning?: KraSigningRecord | null;
   /** FMCG sales document flow: separate status tracks and the next warehouse action. */
   salesFlow?: {
-    mode: "classic" | "pick_pack_first";
+    mode: "classic" | "pick_pack_first" | "joy_dispatch";
     steps: string[];
     actions: string[];
     pickPack?: { id: string; number: string; status: string } | null;

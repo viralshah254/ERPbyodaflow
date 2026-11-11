@@ -136,6 +136,29 @@ export type JoyMovementSummary = {
   reason: string;
 };
 
+export type JoyRouteOrderLine = { lineId: string; productId: string; name: string; quantity: number };
+export type JoyRouteOrder = { id: string; number: string; customerName: string; branchName: string; lines: JoyRouteOrderLine[] };
+export type JoyRouteProduct = { productId: string; name: string; orderedQty: number };
+export type JoyRouteLoad = {
+  trucks: string[];
+  dispatchWarehouseName: string;
+  routes: Array<{ warehouseId: string; warehouseName: string; orderCount: number; orders: JoyRouteOrder[]; products: JoyRouteProduct[] }>;
+};
+
+export async function fetchJoyRouteLoads(): Promise<JoyRouteLoad> {
+  requireLiveApi("Route loads");
+  return apiRequest("/api/joy-dispatch/route-loads");
+}
+
+export async function invoiceJoyRouteLoad(input: {
+  warehouseId: string;
+  truck: string;
+  lines: Array<{ productId: string; loadedQty: number; orders: Array<{ salesOrderId: string; lineId: string; quantity: number }> }>;
+}): Promise<{ invoices: Array<{ id: string; number: string }>; deliveryNotes: Array<{ id: string; number: string }> }> {
+  requireLiveApi("Route loads");
+  return apiRequest("/api/joy-dispatch/route-loads/invoice", { method: "POST", body: input });
+}
+
 export async function fetchJoyMovementSummary(warehouseId: string, from: string, to: string) {
   requireLiveApi("Warehouse movement summary");
   const params = new URLSearchParams({ warehouseId, from, to });

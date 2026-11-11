@@ -104,10 +104,12 @@ it("changes price and VAT tags locally without changing customer defaults or aut
 it("keeps a Joy sales order on the header until a delivery warehouse is selected", async () => {
   render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{ ...doc("sales-order"), warehouseId: "" }} />);
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
-  expect(screen.getByText(/Delivery warehouse/)).toBeInTheDocument();
+  const routeWarehouse = screen.getByText(/Route warehouse/);
+  const branch = screen.getByText("Branch");
+  expect(routeWarehouse.compareDocumentPosition(branch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.getByText("This store is the route the order is delivered on.")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
-  expect(await screen.findByText("Select the delivery warehouse. That store is the route this order is going to.")).toBeInTheDocument();
+  expect(await screen.findByText("Select the route warehouse. That store is the route this order is going to.")).toBeInTheDocument();
   expect(screen.getByText(/Step 1 of 3/)).toBeInTheDocument();
   expect(screen.queryByTestId("edit-sheet")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Review & Submit" }));
@@ -118,7 +120,7 @@ it("does not ask other organisations for a delivery warehouse on a sales order",
   state.orgId = "org-other";
   render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{ ...doc("sales-order"), warehouseId: "" }} />);
   await waitFor(() => expect(screen.getByRole("button", { name: "Next" })).toBeEnabled());
-  expect(screen.queryByText(/Delivery warehouse/)).not.toBeInTheDocument();
+  expect(screen.queryByText(/Route warehouse/)).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
   expect(await screen.findByTestId("edit-sheet")).toBeInTheDocument();
 });

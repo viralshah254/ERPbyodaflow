@@ -1625,9 +1625,9 @@ export function DocumentCreateWizard({
     if (String(form.getValues("warehouse") ?? "").trim()) return false;
     form.setError("warehouse", {
       type: "required",
-      message: "Select the delivery warehouse. That store is the route this order is going to.",
+      message: "Select the route warehouse. That store is the route this order is going to.",
     });
-    toast.error("Select the delivery warehouse. That store is the route this order is going to.");
+    toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
   }, [form, joyDeliveryWarehouse]);
 
@@ -2070,7 +2070,7 @@ export function DocumentCreateWizard({
   const baseHeaderFields = headerSection?.fields ?? [];
   const deliveryWarehouseField: FormFieldConfig = {
     id: "warehouse",
-    label: "Delivery warehouse",
+    label: "Route warehouse",
     type: "select",
     required: true,
   };
@@ -2078,11 +2078,11 @@ export function DocumentCreateWizard({
     joyDeliveryWarehouse && !baseHeaderFields.some((field) => field.id === "warehouse")
       ? (() => {
           const branchIndex = baseHeaderFields.findIndex((field) => field.id === "branch");
-          if (branchIndex < 0) return [...baseHeaderFields, deliveryWarehouseField];
+          if (branchIndex < 0) return [deliveryWarehouseField, ...baseHeaderFields];
           return [
-            ...baseHeaderFields.slice(0, branchIndex + 1),
+            ...baseHeaderFields.slice(0, branchIndex),
             deliveryWarehouseField,
-            ...baseHeaderFields.slice(branchIndex + 1),
+            ...baseHeaderFields.slice(branchIndex),
           ];
         })()
       : baseHeaderFields;
@@ -2711,7 +2711,11 @@ export function DocumentCreateWizard({
                       key={f.id}
                       field={f}
                       form={form}
-                      options={fieldOptions[f.id]}
+                      options={
+                        joyDeliveryWarehouse && f.id === "warehouse"
+                          ? (fieldOptions[f.id] ?? []).filter((option) => !/dispatch/i.test(option.label))
+                          : fieldOptions[f.id]
+                      }
                       selectedPartyOption={selectedPartyOption}
                       selectedWarehouseOption={selectedWarehouseOption}
                       warehouseOptionsLoading={!branchWarehouseReady}
@@ -3086,7 +3090,7 @@ export function DocumentCreateWizard({
                 </div>
                 {joyDeliveryWarehouse ? (
                   <div className="space-y-1">
-                    <span className="text-muted-foreground">Delivery warehouse</span>
+                    <span className="text-muted-foreground">Route warehouse</span>
                     <p className="font-medium">
                       {(fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
                         form.watch("warehouse") ||

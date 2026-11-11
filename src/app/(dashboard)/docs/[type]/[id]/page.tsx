@@ -1853,10 +1853,14 @@ export default function DocViewPage() {
               ...(type === "sales-order" && org?.orgId === JOY_SUPERBAKERS_ORG_ID
                 ? [
                     {
-                      label: "Delivery warehouse",
+                      label: "Route warehouse",
                       value: document?.warehouseId?.trim()
                         ? (deliveryNoteWarehouseLabel ?? document.warehouseId)
                         : "Not selected",
+                    },
+                    {
+                      label: "Fulfilment warehouse",
+                      value: "DISPATCH",
                     },
                   ]
                 : []),
@@ -3652,8 +3656,16 @@ function DynamicNextStepsPanel({
       }
     } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
-    } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
-      if (document?.salesFlow?.mode === "pick_pack_first") {
+      } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
+      if (document?.salesFlow?.mode === "joy_dispatch") {
+        steps.push({
+          icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
+          text: "Approved. Load this route with the other orders for the same delivery warehouse.",
+          href: `/warehouse/route-pick-lists?warehouse=${encodeURIComponent(document.warehouseId ?? "")}`,
+          actionLabel: "Load this route",
+          variant: "default",
+        });
+      } else if (document?.salesFlow?.mode === "pick_pack_first") {
         const pack = document.salesFlow.pickPack;
         const packStatus = String(pack?.status ?? "").toUpperCase();
         if (document.salesFlow.actions.includes("start-pick-pack")) {
