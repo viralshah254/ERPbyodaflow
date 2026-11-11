@@ -851,10 +851,10 @@ export default function DocViewPage() {
           deliveryNote: null,
           tracks: {
             orderStatus: "APPROVED",
-            invoiceStatus: "DRAFT",
+            invoiceStatus: "NOT_CREATED",
             kraStatus: "NOT_SUBMITTED",
             dispatchStatus: "PENDING",
-            deliveryStatus: "AWAITING_POD",
+            deliveryStatus: "NOT_DISPATCHED",
             podStatus: "NOT_RECEIVED",
           },
           kraLabel: "KRA: Not submitted",

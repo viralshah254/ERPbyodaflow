@@ -41,6 +41,15 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+/** Older notes saved "C4 FRIDAY - C4 FRIDAY" when a warehouse code equals its name. */
+function placeLabel(label: string): string {
+  const [code, ...rest] = label.split(" - ");
+  const name = rest.join(" - ");
+  return name && code.trim().toUpperCase() === name.trim().toUpperCase() ? name.trim() : label;
+}
+
+const QTY_INPUT = "h-8 w-24 border-muted-foreground/40 text-right tabular-nums";
+
 function WaitingRouteCard({
   route,
   trucks,
@@ -59,7 +68,7 @@ function WaitingRouteCard({
   return (
     <Card id={`route-${route.warehouseId}`}>
       <CardHeader>
-        <CardTitle>{route.warehouseName}</CardTitle>
+        <CardTitle>{placeLabel(route.warehouseName)}</CardTitle>
         <p className="text-sm text-muted-foreground">
           {route.orderCount} order{route.orderCount === 1 ? "" : "s"}: {route.orders.map((order) => order.number).join(", ")}
         </p>
@@ -141,7 +150,8 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
           {note.number} · {note.truck}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          {note.routeWarehouseName} · loaded from {note.fulfilmentWarehouseName} · {note.salesOrderIds.length} order
+          {placeLabel(note.routeWarehouseName)} · loaded from {placeLabel(note.fulfilmentWarehouseName)} ·{" "}
+          {note.salesOrderIds.length} order
           {note.salesOrderIds.length === 1 ? "" : "s"}
         </p>
       </CardHeader>
@@ -167,7 +177,7 @@ function LoadingNoteCard({ note, canLoad, onChanged }: { note: JoyLoadNote; canL
                 <td className="py-1 pr-3 text-right">{line.orderedQty}</td>
                 <td className="py-1 pr-3">
                   <Input
-                    className="h-8 w-24"
+                    className={QTY_INPUT}
                     inputMode="decimal"
                     disabled={!canLoad}
                     value={loaded[line.productId] ?? String(line.orderedQty)}
@@ -256,48 +266,89 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
           {note.number} · {note.truck}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          {note.routeWarehouseName} · {note.status === "INVOICING" ? "invoicing now" : "short load, waiting for finance"}
+          {placeLabel(note.routeWarehouseName)} ·{" "}
+          {note.status === "INVOICING" ? "invoicing now" : "short load, waiting for finance"}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
-        {note.lastError ? <p className="text-sm text-destructive">Last attempt failed: {note.lastError}</p> : null}
+        {note.lastError ? (
+          <div className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+            <p className="font-medium">The last attempt did not finish.</p>
+            <p>{note.lastError}</p>
+          </div>
+        ) : null}
         {lines.some((line) => !line.short) ? (
           <p className="text-sm text-muted-foreground">
-            Loaded in full: {lines.filter((line) => !line.short).map((line) => line.line.name).join(", ")}
+            Loaded in full:{" "}
+            <span className={CAPS_ON_PRODUCT_CLASS}>
+              {lines.filter((line) => !line.short).map((line) => line.line.name).join(", ")}
+            </span>
           </p>
         ) : null}
         {shortLines.length === 0 ? (
           <p className="text-sm text-muted-foreground">Nothing is short. Create the invoices to finish this load.</p>
         ) : null}
-        {shortLines.map(({ line, loaded, allocations, gap }) => (
-          <div
-            key={line.productId}
-            className={`space-y-2 rounded-md border p-3 ${Math.abs(gap) > 0.0001 ? "border-amber-500" : ""}`}
-          >
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <p className={`text-sm font-medium ${CAPS_ON_PRODUCT_CLASS}`}>{line.name}</p>
-              <p className="text-sm">
-                Ordered {line.orderedQty} · loaded {loaded} · {gapText(gap)}
+        {shortLines.map(({ line, loaded, allocations, gap }) => {
+          const matched = Math.abs(gap) < 0.0001;
+          return (
+            <div key={line.productId} className="overflow-hidden rounded-md border">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 bg-muted/50 px-3 py-2">
+                <p className={`text-sm font-medium ${CAPS_ON_PRODUCT_CLASS}`}>
+                  {line.sku ? `${line.sku} · ` : ""}
+                  {line.name}
+                </p>
+                <p className="text-sm tabular-nums">
+                  Ordered {line.orderedQty} · loaded <span className="font-semibold">{loaded}</span>
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-left text-xs text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-1.5 font-normal">Order</th>
+                    <th className="px-3 py-1.5 font-normal">Customer</th>
+                    <th className="px-3 py-1.5 text-right font-normal">Ordered</th>
+                    <th className="px-3 py-1.5 text-right font-normal">Invoice</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allocations.map(({ row, key }) => (
+                    <tr key={key} className="border-t">
+                      <td className="px-3 py-1.5">
+                        <Link className="text-primary hover:underline" href={`/docs/sales-order/${row.salesOrderId}`}>
+                          {row.salesOrderNumber}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {row.customerName}
+                        {row.branchName ? <span className="text-muted-foreground"> · {row.branchName}</span> : null}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums">{row.orderedQty}</td>
+                      <td className="px-3 py-1.5">
+                        <div className="flex justify-end">
+                          <Input
+                            className={QTY_INPUT}
+                            inputMode="decimal"
+                            aria-label={`Invoice quantity for ${row.salesOrderNumber}`}
+                            disabled={!canFinance || invoiced.has(row.salesOrderId)}
+                            value={qty[key] ?? String(row.invoiceQty)}
+                            onChange={(event) => setQty((current) => ({ ...current, [key]: event.target.value }))}
+                          />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p
+                className={`border-t px-3 py-2 text-sm font-medium ${
+                  matched ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"
+                }`}
+              >
+                {gapText(gap)}
               </p>
             </div>
-            {allocations.map(({ row, key }) => (
-              <div key={key} className="flex flex-wrap items-center justify-between gap-3 text-sm">
-                <span>
-                  {row.salesOrderNumber} · {row.customerName}
-                  {row.branchName ? ` · ${row.branchName}` : ""}
-                  <span className="text-muted-foreground"> · ordered {row.orderedQty}</span>
-                </span>
-                <Input
-                  className="h-8 w-24"
-                  inputMode="decimal"
-                  disabled={!canFinance || invoiced.has(row.salesOrderId)}
-                  value={qty[key] ?? String(row.invoiceQty)}
-                  onChange={(event) => setQty((current) => ({ ...current, [key]: event.target.value }))}
-                />
-              </div>
-            ))}
-          </div>
-        ))}
+          );
+        })}
         {canFinance ? (
           <Button
             disabled={!ready || busy || note.status !== "AWAITING_FINANCE"}
@@ -337,7 +388,7 @@ function InvoicedNoteCard({ note }: { note: JoyLoadNote }) {
         <CardTitle>
           {note.number} · {note.truck}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">{note.routeWarehouseName}</p>
+        <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)}</p>
       </CardHeader>
       <CardContent className="space-y-1 text-sm">
         {note.results.map((row) => (
