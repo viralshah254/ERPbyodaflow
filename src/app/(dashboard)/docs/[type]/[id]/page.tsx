@@ -115,6 +115,7 @@ import { isOdaflowSalesOrder, odaflowSourceFromDetail } from "@/lib/odaflow/sale
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
 import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
 import {
   FmcgPackagingConversionBlocker,
   packagingMissingLineLabel,
@@ -1067,6 +1068,31 @@ export default function DocViewPage() {
     };
   }, [type, document?.warehouseId, org?.orgId]);
 
+  const [joyLoadNote, setJoyLoadNote] = React.useState<{ id: string; number: string; status: string } | null>(null);
+  React.useEffect(() => {
+    const status = String(document?.status ?? "").toUpperCase();
+    if (
+      type !== "sales-order" ||
+      org?.orgId !== JOY_SUPERBAKERS_ORG_ID ||
+      !document?.id ||
+      !["APPROVED", "PARTIALLY_FULFILLED"].includes(status)
+    ) {
+      setJoyLoadNote(null);
+      return;
+    }
+    let cancelled = false;
+    fetchJoyLoadNoteForOrder(document.id)
+      .then((payload) => {
+        if (!cancelled) setJoyLoadNote(payload.note);
+      })
+      .catch(() => {
+        if (!cancelled) setJoyLoadNote(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [type, document?.id, document?.status, org?.orgId]);
+
   const isUuidLike = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
@@ -1217,6 +1243,7 @@ export default function DocViewPage() {
       document={documentWithSalesFlow}
       convertTargets={effectiveConvertTargets}
       linkedDeliveryNote={linkedDeliveryNote}
+      joyLoadNote={joyLoadNote}
       canCreateDeliveryNote={canCreateDeliveryNote}
       packagingMissingLines={packagingMissingLines}
       packagingBlocksConversion={packagingBlocksConversion}
@@ -3588,6 +3615,7 @@ function DynamicNextStepsPanel({
   document,
   convertTargets,
   linkedDeliveryNote,
+  joyLoadNote = null,
   canCreateDeliveryNote,
   packagingMissingLines,
   packagingBlocksConversion,
@@ -3611,6 +3639,7 @@ function DynamicNextStepsPanel({
   document: DocumentDetailRecord | null;
   convertTargets: DocTypeKey[];
   linkedDeliveryNote: LinkedDocSummary | null;
+  joyLoadNote?: { id: string; number: string; status: string } | null;
   canCreateDeliveryNote: boolean;
   packagingMissingLines: Array<{
     productId: string;
@@ -3657,7 +3686,18 @@ function DynamicNextStepsPanel({
     } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
       } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
-      if (document?.salesFlow?.mode === "joy_dispatch") {
+      if (document?.salesFlow?.mode === "joy_dispatch" && joyLoadNote) {
+        steps.push({
+          icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
+          text:
+            joyLoadNote.status === "OPEN"
+              ? `On loading note ${joyLoadNote.number}. Record what went on the truck.`
+              : `On loading note ${joyLoadNote.number}. The truck was short, so finance chooses which orders to reduce.`,
+          href: `/warehouse/route-pick-lists?note=${encodeURIComponent(joyLoadNote.id)}`,
+          actionLabel: `Open ${joyLoadNote.number}`,
+          variant: "default",
+        });
+      } else if (document?.salesFlow?.mode === "joy_dispatch") {
         steps.push({
           icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
           text: "Approved. Load this route with the other orders for the same delivery warehouse.",
