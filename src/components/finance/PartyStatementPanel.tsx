@@ -88,7 +88,7 @@ export function PartyStatementPanel(props: {
       const data = await fetchPartyStatementApi(props.kind, props.partyId, fromDate, toDate, currency);
       if (request !== serial.current) return;
       setStatement(data);
-      setEmailTo((current) => current || data.party.email || "");
+      setEmailTo(data.billingRecipients?.join(", ") ?? data.party.email ?? "");
       if (props.syncUrl) {
         const params = new URLSearchParams();
         params.set("partyId", props.partyId);
@@ -205,10 +205,10 @@ export function PartyStatementPanel(props: {
                 <Label htmlFor="statement-email">Email to</Label>
                 <Input
                   id="statement-email"
-                  type="email"
+                  type={props.kind === "customer" ? "text" : "email"}
                   value={emailTo}
                   onChange={(e) => setEmailTo(e.target.value)}
-                  placeholder={`${entity} email`}
+                  placeholder={props.kind === "customer" ? "Email addresses, separated by commas" : `${entity} email`}
                 />
               </div>
               <Button variant="secondary" onClick={() => void sendEmail()} disabled={emailing || !emailTo.trim()}>

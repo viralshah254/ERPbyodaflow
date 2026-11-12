@@ -87,6 +87,8 @@ type ContactDraft = {
   lastName: string;
   phone: string;
   email: string;
+  designation: string;
+  billingEmail?: boolean;
 };
 
 type FormState = {
@@ -129,6 +131,8 @@ function emptyContact(partial?: Partial<ContactDraft>): ContactDraft {
     lastName: partial?.lastName ?? "",
     phone: partial?.phone ?? "",
     email: partial?.email ?? "",
+    designation: partial?.designation ?? "",
+    billingEmail: partial?.billingEmail,
   };
 }
 
@@ -137,7 +141,8 @@ function contactHasDetails(contact: ContactDraft) {
     contact.firstName.trim() ||
       contact.lastName.trim() ||
       contact.phone.trim() ||
-      contact.email.trim()
+      contact.email.trim() ||
+      contact.designation.trim()
   );
 }
 
@@ -178,6 +183,8 @@ function normalizeContactsFromDraft(form: Partial<FormState> & {
         lastName: c.lastName ?? "",
         phone: c.phone ?? (index === 0 ? form.phone ?? "" : ""),
         email: c.email ?? (index === 0 ? form.email ?? "" : ""),
+        designation: c.designation,
+        billingEmail: c.billingEmail,
       })
     );
   }
@@ -542,6 +549,7 @@ export function CustomerFormSheet({
   const [stepErrors, setStepErrors] = React.useState<Record<string, string>>({});
   const [saving, setSaving] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
+  const [customerLoadFailed, setCustomerLoadFailed] = React.useState(false);
   const [terms, setTerms] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
   const [salesReps, setSalesReps] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
   const [priceLists, setPriceLists] = React.useState<Array<{ id: string; name: string }>>([]);
@@ -611,9 +619,10 @@ export function CustomerFormSheet({
       setLoadedParentPartyId(null);
       setLoadedParentPartyName(null);
       setLoading(true);
+      setCustomerLoadFailed(false);
       void fetchPartyByIdApi(customerId)
         .then(async (party) => {
-          if (!party) return;
+          if (!party) throw new Error("Customer could not be loaded.");
           const matchedKind =
             CUSTOMER_KIND_OPTIONS.find((k) => k.sfaSegment === party.sfaSegment)?.id ??
             (party.channel === "MODERN_TRADE"
@@ -641,10 +650,12 @@ export function CustomerFormSheet({
                 lastName: parts.lastName,
                 phone: c.phone ?? "",
                 email: c.email ?? "",
+                designation: c.role ?? "",
+                billingEmail: c.billingEmail,
               });
             });
           } catch {
-            /* fall back to legacy party fields below */
+            throw new Error("Contacts could not be loaded. Reopen the customer to retry.");
           }
           if (contacts.length === 0) {
             contacts = [
@@ -716,7 +727,10 @@ export function CustomerFormSheet({
               : []
           );
         })
-        .catch((err) => toast.error(err instanceof Error ? err.message : "Failed to load customer"))
+        .catch((err) => {
+          setCustomerLoadFailed(true);
+          toast.error(err instanceof Error ? err.message : "Failed to load customer");
+        })
         .finally(() => {
           setLoading(false);
           hydratedRef.current = true;
@@ -780,7 +794,7 @@ export function CustomerFormSheet({
 
   const patchContact = (
     key: string,
-    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email">>
+    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email" | "designation" | "billingEmail">>
   ) => {
     setForm((prev) => ({
       ...prev,
@@ -843,7 +857,7 @@ export function CustomerFormSheet({
     if (id === "identity") {
       if (!form.name.trim()) next.name = "Name is required.";
       const badEmail = form.contacts.find(
-        (c) => c.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())
+        (c) => (c.billingEmail || c.email.trim()) && !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(c.email.trim())
       );
       if (badEmail) next.email = "Enter a valid email address for each contact.";
     }
@@ -928,6 +942,7 @@ export function CustomerFormSheet({
   };
 
   const handleSave = async () => {
+    if (editing && customerLoadFailed) return;
     if (!editing) {
       for (let i = 0; i < createSteps.length - 1; i++) {
         if (!validateStep(i)) {
@@ -941,7 +956,7 @@ export function CustomerFormSheet({
     } else {
       const creditErrors = validateCreditFields(form);
       const badEmail = form.contacts.find(
-        (c) => c.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email.trim())
+        (c) => (c.billingEmail || c.email.trim()) && !/^[^\s@,;<>]+@[^\s@,;<>]+\.[^\s@,;<>]+$/.test(c.email.trim())
       );
       if (badEmail) {
         setStepErrors({ ...creditErrors, email: "Enter a valid email address for each contact." });
@@ -964,6 +979,8 @@ export function CustomerFormSheet({
         name: joinContactName(c.firstName, c.lastName),
         phone: normalizeKenyaPhoneOptional(c.phone),
         email: c.email.trim() || undefined,
+        role: c.designation,
+        billingEmail: c.billingEmail,
       }));
       if (editing && customerId) {
         await updatePartyApi(customerId, payload);
@@ -1537,7 +1554,7 @@ export function CustomerFormSheet({
                           .filter(contactHasDetails)
                           .map((c) => {
                             const name = joinContactName(c.firstName, c.lastName);
-                            const bits = [name, c.phone.trim(), c.email.trim()].filter(Boolean);
+                            const bits = [name, c.designation.trim(), c.phone.trim(), c.email.trim(), c.billingEmail ? "Billing email" : ""].filter(Boolean);
                             return bits.join(" · ");
                           })
                           .join("; ") || "—"}
@@ -1572,7 +1589,7 @@ export function CustomerFormSheet({
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button type="button" onClick={() => void handleSave()} disabled={saving || loading}>
+              <Button type="button" onClick={() => void handleSave()} disabled={saving || loading || (editing && customerLoadFailed)}>
                 {saving ? "Saving…" : "Save"}
               </Button>
             </>
@@ -1587,11 +1604,11 @@ export function CustomerFormSheet({
                 {step === 0 ? "Cancel" : "Back"}
               </Button>
               {step < createSteps.length - 1 ? (
-                <Button type="button" onClick={goNext} disabled={saving || loading}>
+                <Button type="button" onClick={goNext} disabled={saving || loading || (editing && customerLoadFailed)}>
                   Continue
                 </Button>
               ) : (
-                <Button type="button" onClick={() => void handleSave()} disabled={saving || loading}>
+                <Button type="button" onClick={() => void handleSave()} disabled={saving || loading || (editing && customerLoadFailed)}>
                   {saving ? "Creating…" : "Create customer"}
                 </Button>
               )}
@@ -1615,7 +1632,7 @@ function CustomerContactsFields({
   contacts: ContactDraft[];
   onPatch: (
     key: string,
-    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email">>
+    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email" | "designation" | "billingEmail">>
   ) => void;
   onAdd: () => void;
   onRemove: (key: string) => void;
@@ -1624,7 +1641,10 @@ function CustomerContactsFields({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
-        <FieldLabel optional>Contacts</FieldLabel>
+        <div>
+          <FieldLabel optional>Contacts</FieldLabel>
+          <p className="text-xs text-muted-foreground">Choose who receives invoices, credit notes, debit notes and statements by default.</p>
+        </div>
         <Button type="button" variant="outline" size="sm" className="h-8" onClick={onAdd}>
           <Plus className="mr-1.5 h-3.5 w-3.5" />
           Add contact
@@ -1673,6 +1693,15 @@ function CustomerContactsFields({
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <FieldLabel htmlFor={`${idPrefix}-contact-role-${contact.key}`} optional>Designation</FieldLabel>
+              <Input
+                id={`${idPrefix}-contact-role-${contact.key}`}
+                value={contact.designation}
+                onChange={(event) => onPatch(contact.key, { designation: event.target.value })}
+                placeholder="e.g. Accounts Payable Manager"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
                 <FieldLabel htmlFor={`${idPrefix}-contact-phone-${contact.key}`} optional>
@@ -1702,6 +1731,15 @@ function CustomerContactsFields({
                 />
               </div>
             </div>
+            <label className="flex min-h-9 cursor-pointer items-center gap-2 rounded-md bg-muted/50 px-3 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={contact.billingEmail === true}
+                onChange={(event) => onPatch(contact.key, { billingEmail: event.target.checked })}
+              />
+              Use for billing emails
+            </label>
           </div>
         ))}
       </div>
@@ -1812,7 +1850,7 @@ function EditAllFields({
   taxConfigs: TaxConfigRow[];
   onPatchContact: (
     key: string,
-    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email">>
+    patch: Partial<Pick<ContactDraft, "firstName" | "lastName" | "phone" | "email" | "designation" | "billingEmail">>
   ) => void;
   onAddContact: () => void;
   onRemoveContact: (key: string) => void;

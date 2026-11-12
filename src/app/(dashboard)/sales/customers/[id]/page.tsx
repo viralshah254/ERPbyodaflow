@@ -19,7 +19,7 @@ import {
   CustomerOrdersPanel,
   CustomerPaymentsPanel,
 } from "@/components/customers/CustomerHistoryPanels";
-import { fetchPartyByIdApi, fetchPartyCreditSummaryApi, type PartyDetail } from "@/lib/api/parties";
+import { fetchPartyByIdApi, fetchPartyContactsApi, type PartyContactRow, fetchPartyCreditSummaryApi, type PartyDetail } from "@/lib/api/parties";
 import type { PartyCreditSummary } from "@/lib/api/parties";
 import { fetchArOpenPageApi } from "@/lib/api/payments";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
@@ -62,6 +62,8 @@ export default function Customer360Page() {
       : "overview";
   const [tab, setTab] = React.useState<TabId>(initialTab);
   const [party, setParty] = React.useState<PartyDetail | null>(null);
+  const [contacts, setContacts] = React.useState<PartyContactRow[] | null>(null);
+  const [contactsUnavailable, setContactsUnavailable] = React.useState(false);
   const [credit, setCredit] = React.useState<PartyCreditSummary | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [creditLoading, setCreditLoading] = React.useState(false);
@@ -77,6 +79,12 @@ export default function Customer360Page() {
     if (!id) return;
     const request = ++requestRef.current;
     setLoading(true); setCreditLoading(canReadAr); setParty(null); setCredit(null); setOpenInvoiceCount(null);
+    setContacts(null); setContactsUnavailable(false);
+    const contactsTask = fetchPartyContactsApi(id).then((rows) => {
+      if (request === requestRef.current) setContacts(rows);
+    }).catch(() => {
+      if (request === requestRef.current) setContactsUnavailable(true);
+    });
     const detailTask = fetchPartyByIdApi(id).then((detail) => {
       if (request !== requestRef.current) return;
       setParty(detail);
@@ -90,7 +98,7 @@ export default function Customer360Page() {
     const countTask = canReadAr ? fetchArOpenPageApi(id, { limit: 1, offset: 0 }).then((page) => {
       if (request === requestRef.current) setOpenInvoiceCount(page.openCount);
     }).catch(() => {}) : Promise.resolve();
-    await Promise.allSettled([detailTask, creditTask, countTask]);
+    await Promise.allSettled([detailTask, contactsTask, creditTask, countTask]);
   }, [canReadAr, id]);
 
   React.useEffect(() => { void load(); return cancelLoad; }, [load, cancelLoad]);
@@ -225,6 +233,35 @@ export default function Customer360Page() {
                   <CardContent className="text-2xl font-semibold">{credit?.creditUsed == null ? "—" : formatMoney(credit.creditUsed, currency)}</CardContent>
                 </Card>
               </div>
+              <Card>
+                <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base">Contacts</CardTitle>
+                    <CardDescription>People and shared inboxes for this customer.</CardDescription>
+                  </div>
+                  {canWriteSales && <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>Manage contacts</Button>}
+                </CardHeader>
+                <CardContent>
+                  {contactsUnavailable ? <p className="text-sm text-muted-foreground">Contacts are unavailable.</p>
+                    : !contacts ? <p className="text-sm text-muted-foreground">Loading contacts…</p>
+                    : contacts.length === 0 ? <p className="text-sm text-muted-foreground">No additional contacts on file.</p>
+                    : <ul className="divide-y">
+                      {contacts.map((contact) => (
+                        <li key={contact.id} className="grid gap-1 py-2 text-sm sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:gap-3">
+                          <div className="min-w-0 break-words">
+                            <span className="font-medium">{contact.name}</span>
+                            {contact.role && <div className="text-muted-foreground">{contact.role}</div>}
+                          </div>
+                          <div className="min-w-0 break-words text-muted-foreground">
+                            {contact.email && <div>{contact.email}</div>}
+                            {contact.phone && <div>{contact.phone}</div>}
+                          </div>
+                          {contact.billingEmail && <span className="self-start justify-self-start rounded bg-primary/10 px-2 py-0.5 text-xs text-primary">Billing email</span>}
+                        </li>
+                      ))}
+                    </ul>}
+                </CardContent>
+              </Card>
               <Card data-tutorial-hint="customer-profile">
                 <CardHeader>
                   <CardTitle className="text-base">Profile</CardTitle>

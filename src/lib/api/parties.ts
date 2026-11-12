@@ -742,6 +742,7 @@ export type PartyContactRow = {
   partyId: string;
   name: string;
   role?: string;
+  billingEmail?: boolean;
   email?: string;
   phone?: string;
   isPrimary: boolean;
@@ -751,6 +752,7 @@ export type PartyContactRow = {
 export type PartyContactPayload = {
   name: string;
   role?: string;
+  billingEmail?: boolean;
   email?: string;
   phone?: string;
   isPrimary?: boolean;
@@ -770,6 +772,7 @@ export async function fetchPartyContactsApi(partyId: string): Promise<PartyConta
       role: item.role != null ? String(item.role) : undefined,
       email: item.email != null ? String(item.email) : undefined,
       phone: item.phone != null ? String(item.phone) : undefined,
+      billingEmail: typeof item.billingEmail === "boolean" ? item.billingEmail : undefined,
       isPrimary: item.isPrimary === true,
       isActive: item.isActive !== false,
     }))
@@ -807,6 +810,7 @@ export async function updatePartyContactApi(
     role: updated.role != null ? String(updated.role) : undefined,
     email: updated.email != null ? String(updated.email) : undefined,
     phone: updated.phone != null ? String(updated.phone) : undefined,
+    billingEmail: typeof updated.billingEmail === "boolean" ? updated.billingEmail : undefined,
     isPrimary: updated.isPrimary === true,
     isActive: updated.isActive !== false,
   };
@@ -815,16 +819,18 @@ export async function updatePartyContactApi(
 /** Create/update/remove party contacts to match the form list. First filled row is primary. */
 export async function syncPartyContactsApi(
   partyId: string,
-  contacts: Array<{ id?: string; name: string; phone?: string; email?: string }>
+  contacts: Array<Pick<PartyContactPayload, "name" | "phone" | "email" | "role" | "billingEmail"> & { id?: string }>
 ): Promise<void> {
   const filled = contacts
     .map((c) => ({
       id: c.id?.trim() || undefined,
       name: c.name.trim(),
+      role: c.role?.trim(),
+      billingEmail: c.billingEmail,
       phone: c.phone?.trim() || undefined,
       email: c.email?.trim() || undefined,
     }))
-    .filter((c) => c.name || c.phone || c.email);
+    .filter((c) => c.name || c.phone || c.email || c.role);
   const existing = await fetchPartyContactsApi(partyId);
   const keepIds = new Set(filled.map((c) => c.id).filter((id): id is string => Boolean(id)));
 
@@ -842,6 +848,8 @@ export async function syncPartyContactsApi(
       // Always send so clears reach PATCH (omitted keys leave stale phone/email).
       phone: row.phone ?? "",
       email: row.email ?? "",
+      role: row.role,
+      billingEmail: row.billingEmail,
       isPrimary,
       isActive: true,
     };

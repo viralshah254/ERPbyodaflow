@@ -1,5 +1,6 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import { useAccountingOnly } from "@/lib/api/invoice-posting";
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -69,7 +70,7 @@ import {
   patchDocumentApi,
   requestDocumentApprovalApi,
   sendDocumentEmailApi,
-  sendInvoiceEmailApi,
+  fetchDocumentBillingRecipientsApi,
   settleInvoiceApi,
   uploadDocumentAttachmentApi,
 } from "@/lib/api/documents";
@@ -324,6 +325,20 @@ export default function DocViewPage() {
   const [emailDialogOpen, setEmailDialogOpen] = React.useState(false);
   const [emailTo, setEmailTo] = React.useState("");
   const [emailSending, setEmailSending] = React.useState(false);
+  const [emailDefaultsLoading, setEmailDefaultsLoading] = React.useState(false);
+  const [emailDefaultsError, setEmailDefaultsError] = React.useState(false);
+  const billingEmailType = type === "invoice" || type === "credit-note" || type === "debit-note" ? type : undefined;
+  React.useEffect(() => {
+    if (!emailDialogOpen || !billingEmailType) return;
+    let current = true;
+    setEmailDefaultsLoading(true);
+    setEmailDefaultsError(false);
+    void fetchDocumentBillingRecipientsApi(billingEmailType, id)
+      .then(({ recipients }) => { if (current) setEmailTo(recipients.join(", ")); })
+      .catch(() => { if (current) setEmailDefaultsError(true); })
+      .finally(() => { if (current) setEmailDefaultsLoading(false); });
+    return () => { current = false; };
+  }, [billingEmailType, emailDialogOpen, id]);
   const [settleOpen, setSettleOpen] = React.useState(false);
   const [settleStep, setSettleStep] = React.useState<"payment" | "terms">("payment");
   const [settleMethod, setSettleMethod] = React.useState<"CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER">("CASH");
@@ -2082,7 +2097,7 @@ export default function DocViewPage() {
                 <Icons.Printer className="mr-2 h-4 w-4" />
                 Print
               </DropdownMenuItem>
-              {(type === "invoice" || type === "credit-note") && (
+              {canWrite && billingEmailType && (
                 <DropdownMenuItem
                   onClick={() => {
                     setEmailTo("");
@@ -3559,69 +3574,62 @@ export default function DocViewPage() {
         </div>
       )}
 
-      {/* Email to customer dialog */}
-      {emailDialogOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-background rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Icons.Mail className="h-5 w-5 text-primary" />
-              <h3 className="text-base font-semibold">Send to customer</h3>
-            </div>
-            <p className="text-sm text-muted-foreground mb-4">
-              {type === "purchase-order"
-                ? "The purchase order PDF will be attached."
-                : type === "delivery-note"
-                  ? "The delivery note PDF will be attached."
-                  : "The invoice PDF will be attached and sent to the customer email address."}
-              {document?.emailedAt && (
-                <span className="block mt-1 text-xs">
-                  Last sent: {new Date(document.emailedAt).toLocaleString()}
-                  {document.emailedTo ? ` → ${document.emailedTo}` : ""}
-                </span>
-              )}
-            </p>
-            <div className="mb-4">
-              <Label className="text-xs mb-1 block">Override email (optional)</Label>
-              <Input
-                placeholder="Leave blank to use customer email on file"
-                value={emailTo}
-                onChange={(e) => setEmailTo(e.target.value)}
-                type="email"
-              />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={emailSending}
-                onClick={async () => {
-                  setEmailSending(true);
-                  try {
-                    const result = type === "invoice"
-                      ? await sendInvoiceEmailApi(id, { overrideTo: emailTo.trim() || undefined })
-                      : await sendDocumentEmailApi(
-                          type === "purchase-order" ? "purchase-order" : "delivery-note",
-                          id,
-                          { overrideTo: emailTo.trim() || undefined }
-                        );
-                    toast.success(`Sent to ${result.to ?? "the address on file"}`);
-                    setEmailDialogOpen(false);
-                    await refreshDocument(true);
-                  } catch (e) {
-                    toast.error((e as Error).message);
-                  } finally {
-                    setEmailSending(false);
-                  }
-                }}
-              >
-                <Icons.Send className="mr-2 h-4 w-4" />
-                {emailSending ? "Sending..." : "Send"}
-              </Button>
-            </div>
+      <Dialog.Root open={emailDialogOpen} onOpenChange={(open) => { if (!emailSending) setEmailDialogOpen(open); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-xl">
+          <div className="space-y-1">
+            <Dialog.Title className="text-lg font-semibold">Send {label.toLowerCase()}</Dialog.Title>
+            <Dialog.Description className="text-sm text-muted-foreground">The document PDF will be attached.</Dialog.Description>
           </div>
-        </div>
-      )}
+          {document?.emailedAt && (
+            <p className="break-words text-xs text-muted-foreground">
+              Last sent {new Date(document.emailedAt).toLocaleString()}
+              {document.emailedTo ? ` to ${document.emailedTo}` : ""}
+            </p>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="document-email-to">To</Label>
+            <Input
+              id="document-email-to"
+              placeholder={billingEmailType ? "Email addresses, separated by commas" : "Leave blank to use the customer email on file"}
+              value={emailTo}
+              disabled={emailDefaultsLoading || emailSending}
+              onChange={(event) => setEmailTo(event.target.value)}
+            />
+            {billingEmailType && (
+              <p className="text-xs text-muted-foreground" role="status">
+                {emailDefaultsLoading ? "Loading billing recipients…"
+                  : emailDefaultsError ? "Billing defaults could not be loaded. Enter the recipients for this send."
+                  : "Changes here apply only to this email."}
+              </p>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" disabled={emailSending} onClick={() => setEmailDialogOpen(false)}>Cancel</Button>
+            <Button
+              disabled={emailSending || emailDefaultsLoading || Boolean(billingEmailType && !emailTo.trim())}
+              onClick={async () => {
+                setEmailSending(true);
+                try {
+                  const result = await sendDocumentEmailApi(billingEmailType ?? "delivery-note", id, { overrideTo: emailTo.trim() || undefined });
+                  toast.success(`Sent to ${result.to}`);
+                  setEmailDialogOpen(false);
+                  await refreshDocument(true);
+                } catch (error) {
+                  toast.error((error as Error).message);
+                } finally {
+                  setEmailSending(false);
+                }
+              }}
+            >
+              <Icons.Send className="mr-2 h-4 w-4" />
+              {emailSending ? "Sending…" : "Send"}
+            </Button>
+          </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       <OdaflowApprovalConfirmDialog
         open={odaflowApprovalOpen}
         onOpenChange={setOdaflowApprovalOpen}

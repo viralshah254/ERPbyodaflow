@@ -1092,8 +1092,15 @@ export async function settleInvoiceApi(
   });
 }
 
+export type BillingDocumentType = "invoice" | "credit-note" | "debit-note";
+
+export async function fetchDocumentBillingRecipientsApi(type: BillingDocumentType, id: string): Promise<{ recipients: string[] }> {
+  requireLiveApi("Billing email recipients");
+  return apiRequest(`/api/documents/${type}/${encodeURIComponent(id)}/email`);
+}
+
 export async function sendDocumentEmailApi(
-  type: "invoice" | "purchase-order" | "delivery-note",
+  type: BillingDocumentType | "purchase-order" | "delivery-note",
   id: string,
   options?: { overrideTo?: string }
 ): Promise<{ sent: boolean; to: string }> {

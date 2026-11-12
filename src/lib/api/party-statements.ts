@@ -40,6 +40,7 @@ export type PartyStatement = {
   side: "AR" | "AP";
   from: string;
   to: string;
+  billingRecipients?: string[];
   party: {
     id: string;
     name: string;

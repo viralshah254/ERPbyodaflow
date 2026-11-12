@@ -72,7 +72,7 @@ export function CustomerLedger({
       try {
         const data = await fetchPartyStatementApi("customer", partyId, range.from, range.to);
         setStatement(data);
-        setEmailTo((current) => current || data.party.email || "");
+        setEmailTo(data.billingRecipients?.join(", ") ?? data.party.email ?? "");
         setPageOffset(0);
       } catch (error) {
         setStatement(null);
@@ -197,9 +197,9 @@ export function CustomerLedger({
           <>
             <Input
               className="w-[16rem]"
-              type="email"
+              type="text"
               value={emailTo}
-              placeholder="Email statement to"
+              placeholder="Email addresses, separated by commas"
               onChange={(event) => setEmailTo(event.target.value)}
               aria-label="Email statement to"
             />
