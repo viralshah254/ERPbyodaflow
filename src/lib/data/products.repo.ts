@@ -54,8 +54,8 @@ export async function fetchProductsForDocumentLines(
   return items;
 }
 
-/** Active finished goods, independent of whether identifiers are numeric or alphanumeric. */
-export async function fetchAllFinishedGoods(): Promise<ProductRow[]> {
+/** Load the full inline sales catalogue, optionally restricted to the finished-goods role. */
+export async function fetchAllFinishedGoods(finishedGoodsOnly = false): Promise<ProductRow[]> {
   const rows: ProductRow[] = [];
   let cursor: string | null = "0";
   const seen = new Set<string>();
@@ -64,12 +64,13 @@ export async function fetchAllFinishedGoods(): Promise<ProductRow[]> {
     seen.add(cursor);
     const result = await fetchProductsPageApi({
       status: "ACTIVE",
+      ...(finishedGoodsOnly ? { itemRole: "FINISHED" as const } : {}),
       sellable: true,
       limit: 100,
       cursor: cursor ?? "0",
       includeStock: false,
     });
-    rows.push(...result.items);
+    rows.push(...result.items.filter((row) => !finishedGoodsOnly || row.itemRole === "FINISHED"));
     if (!result.hasMore) break;
     if (!result.nextCursor) throw new Error("Product catalogue pagination is incomplete.");
     cursor = result.nextCursor;

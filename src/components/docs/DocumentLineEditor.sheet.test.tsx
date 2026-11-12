@@ -61,6 +61,22 @@ it("uses PCS for a single cake and PACK for a Joy retail multipack without multi
   expect(screen.getByText("Includes KES 11.89 tax")).toBeInTheDocument();
 });
 
+it("limits the Joy sales sheet to finished goods even if sellable raw or semi-finished items are returned", async () => {
+  api.configured = true;
+  const raw = { id: "raw", code: "RM152", name: "Black forest base", itemRole: "RAW", productType: "BOTH" };
+  const semi = { id: "semi", code: "RM151", name: "Chocolate cake base", itemRole: "SEMI", productType: "FINISHED" };
+  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [...products, raw, semi], hasMore: false, nextCursor: null } as never);
+  render(<Harness joyFinishedGoods />);
+  await screen.findByLabelText("Quantity for Celebration cake");
+  expect(screen.getByLabelText("Quantity for Queen cakes")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Quantity for Black forest base")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Quantity for Chocolate cake base")).not.toBeInTheDocument();
+  expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ itemRole: "FINISHED", sellable: true }));
+  expect(fetchDocumentProductDataApi).toHaveBeenCalledWith(["queen", "cake"]);
+  fireEvent.change(screen.getByLabelText("Filter finished goods"), { target: { value: "RM152" } });
+  expect(screen.queryByLabelText("Quantity for Black forest base")).not.toBeInTheDocument();
+});
+
 it("keeps failed metadata loading recoverable instead of enabling incomplete pricing", async () => {
   api.configured = true;
   vi.mocked(fetchDocumentProductDataApi).mockRejectedValueOnce(new Error("Offline"));

@@ -457,7 +457,7 @@ export function DocumentLineEditor({
     setCatalogError(false);
     setSheetCatalogReady(false);
     setFilteredProducts(null);
-    const load = sheetFinishedGoods ? fetchAllFinishedGoods() : fetchProductsForDocumentLines(productFilter);
+    const load = sheetFinishedGoods ? fetchAllFinishedGoods(joyFinishedGoods) : fetchProductsForDocumentLines(productFilter);
     load
       .then(async (rows) => {
         if (sheetFinishedGoods && isApiConfigured()) {
@@ -488,7 +488,7 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, catalogRetry]);
+  }, [productFilter, mode, sheetFinishedGoods, joyFinishedGoods, catalogRetry]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
