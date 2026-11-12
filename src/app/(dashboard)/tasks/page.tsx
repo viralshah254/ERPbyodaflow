@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
+import {
+  LIST_PAGE_SHELL_CLASS,
+  LIST_TABLE_SURFACE_CLASS,
+  PageShell,
+} from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -126,8 +130,8 @@ export default function TasksPage() {
           </Button>
         }
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        <div className="flex flex-wrap gap-2 border-b pb-3">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6">
+        <div className="flex shrink-0 flex-wrap gap-2 border-b pb-3">
           <Button
             size="sm"
             variant={activeTab === "tasks" ? "default" : "outline"}
@@ -146,9 +150,11 @@ export default function TasksPage() {
         </div>
 
         {activeTab === "expected-email" ? (
-          <ExpectedEmailOrdersPanel />
+          <div className={`${LIST_TABLE_SURFACE_CLASS} min-h-[calc(100dvh-14.5rem)] p-4 sm:p-6`}>
+            <ExpectedEmailOrdersPanel />
+          </div>
         ) : (
-          <>
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
         <DataTableToolbar className="shrink-0" searchPlaceholder="Search tasks..." searchValue={search} onSearchChange={setSearch} />
         <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm" data-tutorial-hint="my-tasks">
           <div className="shrink-0 border-b px-4 py-3">
@@ -185,7 +191,7 @@ export default function TasksPage() {
             )}
           </CardContent>
         </Card>
-          </>
+          </div>
         )}
       </div>
 

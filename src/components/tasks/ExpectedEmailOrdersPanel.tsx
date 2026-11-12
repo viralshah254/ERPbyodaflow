@@ -134,8 +134,8 @@ export function ExpectedEmailOrdersPanel() {
   };
 
   return (
-    <div className="flex min-h-0 flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Expected email orders</h3>
           <p className="text-xs text-muted-foreground">
@@ -160,7 +160,7 @@ export function ExpectedEmailOrdersPanel() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex shrink-0 flex-wrap gap-2">
         {(["open", "overdue", "all"] as const).map((key) => (
           <Button
             key={key}
@@ -179,6 +179,7 @@ export function ExpectedEmailOrdersPanel() {
         />
       </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
       {loading ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Loading…</p>
       ) : filtered.length === 0 ? (
@@ -192,7 +193,7 @@ export function ExpectedEmailOrdersPanel() {
           }
         />
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 pb-2">
           {filtered.map((row) => (
             <article
               key={row.id}
@@ -267,6 +268,7 @@ export function ExpectedEmailOrdersPanel() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }
