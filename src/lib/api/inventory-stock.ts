@@ -14,6 +14,8 @@ type BackendStockLevel = {
   packSizeKg?: number | null;
   warehouseId: string;
   warehouse: string;
+  warehouseStockState?: string;
+  warehouseStockBlocked?: boolean;
   location?: string;
   onHand?: number;
   quantity?: number;
@@ -44,6 +46,8 @@ function mapStock(item: BackendStockLevel): InventoryStockRow {
     name: item.name,
     warehouse: item.warehouse,
     warehouseId: item.warehouseId,
+    warehouseStockState: item.warehouseStockState,
+    warehouseStockBlocked: item.warehouseStockBlocked,
     location: item.location,
     quantity: item.onHand ?? item.quantity ?? 0,
     reserved: item.reserved ?? item.reservedQuantity ?? 0,
@@ -61,6 +65,8 @@ function mapStock(item: BackendStockLevel): InventoryStockRow {
 }
 
 export type InventoryStockRow = StockRow & {
+  warehouseStockState?: string;
+  warehouseStockBlocked?: boolean;
   productId?: string;
   ownership?: "CoolCatch" | "Franchise";
   ageDays?: number;
@@ -323,6 +329,8 @@ type BackendInventoryMovement = {
   date: string;
   direction: "IN" | "OUT";
   signedQuantity?: number;
+  movementType?: string;
+  uom?: string;
   sku?: string;
   name?: string;
   warehouse: string;
@@ -357,15 +365,16 @@ export async function fetchInventoryMovementsApi(filters?: {
       id: item.id,
       date: item.date,
       type:
-        item.sourceType === "TRANSFER"
+        item.movementType?.startsWith("TRANSFER_") || item.sourceType?.toUpperCase() === "TRANSFER"
           ? "TRANSFER"
-          : item.sourceType === "ADJUSTMENT"
+          : ["ADJUSTMENT", "CYCLE_COUNT"].includes(item.movementType ?? item.sourceType ?? "")
             ? "ADJUST"
             : item.direction,
       sku: item.sku ?? "—",
       productName: item.name ?? "Unknown product",
       warehouse: item.warehouse,
       quantity: item.signedQuantity ?? 0,
+      uom: item.uom,
       reference: item.reference,
       sourceType: item.sourceType,
       sourceId: item.sourceId,

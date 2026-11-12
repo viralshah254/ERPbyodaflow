@@ -91,14 +91,14 @@ export async function verifyJoyPickList(id: string): Promise<{ dispatchNote?: { 
   return apiRequest(`/api/joy-dispatch/pick-lists/${encodeURIComponent(id)}/verify`, { method: "POST", body: {} });
 }
 
-export async function recordJoyShort(id: string, input: { productId: string; quantity: number; whereNow: string }) {
+export async function recordJoyShort(id: string, input: { productId: string; quantity: number; whereNow: string; requestId: string }) {
   requireLiveApi("Route pick lists");
   return apiRequest(`/api/joy-dispatch/pick-lists/${encodeURIComponent(id)}/short`, { method: "POST", body: input });
 }
 
 export async function recordJoyDamage(
   id: string,
-  input: { lines: Array<{ productId: string; quantity: number }>; toWarehouseId?: string; reason?: string }
+  input: { lines: Array<{ productId: string; quantity: number }>; toWarehouseId?: string; reason?: string; requestId: string }
 ) {
   requireLiveApi("Route pick lists");
   return apiRequest(`/api/joy-dispatch/pick-lists/${encodeURIComponent(id)}/damage`, { method: "POST", body: input });

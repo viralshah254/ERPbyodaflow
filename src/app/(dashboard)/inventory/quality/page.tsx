@@ -22,7 +22,10 @@ import {
 export default function InventoryQualityPage() {
   const [items, setItems] = React.useState<InventoryQualityCase[]>([]);
   const [kind, setKind] = React.useState<"QUALITY" | "LOSS" | "RECALL">("QUALITY");
-  const [lotId, setLotId] = React.useState("");
+  const [selectedLot, setSelectedLot] = React.useState<InventoryLotOption>();
+  const [searchingLots, setSearchingLots] = React.useState(false);
+  const [lotSearchFailed, setLotSearchFailed] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const [lotQuery, setLotQuery] = React.useState("");
   const [lotOptions, setLotOptions] = React.useState<InventoryLotOption[]>([]);
   const [quantity, setQuantity] = React.useState("");
@@ -35,11 +38,30 @@ export default function InventoryQualityPage() {
   }, []);
   React.useEffect(() => { void refresh(); }, [refresh]);
   React.useEffect(() => {
-    const handle = window.setTimeout(() => {
-      void searchInventoryLotsApi(lotQuery).then(setLotOptions).catch(() => setLotOptions([]));
+    if (selectedLot || !lotQuery.trim()) return;
+    let current = true;
+    setSearchingLots(true);
+    setLotSearchFailed(false);
+    const handle = window.setTimeout(async () => {
+      try {
+        const matches = await searchInventoryLotsApi(lotQuery.trim());
+        if (current) setLotOptions(matches);
+      } catch {
+        if (current) setLotSearchFailed(true);
+      } finally {
+        if (current) setSearchingLots(false);
+      }
     }, 250);
-    return () => window.clearTimeout(handle);
-  }, [lotQuery]);
+    return () => {
+      current = false;
+      window.clearTimeout(handle);
+    };
+  }, [lotQuery, selectedLot]);
+
+  const affectedQuantity = Number(quantity);
+  const canOpen = Boolean(selectedLot && quantity.trim() && Number.isFinite(affectedQuantity) &&
+    (kind === "RECALL" ? affectedQuantity >= 0 : affectedQuantity > 0) &&
+    affectedQuantity <= selectedLot.remainingQuantity && reason.trim());
 
   return (
     <PageShell>
@@ -55,8 +77,15 @@ export default function InventoryQualityPage() {
             <div className="space-y-1"><Label>Type</Label><Select value={kind} onValueChange={(value) => setKind(value as typeof kind)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="QUALITY">Quality hold</SelectItem><SelectItem value="LOSS">Loss</SelectItem><SelectItem value="RECALL">Recall</SelectItem></SelectContent></Select></div>
             <div className="space-y-1">
               <Label htmlFor="quality-lot-search">Lot</Label>
-              <Input id="quality-lot-search" value={lotQuery} onChange={(e) => setLotQuery(e.target.value)} placeholder="Search lot number" />
-              {lotOptions.length > 0 ? (
+              <Input id="quality-lot-search" value={lotQuery} onChange={(e) => {
+                setLotQuery(e.target.value);
+                setSelectedLot(undefined);
+                setQuantity("");
+                setLotOptions([]);
+                setLotSearchFailed(false);
+                setSearchingLots(Boolean(e.target.value.trim()));
+              }} placeholder="Search lot number" />
+              {!selectedLot && lotOptions.length > 0 ? (
                 <div className="max-h-40 overflow-auto rounded-md border">
                   {lotOptions.map((lot) => (
                     <button
@@ -64,9 +93,9 @@ export default function InventoryQualityPage() {
                       type="button"
                       className="block w-full px-3 py-2 text-left text-sm hover:bg-muted"
                       onClick={() => {
-                        setLotId(lot.id);
+                        setSelectedLot(lot);
                         setLotQuery(lot.lotNumber);
-                        if (!quantity) setQuantity(String(lot.remainingQuantity ?? ""));
+                        setQuantity(String(lot.remainingQuantity ?? ""));
                       }}
                     >
                       {[lot.lotNumber, [lot.productSku, lot.productName].filter(Boolean).join(" "), `${lot.remainingQuantity} left`, lot.status].filter(Boolean).join(" · ")}
@@ -74,17 +103,29 @@ export default function InventoryQualityPage() {
                   ))}
                 </div>
               ) : null}
-              {lotId ? <p className="text-xs text-muted-foreground">Selected lot {lotQuery || lotId}</p> : null}
+              {selectedLot ? (
+                <p className="text-sm text-muted-foreground">Selected {selectedLot.lotNumber} · {selectedLot.productName || selectedLot.productSku} · {selectedLot.remainingQuantity} on hand</p>
+              ) : lotSearchFailed ? (
+                <p role="alert" className="text-sm text-destructive">Lot search failed. Edit the search to try again.</p>
+              ) : lotQuery.trim() ? (
+                <p role="status" className="text-sm text-muted-foreground">{searchingLots ? "Searching lots…" : lotOptions.length === 0 ? "No matching lots." : "Choose the lot to use."}</p>
+              ) : null}
             </div>
-            <div className="space-y-1"><Label>Affected quantity</Label><Input type="number" min={0} value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>
-            <div className="space-y-1"><Label>Reason / evidence</Label><Input value={reason} onChange={(e) => setReason(e.target.value)} /></div>
-            <Button className="w-full" onClick={async () => {
+            <div className="space-y-1"><Label htmlFor="quality-quantity">Affected quantity</Label><Input id="quality-quantity" type="number" min={0} step="any" value={quantity} onChange={(e) => setQuantity(e.target.value)} /></div>
+            <div className="space-y-1"><Label htmlFor="quality-reason">Reason / evidence</Label><Input id="quality-reason" value={reason} onChange={(e) => setReason(e.target.value)} /></div>
+            {selectedLot && affectedQuantity > selectedLot.remainingQuantity && (
+              <p role="alert" className="text-sm text-destructive">Enter {selectedLot.remainingQuantity} or fewer for this lot.</p>
+            )}
+            <Button className="w-full" disabled={!canOpen || saving} onClick={async () => {
+              if (!selectedLot || !canOpen || saving) return;
+              setSaving(true);
               try {
-                const result = await createInventoryQualityCaseApi({ kind, lotId, affectedQuantity: Number(quantity) || 0, reason });
+                const result = await createInventoryQualityCaseApi({ kind, lotId: selectedLot.id, affectedQuantity, reason: reason.trim() });
                 toast.success(kind === "RECALL" ? `Recall opened; ${result.linkedDocumentCount} delivery document(s) traced.` : "Case opened.");
-                setLotId(""); setQuantity(""); setReason(""); await refresh();
+                setSelectedLot(undefined); setLotQuery(""); setLotOptions([]); setQuantity(""); setReason(""); await refresh();
               } catch (error) { toast.error(error instanceof Error ? error.message : "Failed to open case."); }
-            }}>Open case</Button>
+              finally { setSaving(false); }
+            }}>{saving ? "Opening case…" : "Open case"}</Button>
           </CardContent>
         </Card>
         <Card>

@@ -15,10 +15,9 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { Badge } from "@/components/ui/badge";
 import { downloadCsv } from "@/lib/export/csv";
-import type { MovementRow } from "@/lib/types/inventory";
+import { stockMovementSourceHref, type MovementRow } from "@/lib/types/inventory";
 import { fetchInventoryMovementsApi } from "@/lib/api/inventory-stock";
-import { productMatchesSearch } from "@/lib/products/product-search";
-import { toast } from "sonner";
+import Link from "next/link";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 
@@ -31,33 +30,35 @@ export default function StockMovementsPage() {
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(25);
 
-  const refreshRows = React.useCallback(async () => {
-    setLoading(true);
-    try {
-      setAllRows(await fetchInventoryMovementsApi());
-    } catch (error) {
-      toast.error((error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [loadError, setLoadError] = React.useState("");
+  const [refresh, setRefresh] = React.useState(0);
 
   React.useEffect(() => {
-    void refreshRows();
-  }, [refreshRows]);
+    let current = true;
+    setLoading(true);
+    setLoadError("");
+    const timer = window.setTimeout(async () => {
+      try {
+        const rows = await fetchInventoryMovementsApi({ search });
+        if (current) setAllRows(rows);
+      } catch (error) {
+        if (current) {
+          setAllRows([]);
+          setLoadError((error as Error).message);
+        }
+      } finally {
+        if (current) setLoading(false);
+      }
+    }, search ? 300 : 0);
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [search, refresh]);
 
-  const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return allRows.filter((row) => {
-      if (warehouseFilter && row.warehouse !== warehouseFilter) return false;
-      if (typeFilter && row.type !== typeFilter) return false;
-      if (!q) return true;
-      if (productMatchesSearch({ name: row.productName, sku: row.sku }, search)) return true;
-      return [row.reference, row.warehouse]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(q));
-    });
-  }, [allRows, search, warehouseFilter, typeFilter]);
+  const filtered = React.useMemo(() => allRows.filter((row) =>
+    (!warehouseFilter || row.warehouse === warehouseFilter) && (!typeFilter || row.type === typeFilter)
+  ), [allRows, warehouseFilter, typeFilter]);
 
   React.useEffect(() => {
     setPageOffset(0);
@@ -104,11 +105,19 @@ export default function StockMovementsPage() {
         header: "Quantity",
         accessor: (r: MovementRow) => (
           <span className={r.quantity < 0 ? "text-destructive" : ""}>
-            {r.quantity > 0 ? "+" : ""}{r.quantity}
+            {r.quantity > 0 ? "+" : ""}{r.quantity}{r.uom ? ` ${r.uom}` : ""}
           </span>
         ),
       },
-      { id: "reference", header: "Reference", accessor: "reference" as keyof MovementRow },
+      {
+        id: "reference",
+        header: "Source document",
+        accessor: (row: MovementRow) => {
+          const label = row.reference || row.sourceType || "—";
+          const href = stockMovementSourceHref(row);
+          return href ? <Link className="text-primary underline" href={href}>{label}</Link> : label;
+        },
+      },
     ],
     []
   );
@@ -117,7 +126,7 @@ export default function StockMovementsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Stock Movements"
-        description="Track inventory movements and transactions"
+        description="View the latest 500 movements for your search, with quantities and source documents."
         breadcrumbs={[
           { label: "Inventory", href: "/inventory/products" },
           { label: "Movements" },
@@ -128,7 +137,7 @@ export default function StockMovementsPage() {
       />
       <div className={LIST_PAGE_BODY_VIEWPORT_CLASS}>
         <DataTableToolbar className="shrink-0 p-2"
-          searchPlaceholder="Name, size, barcode, or reference"
+          searchPlaceholder="Product name, SKU, code, barcode, warehouse or reference"
           searchValue={search}
           onSearchChange={setSearch}
           searchInputDataHint="search"
@@ -158,7 +167,7 @@ export default function StockMovementsPage() {
               onChange: (v) => setTypeFilter(v),
             },
           ]}
-          onExport={() =>
+          onExport={loading || loadError ? undefined : () =>
             downloadCsv(
               `stock-movements-${new Date().toISOString().slice(0, 10)}.csv`,
               filtered.map((row) => ({
@@ -168,6 +177,7 @@ export default function StockMovementsPage() {
                 productName: row.productName,
                 warehouse: row.warehouse,
                 quantity: row.quantity,
+                uom: row.uom ?? "",
                 reference: row.reference ?? "",
               }))
             )
@@ -178,6 +188,10 @@ export default function StockMovementsPage() {
           {loading ? (
             <div className="flex min-h-0 flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
               Loading movements...
+            </div>
+          ) : loadError ? (
+            <div className="p-8 text-sm" role="alert">
+              Could not load stock movements. <button type="button" className="underline" onClick={() => setRefresh((value) => value + 1)}>Retry</button>
             </div>
           ) : (
             <div className={LIST_TABLE_SCROLL_BODY_CLASS}>

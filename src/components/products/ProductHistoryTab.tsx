@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { LIST_TABLE_SURFACE_CLASS } from "@/components/layout/page-shell";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -12,36 +12,30 @@ import {
   fetchStockLevelsApi,
   type InventoryStockRow,
 } from "@/lib/api/inventory-stock";
-import type { MovementRow } from "@/lib/types/inventory";
-import { toast } from "sonner";
-
-function movementHref(row: MovementRow): string | null {
-  if (!row.sourceId || !row.sourceType) return null;
-  const type = row.sourceType.toLowerCase().replace(/_/g, "-");
-  if (type === "adjustment" || type === "adjust") return null;
-  if (type === "transfer") return "/inventory/movements";
-  return `/docs/${type}/${row.sourceId}`;
-}
+import { stockMovementSourceHref, warehouseStockStateLabel, type MovementRow } from "@/lib/types/inventory";
+import { Button } from "@/components/ui/button";
 
 export function ProductHistoryTab(props: { productId: string }) {
   const [stock, setStock] = React.useState<InventoryStockRow[]>([]);
   const [movements, setMovements] = React.useState<MovementRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [stockError, setStockError] = React.useState(false);
+  const [movementError, setMovementError] = React.useState(false);
+  const [refresh, setRefresh] = React.useState(0);
 
   React.useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      fetchStockLevelsApi({ productId: props.productId, limit: 100 }).catch(() => []),
-      fetchInventoryMovementsApi({ productId: props.productId, limit: 100 }).catch(() => []),
+    Promise.allSettled([
+      fetchStockLevelsApi({ productId: props.productId, limit: 100 }),
+      fetchInventoryMovementsApi({ productId: props.productId, limit: 100 }),
     ])
       .then(([stockRows, movementRows]) => {
         if (cancelled) return;
-        setStock(stockRows);
-        setMovements(movementRows);
-      })
-      .catch((error) => {
-        if (!cancelled) toast.error((error as Error).message || "Failed to load product history");
+        setStockError(stockRows.status === "rejected");
+        setMovementError(movementRows.status === "rejected");
+        setStock(stockRows.status === "fulfilled" ? stockRows.value : []);
+        setMovements(movementRows.status === "fulfilled" ? movementRows.value : []);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -49,7 +43,7 @@ export function ProductHistoryTab(props: { productId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [props.productId]);
+  }, [props.productId, refresh]);
 
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading inventory history…</p>;
@@ -60,9 +54,12 @@ export function ProductHistoryTab(props: { productId: string }) {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">On hand by warehouse</CardTitle>
+          <CardDescription>Unreserved stock can still be subject to lot quality and expiry checks.</CardDescription>
         </CardHeader>
         <CardContent>
-          {stock.length === 0 ? (
+          {stockError ? (
+            <p role="alert" className="text-sm">Could not load warehouse stock. <Button variant="link" size="sm" onClick={() => setRefresh((value) => value + 1)}>Retry</Button></p>
+          ) : stock.length === 0 ? (
             <p className="text-sm text-muted-foreground">No stock levels recorded for this product.</p>
           ) : (
             <div className={LIST_TABLE_SURFACE_CLASS}>
@@ -73,8 +70,8 @@ export function ProductHistoryTab(props: { productId: string }) {
                     <TableHead>Location</TableHead>
                     <TableHead className="text-right">On hand</TableHead>
                     <TableHead className="text-right">Reserved</TableHead>
-                    <TableHead className="text-right">Available</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Unreserved</TableHead>
+                    <TableHead>Warehouse status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -94,9 +91,9 @@ export function ProductHistoryTab(props: { productId: string }) {
                         {row.quantity} {row.uom ?? ""}
                       </TableCell>
                       <TableCell className="text-right">{row.reserved}</TableCell>
-                      <TableCell className="text-right">{row.available}</TableCell>
+                      <TableCell className="text-right">{row.warehouseStockBlocked ? "—" : row.available}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{row.status}</Badge>
+                        <Badge variant="outline">{warehouseStockStateLabel(row.warehouseStockState)}</Badge>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -107,7 +104,10 @@ export function ProductHistoryTab(props: { productId: string }) {
         </CardContent>
       </Card>
 
-      {movements.length === 0 ? (
+      <h3 className="text-base font-semibold">Stock movement history</h3>
+      {movementError ? (
+        <p role="alert" className="text-sm">Could not load stock movements. <Button variant="link" size="sm" onClick={() => setRefresh((value) => value + 1)}>Retry</Button></p>
+      ) : movements.length === 0 ? (
         <EmptyState
           icon="History"
           title="No stock movements"
@@ -127,7 +127,7 @@ export function ProductHistoryTab(props: { productId: string }) {
             </TableHeader>
             <TableBody>
               {movements.map((row) => {
-                const href = movementHref(row);
+                const href = stockMovementSourceHref(row);
                 return (
                   <TableRow key={row.id}>
                     <TableCell>{row.date}</TableCell>
@@ -135,7 +135,7 @@ export function ProductHistoryTab(props: { productId: string }) {
                       <Badge variant="secondary">{row.type}</Badge>
                     </TableCell>
                     <TableCell>{row.warehouse}</TableCell>
-                    <TableCell className="text-right">{row.quantity}</TableCell>
+                    <TableCell className="text-right">{row.quantity > 0 ? "+" : ""}{row.quantity}{row.uom ? ` ${row.uom}` : ""}</TableCell>
                     <TableCell>
                       {href ? (
                         <Link href={href} className="hover:underline">

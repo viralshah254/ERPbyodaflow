@@ -18,6 +18,7 @@ import {
   type InventoryStockRow,
 } from "@/lib/api/inventory-stock";
 import type { FilterChip } from "@/components/ui/filter-chips";
+import { warehouseStockStateLabel } from "@/lib/types/inventory";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -41,7 +42,7 @@ function AvailabilityBar({ available, onHand }: { available: number; onHand: num
   return (
     <div className="mt-1 flex items-center gap-2 min-w-[5rem]">
       <div className="h-1.5 flex-1 rounded-full bg-muted overflow-hidden">
-        <div className={cn("h-full rounded-full transition-all", tone)} style={{ width: `${pct}%` }} />
+        <div className={cn("h-full rounded-full transition-all", tone)} style={{ width: `${Math.max(0, pct)}%` }} />
       </div>
       <span className="text-[10px] tabular-nums text-muted-foreground">{pct}%</span>
     </div>
@@ -291,7 +292,7 @@ export default function InventoryStockExplorerPage() {
       },
       {
         id: "available",
-        header: "Available",
+        header: "Unreserved",
         accessor: (r: InventoryStockRow) => (
           <div>
             <span
@@ -303,7 +304,7 @@ export default function InventoryStockExplorerPage() {
             >
               {r.available.toLocaleString()}
             </span>
-            <AvailabilityBar available={r.available} onHand={r.quantity} />
+            {!r.warehouseStockBlocked && <AvailabilityBar available={r.available} onHand={r.quantity} />}
           </div>
         ),
         sortable: true,
@@ -319,7 +320,7 @@ export default function InventoryStockExplorerPage() {
       {
         id: "status",
         header: "Status",
-        accessor: (r: InventoryStockRow) => <StatusBadge status={r.status} />,
+        accessor: (r: InventoryStockRow) => r.warehouseStockBlocked ? <Badge variant="outline">{warehouseStockStateLabel(r.warehouseStockState)}</Badge> : <StatusBadge status={r.status} />,
         sortable: true,
         sortValue: (r: InventoryStockRow) => r.status.toLowerCase(),
       },
@@ -331,7 +332,7 @@ export default function InventoryStockExplorerPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Stock Explorer"
-        description="Global stock view by SKU, location, ownership, reserved status, and age."
+        description="See on-hand and reserved stock by warehouse. Warehouse status identifies stock held from use."
         breadcrumbs={[
           { label: "Inventory", href: "/inventory/products" },
           { label: "Stock Explorer" },
@@ -410,8 +411,8 @@ export default function InventoryStockExplorerPage() {
                   [
                     ["minOH", "Min on hand", minOnHand, setMinOnHand],
                     ["maxOH", "Max on hand", maxOnHand, setMaxOnHand],
-                    ["minAv", "Min available", minAvailable, setMinAvailable],
-                    ["maxAv", "Max available", maxAvailable, setMaxAvailable],
+                    ["minAv", "Min unreserved", minAvailable, setMinAvailable],
+                    ["maxAv", "Max unreserved", maxAvailable, setMaxAvailable],
                     ["minAge", "Min age (days)", minAge, setMinAge],
                     ["maxAge", "Max age (days)", maxAge, setMaxAge],
                   ] as const
