@@ -17,14 +17,13 @@ import {
   SheetDescription,
   SheetFooter,
 } from "@/components/ui/sheet";
+import { BusinessTitlePicker, useBusinessTitles } from "@/components/masters/BusinessTitlePicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -32,7 +31,6 @@ import { createEmployeeApi, fetchEmployeesApi } from "@/lib/api/payroll";
 import {
   PAYROLL_DEPARTMENTS,
   PAYROLL_FORM_EMPTY_VALUE,
-  PAYROLL_JOB_TITLE_GROUPS,
 } from "@/lib/payroll/employee-form-options";
 import type { Employee, EmploymentType, ConsultantResidency, TaxCountry } from "@/lib/payroll/types";
 import { formatMoney } from "@/lib/money";
@@ -53,6 +51,7 @@ export default function PayrollEmployeesPage() {
   const [lastName, setLastName] = React.useState("");
   const [department, setDepartment] = React.useState("");
   const [jobTitle, setJobTitle] = React.useState("");
+  const jobTitles = useBusinessTitles("employee-job-titles");
   const [branchId, setBranchId] = React.useState("");
   const [employmentType, setEmploymentType] = React.useState<EmploymentType>("FULL_TIME");
   const [taxCountry, setTaxCountry] = React.useState<TaxCountry>("KE");
@@ -305,27 +304,13 @@ export default function PayrollEmployeesPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="emp-job-title">Job title</Label>
-                <Select
-                  value={jobTitle === "" ? PAYROLL_FORM_EMPTY_VALUE : jobTitle}
-                  onValueChange={(v) => setJobTitle(v === PAYROLL_FORM_EMPTY_VALUE ? "" : v)}
-                >
-                  <SelectTrigger id="emp-job-title">
-                    <SelectValue placeholder="Select job title" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-[min(320px,70vh)]">
-                    <SelectItem value={PAYROLL_FORM_EMPTY_VALUE}>— Not specified —</SelectItem>
-                    {PAYROLL_JOB_TITLE_GROUPS.map((group) => (
-                      <SelectGroup key={group.label}>
-                        <SelectLabel className="text-xs">{group.label}</SelectLabel>
-                        {group.titles.map((t) => (
-                          <SelectItem key={`${group.label}-${t}`} value={t}>
-                            {t}
-                          </SelectItem>
-                        ))}
-                      </SelectGroup>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <BusinessTitlePicker
+                  id="emp-job-title"
+                  kind="employee-job-titles"
+                  value={jobTitle}
+                  onChange={setJobTitle}
+                  catalogue={jobTitles}
+                />
               </div>
             </div>
             <div className="space-y-1.5">

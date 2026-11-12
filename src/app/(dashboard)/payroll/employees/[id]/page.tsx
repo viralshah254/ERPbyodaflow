@@ -7,6 +7,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BusinessTitlePicker, useBusinessTitles } from "@/components/masters/BusinessTitlePicker";
 import { Button } from "@/components/ui/button";
 import { fetchEmployeeByIdApi, fetchPayrollStatutoriesApi, updateEmployeeApi, fetchErpPayrollCapabilitiesApi } from "@/lib/api/payroll";
 import type { Employee } from "@/lib/payroll/types";
@@ -26,6 +27,9 @@ export default function PayrollEmployeeDetailPage() {
   const permissions = useAuthStore(state => state.permissions);
   const [payBasis, setPayBasis] = React.useState<"SALARY" | "PIECEWORK">("SALARY");
   const [pieceworkRate, setPieceworkRate] = React.useState(0);
+  const jobTitles = useBusinessTitles("employee-job-titles");
+  const [jobTitle, setJobTitle] = React.useState("");
+  const [savingTitle, setSavingTitle] = React.useState(false);
   const [savingBasis, setSavingBasis] = React.useState(false);
 
   React.useEffect(() => {
@@ -39,6 +43,7 @@ export default function PayrollEmployeeDetailPage() {
         ]);
         if (!cancelled) {
           setEmployee(employeeItem);
+          setJobTitle(employeeItem?.role ?? "");
           setPayBasis(employeeItem?.payBasis || "SALARY");
           setPieceworkRate(employeeItem?.pieceworkRate || 0);
           setStatutories(statutoryItems);
@@ -99,11 +104,33 @@ export default function PayrollEmployeeDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Employment profile</CardTitle>
-            <CardDescription>Branch, role, and payroll basis for this employee.</CardDescription>
+            <CardDescription>Branch, job title, and payroll basis for this employee.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <p><span className="text-muted-foreground">Department:</span> {employee.department ?? "Not set"}</p>
-            <p><span className="text-muted-foreground">Role:</span> {employee.role ?? "Not set"}</p>
+            {permissions.includes("finance.write") ? (
+              <form className="flex flex-wrap items-end gap-2" onSubmit={async (event) => {
+                event.preventDefault();
+                setSavingTitle(true);
+                try {
+                  await updateEmployeeApi(id, { jobTitle });
+                  setEmployee((previous) => previous ? { ...previous, role: jobTitle || undefined } : previous);
+                  toast.success("Job title saved.");
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : "Could not save job title.");
+                } finally {
+                  setSavingTitle(false);
+                }
+              }}>
+                <div className="min-w-48 flex-1 space-y-1">
+                  <Label htmlFor="employee-job-title">Job title</Label>
+                  <BusinessTitlePicker id="employee-job-title" kind="employee-job-titles" value={jobTitle} onChange={setJobTitle} catalogue={jobTitles} disabled={savingTitle} />
+                </div>
+                <Button type="submit" size="sm" disabled={savingTitle || jobTitle === (employee.role ?? "")}>
+                  {savingTitle ? "Saving…" : "Save job title"}
+                </Button>
+              </form>
+            ) : <p><span className="text-muted-foreground">Job title:</span> {employee.role || "Not set"}</p>}
             <p><span className="text-muted-foreground">Branch:</span> {employee.branch ?? "Not set"}</p>
             <p><span className="text-muted-foreground">Employment type:</span>{" "}
               {employee.employmentType === "FULL_TIME"

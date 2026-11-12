@@ -9,6 +9,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { BusinessTitlePicker, useBusinessTitles } from "@/components/masters/BusinessTitlePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1638,6 +1639,7 @@ function CustomerContactsFields({
   onRemove: (key: string) => void;
   emailError?: string;
 }) {
+  const designations = useBusinessTitles("customer-designations");
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -1695,11 +1697,12 @@ function CustomerContactsFields({
             </div>
             <div className="space-y-2">
               <FieldLabel htmlFor={`${idPrefix}-contact-role-${contact.key}`} optional>Designation</FieldLabel>
-              <Input
+              <BusinessTitlePicker
                 id={`${idPrefix}-contact-role-${contact.key}`}
+                kind="customer-designations"
                 value={contact.designation}
-                onChange={(event) => onPatch(contact.key, { designation: event.target.value })}
-                placeholder="e.g. Accounts Payable Manager"
+                onChange={(designation) => onPatch(contact.key, { designation })}
+                catalogue={designations}
               />
             </div>
             <div className="grid grid-cols-2 gap-3">

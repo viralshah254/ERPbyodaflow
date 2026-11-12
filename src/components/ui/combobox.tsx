@@ -14,6 +14,7 @@ export interface ComboboxOption {
 }
 
 interface ComboboxProps {
+  id?: string;
   value?: string;
   onChange: (value: string) => void;
   options: ComboboxOption[];
@@ -23,7 +24,9 @@ interface ComboboxProps {
   disabled?: boolean;
   className?: string;
   /** Show a "+ Create …" affordance (and Enter-to-create). Return the option to select, or void. */
-  onCreate?: (label: string) => void | Promise<void>;
+  onCreate?: (label: string) => void | false | Promise<void | false>;
+  createLabel?: string;
+  createOnEnter?: boolean;
   /** Per-option rename. When provided, an edit action shows on each row. */
   onRename?: (value: string, newLabel: string) => void | Promise<void>;
   /** Per-option delete. When provided, a delete action with inline confirm shows on each row. */
@@ -35,6 +38,7 @@ interface ComboboxProps {
 }
 
 export function Combobox({
+  id,
   value,
   onChange,
   options,
@@ -44,6 +48,8 @@ export function Combobox({
   disabled = false,
   className,
   onCreate,
+  createLabel = "Create",
+  createOnEnter = true,
   onRename,
   onDelete,
   deleteHint,
@@ -89,10 +95,10 @@ export function Combobox({
   }, [open]);
 
   const handleCreate = async () => {
-    if (!onCreate || !query.trim()) return;
+    if (!onCreate || !query.trim() || busy) return;
     setBusy(true);
     try {
-      await onCreate(query.trim());
+      if (await onCreate(query.trim()) === false) return;
       setQuery("");
       setOpen(false);
     } finally {
@@ -128,6 +134,7 @@ export function Combobox({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button
+          id={id}
           type="button"
           variant="outline"
           role="combobox"
@@ -159,9 +166,15 @@ export function Combobox({
             onKeyDown={(e) => {
               if (e.key === "Enter") {
                 e.preventDefault();
-                if (canCreate) void handleCreate();
-                else if (filtered.length > 0) {
-                  onChange(filtered[0].value);
+                if (busy) return;
+                if (canCreate && createOnEnter) {
+                  void handleCreate();
+                  return;
+                }
+                const exact = options.find((option) => option.label.trim().toLowerCase() === query.trim().toLowerCase());
+                const match = exact ?? (searchPending ? undefined : filtered[0]);
+                if (match) {
+                  onChange(match.value);
                   setOpen(false);
                 }
               }
@@ -321,7 +334,7 @@ export function Combobox({
               className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left text-sm text-primary hover:bg-primary/10 disabled:opacity-50"
             >
               <Icons.Plus className="h-4 w-4 shrink-0" />
-              <span className="truncate">Create “{query.trim()}”</span>
+              <span className="truncate">{createLabel} “{query.trim()}”</span>
             </button>
           </div>
         ) : null}
