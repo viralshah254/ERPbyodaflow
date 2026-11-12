@@ -128,7 +128,7 @@ export function resolveFactorToBase(
   const want = normalizeUomCode(uom);
   const base = normalizeUomCode(productBaseUom) || "PCS";
   if (!want) return null;
-  if (uomsMatch(want, base) || isPieceUomCode(want)) return 1;
+  if (uomsMatch(want, base)) return 1;
 
   const byCode = new Map<string, SkuAlternateUom>();
   for (const row of rows) {
@@ -150,7 +150,7 @@ export function resolveFactorToBase(
   let factor = 1;
   const visited = new Set<string>();
   while (true) {
-    if (uomsMatch(current, base) || isPieceUomCode(current)) return factor;
+    if (uomsMatch(current, base)) return factor;
     if (visited.has(current)) return null;
     visited.add(current);
     const row =
@@ -212,7 +212,6 @@ export function validateSkuUomChain(
     }
     const refOk =
       uomsMatch(ref, base) ||
-      isPieceUomCode(ref) ||
       rows.some((r) => uomsMatch(r.uom, ref) && normalizeUomCode(r.uom) !== uom);
     if (!refOk) {
       errors.push(`"${uom}" references unknown UOM "${ref}"`);
@@ -321,7 +320,7 @@ export function formatQtyAs(
     mode === "preferred"
       ? preferredDisplayUom(rows, "warehouse") || preferredDisplayUom(rows, "reporting") || base
       : normalizeUomCode(selectedUom) || base;
-  if (uomsMatch(target, base) || isPieceUomCode(target)) {
+  if (uomsMatch(target, base)) {
     return `${q.toLocaleString()} ${base}`;
   }
   const converted = fromBaseQuantity(q, target, rows, base);
@@ -359,7 +358,7 @@ export function formatConversionPreview(
     base
   );
   const unitsPer = resolveFactorToBase(u, draft, base);
-  if (uomsMatch(ref, base) || isPieceUomCode(ref)) {
+  if (uomsMatch(ref, base)) {
     return `1 ${u} = ${factor} ${ref}`;
   }
   if (unitsPer != null) {

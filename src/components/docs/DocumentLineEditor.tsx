@@ -20,6 +20,7 @@ import {
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import {
   listProducts,
+  getProductById,
   fetchAllFinishedGoods,
   fetchProductsForDocumentLines,
   setProductsCache,
@@ -38,7 +39,7 @@ import {
   type FmcgCatalogItem,
 } from "@/lib/fmcg/pricing";
 import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/docs/DocumentProductPickerSheet";
-import { defaultDocumentLineUom, documentLineBaseUom } from "@/lib/docs/default-line-uom";
+import { activeDocumentAlternates, defaultDocumentLineUom, documentLineBaseUom } from "@/lib/docs/default-line-uom";
 import { AddPackUomDialog } from "@/components/docs/AddPackUomDialog";
 import { cn } from "@/lib/utils";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
@@ -122,11 +123,6 @@ interface DocumentLineEditorProps {
   /** When true, unit prices already include VAT — tax is back-calculated. Default: false (tax-exclusive). */
   linesAreTaxInclusive?: boolean;
   /**
-   * Org UOM catalog (Settings → UOM). Merged into each line’s UOM dropdown with product packaging UOMs.
-   * Packaging defines units-per-base; the catalog ensures codes like KG appear even if packaging fetch failed.
-   */
-  catalogUomCodes?: string[];
-  /**
    * Override the Qty and Base qty column labels + help tooltips. Pass when the doc type gives these
    * columns specific meaning — e.g. for GRN: received quantity and the original PO quantity.
    */
@@ -185,52 +181,10 @@ function productMatchesLineSearch(p: ProductRow, query: string): boolean {
   return !query.trim() || productMatchesSearch(p, query);
 }
 
-/** Packs that are actually configured (pieces-per-pack > 1). */
-function configuredPackUoms(packaging: ProductPackaging[] | undefined): string[] {
-  return (packaging ?? [])
-    .filter((p) => Number.isFinite(p.unitsPer) && p.unitsPer > 1 && !isPieceUom(p.uom))
-    .map((p) => String(p.uom).trim().toUpperCase())
-    .filter(Boolean);
-}
-
-/**
- * Line UOM options.
- * FMCG: the product's base unit first, then packs saved on that product.
- * Seafood / other: packaging UOMs merged with org UOM catalog.
- */
-function mergeLineUomOptions(
-  packagingForProduct: ProductPackaging[] | undefined,
-  catalogUomCodes: string[],
-  currentValue?: string,
-  opts?: { fmcgOrg?: boolean; baseUom?: string; joyRetailPack?: boolean }
-): string[] {
-  if (opts?.fmcgOrg) {
-    const base = String(opts.baseUom ?? "PCS").trim().toUpperCase() || "PCS";
-    const merged = new Set<string>([base, ...configuredPackUoms(packagingForProduct)]);
-    if (!isPieceUom(base) && !opts.joyRetailPack) merged.add("PCS");
-    if (currentValue) merged.add(String(currentValue).trim().toUpperCase());
-    const arr = [...merged].filter(Boolean);
-    arr.sort((a, b) => {
-      if (a === base && b !== base) return -1;
-      if (b === base && a !== base) return 1;
-      if (isPieceUom(a) && !isPieceUom(b)) return -1;
-      if (!isPieceUom(a) && isPieceUom(b)) return 1;
-      return a.localeCompare(b);
-    });
-    return arr.length ? arr : [base];
-  }
-  const fromPack = (packagingForProduct ?? []).map((p) => p.uom);
-  const merged = new Set<string>([...fromPack, ...catalogUomCodes]);
-  if (currentValue) merged.add(currentValue);
-  const arr = [...merged].filter(Boolean);
-  arr.sort((a, b) => a.localeCompare(b));
-  return arr.length ? arr : ["EA"];
-}
-
 function defaultLineUom(
   packaging: ProductPackaging[],
   mode: "sales" | "purchasing",
-  product: Pick<ProductRow, "unit" | "baseUom" | "size">,
+  product: Pick<ProductRow, "unit" | "baseUom">,
   fmcgOrg: boolean
 ): string {
   return defaultDocumentLineUom({
@@ -238,7 +192,6 @@ function defaultLineUom(
     mode,
     baseUom: product.baseUom,
     unit: product.unit,
-    size: product.size,
     fmcgOrg,
   });
 }
@@ -309,7 +262,6 @@ export function DocumentLineEditor({
   taxCodes = [],
   defaultLineTaxCodeId,
   linesAreTaxInclusive = false,
-  catalogUomCodes = [],
   lineColumnLabels,
   dailyPricesByProductId,
   catalogPricesByProductId,
@@ -433,7 +385,7 @@ export function DocumentLineEditor({
     const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))];
     for (const productId of productIds) {
       ensureVariantsLoaded(productId);
-      const cached = products.find((p) => p.id === productId);
+      const cached = products.find((p) => p.id === productId) ?? getProductById(productId);
       if (resolveFmcgProductSizeLabel(cached, variantsByProductId[productId])) continue;
       void fetchProductApi(productId)
         .then((full) => {
@@ -522,7 +474,7 @@ export function DocumentLineEditor({
     (productId: string, uom: string, qty: number): number => {
       const packaging = packagingByProductId?.[productId];
       if (fmcgOrg) {
-        const product = products.find((p) => p.id === productId);
+        const product = products.find((p) => p.id === productId) ?? getProductById(productId);
         const rows = joyFinishedGoods ? joyRetailPackPricingRows(product, packaging, fmcgCatalogByProductId?.[productId]?.packPrices) : packaging;
         const unitsPer = resolveUnitsPerPiece(uom, rows, product?.baseUom ?? product?.unit);
         return Math.round(qty * unitsPer * 1000) / 1000;
@@ -541,16 +493,17 @@ export function DocumentLineEditor({
       discountOverride?: number
     ): { price: number; reason: string; discount?: number } => {
       if (useCostPricing) return { price: 0, reason: "Manual" };
+      const unitsPer = computeBaseQty(productId, uom, 1);
       const daily = dailyPricesByProductId?.[productId];
       if (daily?.effectivePrice != null && daily.effectivePrice > 0) {
         const label = daily.isStale
           ? `⚠ Stale${daily.fallbackDate ? ` (${daily.fallbackDate})` : ""}`
           : "Daily price";
-        return { price: daily.effectivePrice, reason: label };
+        return { price: daily.effectivePrice * unitsPer, reason: label };
       }
       const fmcgItem = fmcgCatalogByProductId?.[productId];
       if (fmcgItem?.pricePerPiece != null && fmcgItem.pricePerPiece > 0) {
-        const product = products.find((p) => p.id === productId);
+        const product = products.find((p) => p.id === productId) ?? getProductById(productId);
         const resolved = resolveFmcgClientLinePrice({
           pricePerPiece: fmcgItem.pricePerPiece,
           uom,
@@ -579,12 +532,18 @@ export function DocumentLineEditor({
               : {}),
         };
       }
-      const catalog = catalogPricesByProductId?.[productId];
-      if (catalog != null && catalog > 0) {
-        return { price: catalog, reason: "Price list" };
-      }
       const tier = getPriceForLine(productId, priceListIdResolved, qty, uom, pricingByProductId?.[productId]);
       if (tier.price > 0) return tier;
+      const product = products.find((p) => p.id === productId) ?? getProductById(productId);
+      const baseUom = documentLineBaseUom(product ?? {}, fmcgOrg);
+      if (uom !== baseUom) {
+        const baseTier = getPriceForLine(productId, priceListIdResolved, qty * unitsPer, baseUom, pricingByProductId?.[productId]);
+        if (baseTier.price > 0) return { ...baseTier, price: baseTier.price * unitsPer };
+      }
+      const catalog = catalogPricesByProductId?.[productId];
+      if (catalog != null && catalog > 0) {
+        return { price: catalog * unitsPer, reason: "Price list" };
+      }
       if (daily && daily.effectivePrice == null && catalog == null && !fmcgItem) {
         return { price: 0, reason: "Not priced on list" };
       }
@@ -592,6 +551,8 @@ export function DocumentLineEditor({
     },
     [
       useCostPricing,
+      computeBaseQty,
+      fmcgOrg,
       joyFinishedGoods,
       dailyPricesByProductId,
       fmcgCatalogByProductId,
@@ -1005,7 +966,10 @@ export function DocumentLineEditor({
     if (!line) return;
     const baseQty = computeBaseQty(line.productId, uom, line.qty);
     if (useCostPricing) {
-      updateLine(lineId, { uom, baseQty, amount: line.qty * line.price });
+      const previousFactor = computeBaseQty(line.productId, line.uom, 1);
+      const nextFactor = computeBaseQty(line.productId, uom, 1);
+      const price = Math.round(line.price * nextFactor / previousFactor * 100) / 100;
+      updateLine(lineId, { uom, baseQty, price, amount: line.qty * price });
     } else {
       const { price, reason, discount } = resolvePrice(line.productId, line.qty, uom, line.discount);
       updateLine(lineId, {
@@ -1535,7 +1499,7 @@ export function DocumentLineEditor({
               </thead>
               <tbody>
           {displayedLines.map((l) => {
-            const product = products.find((p) => p.id === l.productId);
+            const product = products.find((p) => p.id === l.productId) ?? getProductById(l.productId);
             const joyUnit = joyFinishedGoods && product
               ? joyFinishedGoodSalesUnit(product, packagingByProductId?.[l.productId], fmcgCatalogByProductId?.[l.productId]?.packPrices)
               : undefined;
@@ -1622,18 +1586,12 @@ export function DocumentLineEditor({
                       productName={l.name || product?.name}
                       value={l.uom}
                       onChange={setUom}
-                      packagingForProduct={packagingByProductId?.[l.productId]}
-                      catalogUomCodes={catalogUomCodes}
+                      packagingForProduct={joyUnit === "PACK"
+                        ? joyRetailPackPricingRows(product, packagingByProductId?.[l.productId], fmcgCatalogByProductId?.[l.productId]?.packPrices)
+                        : packagingByProductId?.[l.productId]}
                       fmcgOrg={fmcgOrg}
-                      joyRetailPack={joyUnit === "PACK"}
-                      baseUom={joyUnit ?? documentLineBaseUom(
-                        {
-                          baseUom: product?.baseUom,
-                          unit: product?.unit,
-                          size: product?.size,
-                        },
-                        fmcgOrg
-                      )}
+                      baseUom={documentLineBaseUom(product ?? {}, fmcgOrg)}
+                      equivalentUnit={joyUnit === "PCS" ? joyUnit : undefined}
                       onPackagingUpdated={onPackagingUpdated}
                     />
                   </td>
@@ -1744,6 +1702,16 @@ export function DocumentLineEditor({
                       {l.priceReason ? (
                         <span className="text-xs text-muted-foreground">{l.priceReason}</span>
                       ) : null}
+                      {product?.grossWeightKg != null && (
+                        <span className="text-xs text-muted-foreground">
+                          Gross weight {(l.baseQty * product.grossWeightKg).toLocaleString(undefined, { maximumSignificantDigits: 10 })} kg
+                        </span>
+                      )}
+                      {product?.grossVolumeM3 != null && (
+                        <span className="text-xs text-muted-foreground">
+                          Gross volume {(l.baseQty * product.grossVolumeM3).toLocaleString(undefined, { maximumSignificantDigits: 10 })} m³
+                        </span>
+                      )}
                     </div>
                   </div>
                     </td>
@@ -1793,10 +1761,9 @@ function UomSelect({
   value,
   onChange,
   packagingForProduct = [],
-  catalogUomCodes = [],
   fmcgOrg = false,
-  joyRetailPack = false,
   baseUom = "PCS",
+  equivalentUnit,
   onPackagingUpdated,
 }: {
   lineId: string;
@@ -1805,37 +1772,17 @@ function UomSelect({
   value: string;
   onChange: (lineId: string, uom: string) => void;
   packagingForProduct?: ProductPackaging[];
-  catalogUomCodes?: string[];
   fmcgOrg?: boolean;
-  joyRetailPack?: boolean;
   baseUom?: string;
+  equivalentUnit?: string;
   onPackagingUpdated?: (productId: string, items: ProductPackaging[]) => void;
 }) {
-  // Always keep the line's current UOM in options (e.g. CARTON from SO/DN/invoice)
-  // so edit mode does not collapse to PCS before packaging finishes loading.
-  const options = mergeLineUomOptions(
-    packagingForProduct,
-    catalogUomCodes,
-    value,
-    { fmcgOrg, baseUom, joyRetailPack }
-  );
-  const normalizedValue = String(value ?? "").trim().toUpperCase();
-  const selectValue = options.includes(normalizedValue)
-    ? normalizedValue
-    : options.includes(value)
-      ? value
-      : options[0] ?? value;
-
-  React.useEffect(() => {
-    if (!fmcgOrg) return;
-    if (!selectValue || selectValue === normalizedValue || selectValue === value) return;
-    // A product set to KG must not be rewritten to PCS while packaging is still loading.
-    if (normalizedValue && !isPieceUom(normalizedValue) && isPieceUom(selectValue)) return;
-    // Never strip a pack UOM before product packaging has loaded.
-    const packsLoaded = (packagingForProduct?.length ?? 0) > 0;
-    if (!packsLoaded && normalizedValue && !isPieceUom(normalizedValue)) return;
-    onChange(lineId, selectValue);
-  }, [fmcgOrg, lineId, onChange, packagingForProduct, selectValue, value, normalizedValue]);
+  const selectValue = value.trim().toUpperCase() || baseUom;
+  const options = [...new Set([
+    equivalentUnit ?? baseUom,
+    ...activeDocumentAlternates(packagingForProduct).map((row) => row.uom.trim().toUpperCase()),
+  ])];
+  const historicalUnit = !options.includes(selectValue);
 
   const [menuOpen, setMenuOpen] = React.useState(false);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -1852,6 +1799,7 @@ function UomSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
+          {historicalUnit && <SelectItem value={selectValue} disabled>{selectValue} (existing)</SelectItem>}
           {options.map((u) => (
             <SelectItem key={u} value={u}>
               {u}

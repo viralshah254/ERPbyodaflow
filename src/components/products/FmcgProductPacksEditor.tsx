@@ -170,12 +170,16 @@ export function FmcgProductPacksEditor({
   compact,
   onChanged,
   baseUom: baseUomProp,
+  grossWeightKg,
+  grossVolumeM3,
 }: {
   productId: string;
   canWrite: boolean;
   compact?: boolean;
   onChanged?: (items: ProductPackaging[]) => void;
   baseUom?: string;
+  grossWeightKg?: number;
+  grossVolumeM3?: number;
 }) {
   const baseUom = (baseUomProp ?? "PCS").trim().toUpperCase() || "PCS";
   const [rows, setRows] = React.useState<PackRow[]>([]);
@@ -498,6 +502,12 @@ export function FmcgProductPacksEditor({
                           {baseEq != null ? `${baseEq} ${baseUom}` : "—"}
                         </div>
                         <div className="text-muted-foreground">{preview}</div>
+                        {baseEq != null && grossWeightKg != null && (
+                          <div>Gross weight {(baseEq * grossWeightKg).toLocaleString(undefined, { maximumSignificantDigits: 10 })} kg</div>
+                        )}
+                        {baseEq != null && grossVolumeM3 != null && (
+                          <div>Gross volume {(baseEq * grossVolumeM3).toLocaleString(undefined, { maximumSignificantDigits: 10 })} m³</div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>

@@ -12,7 +12,7 @@ describe("FMCG bakery purchasing uses the same screens as the manufacturer", () 
     expect(isPlantCatalogueTemplate(templateId)).toBe(true);
   });
 
-  it("opens a kilogram size on KG and loads finished goods for a plant purchase list", () => {
+  it("opens a piece-stock item on PCS and loads finished goods for a plant purchase list", () => {
     const fmcgOrg = isFmcgOrg("fmcg-bakery");
     const plantCatalogue = isPlantCatalogueTemplate("fmcg-bakery");
 
@@ -20,11 +20,10 @@ describe("FMCG bakery purchasing uses the same screens as the manufacturer", () 
       defaultDocumentLineUom({
         packaging: [],
         mode: "purchasing",
-        baseUom: "PCS",
-        size: "35kg",
+        ...{ baseUom: "PCS", size: "4kg" },
         fmcgOrg,
       })
-    ).toBe("KG");
+    ).toBe("PCS");
 
     expect(
       pickerListQuery({ productFilter: "purchasable", plantCatalogue, typeFilter: "FINISHED" })

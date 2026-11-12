@@ -44,7 +44,6 @@ export function resolveUnitsPerPieceOrNull(
 ): number | null {
   const want = normalizeUom(uom);
   const base = normalizeUom(productBaseUom || "PCS");
-  if (isPieceUom(want) || want === base) return 1;
   return resolveFactorToBase(want, asSkuRows(packaging, base), base);
 }
 
@@ -105,11 +104,12 @@ export function resolveFmcgClientLinePrice(opts: {
   const discountPercent = Math.min(100, Math.max(0, opts.discountPercent ?? 0));
   const unitPriceNet = Math.round(unitPriceGross * (1 - discountPercent / 100) * 100) / 100;
   const discountAmount = Math.round(unitPriceGross * opts.quantity * (discountPercent / 100) * 100) / 100;
+  const baseLabel = normalizeUom(opts.productBaseUom || "PCS");
   const reason =
     discountPercent > 0
-      ? `${unitsPer} pc × ${opts.pricePerPiece} (−${discountPercent}%)`
+      ? `${unitsPer} ${baseLabel} × ${opts.pricePerPiece} (−${discountPercent}%)`
       : unitsPer > 1
-        ? `${unitsPer} pc × ${opts.pricePerPiece}`
-        : "Price / pc";
+        ? `${unitsPer} ${baseLabel} × ${opts.pricePerPiece}`
+        : `Price / ${baseLabel}`;
   return { unitPriceGross, unitPriceNet, discountPercent, discountAmount, unitsPer, reason };
 }

@@ -45,7 +45,7 @@ export function getBaseQty(
   packagingForProduct?: ProductPackaging[]
 ): number {
   if (!packagingForProduct?.length) return qty;
-  const p = packagingForProduct.find((x) => x.uom === uom);
-  if (!p || p.unitsPer <= 0) return qty;
+  const p = packagingForProduct.find((x) => x.status !== "inactive" && x.uom.trim().toUpperCase() === uom.trim().toUpperCase());
+  if (!p || !Number.isFinite(p.unitsPer) || p.unitsPer <= 0) return qty;
   return qty * p.unitsPer;
 }

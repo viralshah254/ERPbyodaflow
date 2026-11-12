@@ -441,7 +441,7 @@ export default function ProductDetailPage() {
     const roleChanged = plantCatalogue && itemRoleDraft !== (product.itemRole ?? "");
     const taxChanged = (defaultTaxCodeId || "") !== (product.defaultTaxCodeId ?? "");
     const uomChanged =
-      !fmcgOrg && Boolean(baseUomDraft) && baseUomDraft !== (product.baseUom ?? product.unit ?? "");
+      Boolean(baseUomDraft) && baseUomDraft !== (product.baseUom ?? product.unit ?? "");
     const categoryChanged = (categoryDraft || "") !== (product.category ?? "");
     const sizeChanged =
       fmcgOrg &&
@@ -504,15 +504,15 @@ export default function ProductDetailPage() {
     if (!fmcgOrg) {
       const familyNext = productFamilyDraft.trim() || undefined;
       if ((familyNext ?? "") !== (product.productFamily ?? "")) patch.productFamily = familyNext;
-      const uomNext = baseUomDraft.trim();
-      if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) {
-        const ok = window.confirm(
-          `Change Base UOM from ${product.baseUom ?? product.unit} to ${uomNext}? Historical transactions keep their conversion snapshots. Administrator confirmation is required if stock or documents exist.`
-        );
-        if (!ok) return;
-        patch.baseUom = uomNext;
-        patch.confirmBaseUomChange = true;
-      }
+    }
+    const uomNext = baseUomDraft.trim();
+    if (uomNext && uomNext !== (product.baseUom ?? product.unit ?? "")) {
+      const ok = window.confirm(
+        `Change Base UOM from ${product.baseUom ?? product.unit} to ${uomNext}? Historical transactions keep their conversion snapshots. Administrator confirmation is required if stock or documents exist.`
+      );
+      if (!ok) return;
+      patch.baseUom = uomNext;
+      patch.confirmBaseUomChange = true;
     }
     const notesNext = descriptionDraft.trim() || undefined;
     if (descriptionDraft !== (product.description ?? "")) patch.description = notesNext;
@@ -1056,23 +1056,19 @@ export default function ProductDetailPage() {
                         }
                       />
                     </div>
-                    {!fmcgOrg ? (
-                      <>
-                        <span className="text-muted-foreground align-top pt-1.5">Base UOM</span>
-                        <div className="min-w-0">
-                          <Combobox
-                            value={baseUomDraft}
-                            onChange={setBaseUomDraft}
-                            options={[
-                              ...new Set([...(baseUomDraft ? [baseUomDraft] : []), ...uomOptions]),
-                            ].map((u) => ({ value: u, label: u }))}
-                            placeholder="Select unit"
-                            searchPlaceholder="Search units…"
-                            emptyMessage="No units."
-                          />
-                        </div>
-                      </>
-                    ) : null}
+                    <span className="text-muted-foreground align-top pt-1.5">Stock Base UOM</span>
+                    <div className="min-w-0">
+                      <Combobox
+                        value={baseUomDraft}
+                        onChange={setBaseUomDraft}
+                        options={[
+                          ...new Set([...(baseUomDraft ? [baseUomDraft] : []), ...uomOptions]),
+                        ].map((u) => ({ value: u, label: u }))}
+                        placeholder="Select unit"
+                        searchPlaceholder="Search units…"
+                        emptyMessage="No units."
+                      />
+                    </div>
                     <span className="text-muted-foreground">Status</span>
                     <span>
                       <Badge variant={product.status === "ACTIVE" ? "secondary" : "outline"}>
@@ -1210,7 +1206,7 @@ export default function ProductDetailPage() {
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label htmlFor="gross-weight-kg">Gross weight (kg)</Label>
+                      <Label htmlFor="gross-weight-kg">Gross weight (kg per {baseUom})</Label>
                       <Input
                         id="gross-weight-kg"
                         inputMode="decimal"
@@ -1223,7 +1219,7 @@ export default function ProductDetailPage() {
                       </p>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="gross-volume-m3">Gross volume (m³)</Label>
+                      <Label htmlFor="gross-volume-m3">Gross volume (m³ per {baseUom})</Label>
                       <Input
                         id="gross-volume-m3"
                         inputMode="decimal"
@@ -1690,6 +1686,8 @@ export default function ProductDetailPage() {
                     productId={id}
                     canWrite={canWrite}
                     baseUom={baseUom}
+                    grossWeightKg={product.grossWeightKg}
+                    grossVolumeM3={product.grossVolumeM3}
                     onChanged={setPackaging}
                   />
                 </CardContent>

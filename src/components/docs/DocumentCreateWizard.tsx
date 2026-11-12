@@ -97,7 +97,6 @@ import {
   fetchDocumentProductDataApi,
   fetchProductPricingApi,
 } from "@/lib/api/product-master";
-import { fetchProductUomsApi } from "@/lib/api/uom";
 import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-types";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -657,8 +656,6 @@ export function DocumentCreateWizard({
     return taxCodes.find((t) => t.code === DEFAULT_TAX_CODE)?.id;
   }, [currentOrgId, taxCodes, fmcgOrg, effectiveTaxConfig?.taxCodeId]);
   const [packagingByProductId, setPackagingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPackagingApi>>>>({});
-  /** Org catalog UOM codes (same source as Settings → UOM) for line dropdown merge. */
-  const [catalogUomCodes, setCatalogUomCodes] = React.useState<string[]>([]);
   const [pricingByProductId, setPricingByProductId] = React.useState<Record<string, Awaited<ReturnType<typeof fetchProductPricingApi>>>>({});
   const [costPricingByProductId, setCostPricingByProductId] = React.useState<Record<string, ProductPrice[]>>({});
   const [dailyPricesByProductId, setDailyPricesByProductId] = React.useState<Record<string, { effectivePrice: number | null; isStale: boolean; fallbackDate?: string | null }>>({});
@@ -1048,25 +1045,6 @@ export function DocumentCreateWizard({
       cancelled = true;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step]);
-
-  React.useEffect(() => {
-    if (step !== 2) return;
-    if (!isApiConfigured()) {
-      setCatalogUomCodes([]);
-      return;
-    }
-    let cancelled = false;
-    fetchProductUomsApi()
-      .then((list) => {
-        if (!cancelled) setCatalogUomCodes(list.map((u) => u.code).sort((a, b) => a.localeCompare(b)));
-      })
-      .catch(() => {
-        if (!cancelled) setCatalogUomCodes([]);
-      });
-    return () => {
-      cancelled = true;
-    };
   }, [step]);
 
   React.useEffect(() => {
@@ -3031,7 +3009,6 @@ export function DocumentCreateWizard({
               mode={lineEditorMode}
               productFilter={lineEditorMode === "purchasing" ? "purchasable" : "sellable"}
               packagingByProductId={packagingByProductId}
-              catalogUomCodes={catalogUomCodes}
               pricingByProductId={lineEditorPricingByProductId}
               dailyPricesByProductId={
                 lineEditorMode === "sales" && !fmcgOrg ? dailyPricesByProductId : undefined
