@@ -21,8 +21,10 @@ import {
 import type { WorkQueueItem } from "@/lib/types/work-queue";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
+import { ExpectedEmailOrdersPanel } from "@/components/tasks/ExpectedEmailOrdersPanel";
 
 export default function TasksPage() {
+  const [activeTab, setActiveTab] = React.useState<"tasks" | "expected-email">("tasks");
   const [search, setSearch] = React.useState("");
   const [tasks, setTasks] = React.useState<WorkQueueTaskRow[]>([]);
   const [queue, setQueue] = React.useState<WorkQueueItem[]>([]);
@@ -125,6 +127,28 @@ export default function TasksPage() {
         }
       />
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
+        <div className="flex flex-wrap gap-2 border-b pb-3">
+          <Button
+            size="sm"
+            variant={activeTab === "tasks" ? "default" : "outline"}
+            onClick={() => setActiveTab("tasks")}
+          >
+            Work queue
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === "expected-email" ? "default" : "outline"}
+            onClick={() => setActiveTab("expected-email")}
+          >
+            <Icons.Mail className="mr-2 h-3.5 w-3.5" />
+            Expected email orders
+          </Button>
+        </div>
+
+        {activeTab === "expected-email" ? (
+          <ExpectedEmailOrdersPanel />
+        ) : (
+          <>
         <DataTableToolbar className="shrink-0" searchPlaceholder="Search tasks..." searchValue={search} onSearchChange={setSearch} />
         <div className="relative flex min-h-0 flex-col rounded-xl border bg-card shadow-sm" data-tutorial-hint="my-tasks">
           <div className="shrink-0 border-b px-4 py-3">
@@ -161,6 +185,8 @@ export default function TasksPage() {
             )}
           </CardContent>
         </Card>
+          </>
+        )}
       </div>
 
       {drawerOpen ? (
