@@ -528,6 +528,15 @@
       "Confirm actual allocation deliberately and verify the task balance and inventory location afterwards."
     ]
   },
+  "/warehouse/transfers/new": {
+    "title": "Create transfer",
+    "summary": "Prepare a draft transfer using stock available at the source warehouse.",
+    "tasks": [
+      "Choose a source and a different destination warehouse. Review any source marked as needing classification.",
+      "Search the source stock list and enter quantities beside the available stock. Confirm the unit for each selected product.",
+      "Review the selected products and save the draft for approval."
+    ]
+  },
   "/warehouse/transfers/[id]": {
     "title": "Stock transfer record",
     "summary": "Review a stock move between its source and destination warehouses.",

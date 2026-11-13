@@ -5652,12 +5652,15 @@
     "hints": []
   },
   {
-    "route": "/warehouse/transfers",
-    "title": "Transfers",
-    "description": "Inter-warehouse transfers",
+    "route": "/warehouse/transfers/new",
+    "title": "Create transfer",
+    "description": "Prepare a stock transfer using quantities available at the source warehouse.",
     "sections": [
       {
-        "title": "Transfers"
+        "title": "Source warehouse stock"
+      },
+      {
+        "title": "Optional details"
       }
     ],
     "fields": [
@@ -5672,6 +5675,18 @@
       "Source GRN ID (optional)",
       "Cost description"
     ],
+    "hints": []
+  },
+  {
+    "route": "/warehouse/transfers",
+    "title": "Transfers",
+    "description": "Inter-warehouse transfers",
+    "sections": [
+      {
+        "title": "Transfers"
+      }
+    ],
+    "fields": [],
     "hints": []
   },
   {
