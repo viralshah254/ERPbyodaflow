@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
 import { isApiConfigured } from "@/lib/api/client";
 import {
   fetchSalesDocumentFlowApi,
@@ -148,6 +149,7 @@ export default function SalesDocumentFlowPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
+  const routeDispatch = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
   const [settings, setSettings] = React.useState<SalesDocumentFlowSettings>(DEFAULTS);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -247,14 +249,16 @@ export default function SalesDocumentFlowPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className={`grid gap-3 ${routeDispatch ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
                 {(
                   [
                     ["classic", "Current flow", "Delivery note first, then pick & pack, then invoice after the signed note."],
                     ["pick_pack_first", "Pick & pack first", "Pick from the sales order, then invoice and delivery note, then proof of delivery."],
                     ["joy_dispatch", "Route dispatch", "Group orders by delivery route, load one truck from DISPATCH, invoice the loaded quantity, then mark the truck as left."],
                   ] as Array<[SalesDocumentFlowMode, string, string]>
-                ).map(([mode, label, hint]) => (
+                )
+                  .filter(([mode]) => mode !== "joy_dispatch" || routeDispatch)
+                  .map(([mode, label, hint]) => (
                   <button
                     key={mode}
                     type="button"

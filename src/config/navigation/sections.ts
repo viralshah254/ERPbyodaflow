@@ -1,5 +1,5 @@
 import type { NavSectionConfig } from "./types";
-import { FMCG_COMMERCE_TEMPLATE_IDS, FMCG_SELLING_TEMPLATE_IDS } from "../industry";
+import { FMCG_BAKERY_TEMPLATE_ID, FMCG_COMMERCE_TEMPLATE_IDS, FMCG_SELLING_TEMPLATE_IDS } from "../industry";
 
 export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
   {
@@ -256,7 +256,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         icon: "ClipboardList",
         moduleKey: "inventory",
         requiresPermissions: ["inventory.write"],
-        requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
+        requiresTemplates: [FMCG_BAKERY_TEMPLATE_ID],
       },
       { key: "warehouse-putaway", label: "Putaway", href: "/warehouse/putaway", icon: "MapPin", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "warehouse-bin-locations", label: "Bin locations", href: "/warehouse/bin-locations", icon: "LayoutGrid", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },

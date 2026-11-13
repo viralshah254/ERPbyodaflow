@@ -72,8 +72,8 @@ export default function DispatchReturnDetailPage() {
           toast.error(error instanceof Error ? error.message : "Could not load this return.");
         }
       });
-    void fetchWarehouseOptions()
-      .then(setWarehouses)
+    void fetchWarehouseOptions({ includeTransferEligibility: true })
+      .then((rows) => setWarehouses(rows.filter((row) => !row.transferSourceBlock)))
       .catch(() => {
         /* Warehouse list is required to post; the form shows an empty selector. */
       });
@@ -182,7 +182,7 @@ export default function DispatchReturnDetailPage() {
       <PageShell>
         <PageHeader
           title={`Return ${onRoad.number}`}
-          description="Count what the truck brought back. Good quantity is added to stock in the same unit that was dispatched."
+          description="Count what the truck brought back. Good quantity returns to the warehouse you pick. Damaged quantity goes to the returns store. What comes back is left off the customer invoice."
           breadcrumbs={[
             { label: "Warehouse", href: "/warehouse/overview" },
             { label: "Driver returns", href: "/warehouse/dispatch-returns" },
@@ -237,7 +237,7 @@ export default function DispatchReturnDetailPage() {
                   <div key={line.lineId} className="space-y-2 border-b border-border pb-4 last:border-0">
                     <p className="text-sm font-medium">{line.description || line.lineId}</p>
                     <p className="text-xs text-muted-foreground">
-                      Dispatched {line.shippedQty} {unit}
+                      Still out {line.shippedQty} {unit}
                     </p>
                     <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
                       <div className="space-y-2">
@@ -328,7 +328,7 @@ export default function DispatchReturnDetailPage() {
                   onChange={(e) => setWeights((prev) => ({ ...prev, [line.lineId]: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Driver dropped {line.droppedWeightKg}
+                  Driver brought back {line.droppedWeightKg} {line.unit || "units"}
                   {line.shippedQty != null ? ` · dispatched ${line.shippedQty}` : ""}
                 </p>
               </div>
