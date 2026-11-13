@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,7 +52,6 @@ function placeLabel(label: string): string {
 
 const QTY_INPUT = "h-8 w-24 border-muted-foreground/40 text-right tabular-nums";
 
-type BoardStep = "all" | "load" | "finance" | "leave";
 
 function WaitingRouteCard({
   route,
@@ -103,7 +103,7 @@ function WaitingRouteCard({
         {activeNote ? (
           <p className="rounded-md border bg-muted/50 p-3 text-sm">
             Waiting for {activeNote.number} to clear.{" "}
-            <Link className="text-primary underline" href={`/warehouse/route-pick-lists#note-${activeNote.id}`}>
+            <Link className="text-primary underline" href={`/warehouse/route-pick-lists?note=${encodeURIComponent(activeNote.id)}`}>
               Open loading note
             </Link>
           </p>
@@ -608,7 +608,7 @@ function JoyRouteLoadsInner() {
   const params = useSearchParams();
   const focusWarehouse = params.get("warehouse") ?? "";
   const focusNote = params.get("note") ?? "";
-  const step = (params.get("step") as BoardStep | null) ?? "all";
+  const step = params.get("step");
   const canLoad = useHasPermission("inventory.write");
   const canFinance = useHasPermission("finance.write");
   const [data, setData] = React.useState<JoyLoadNotes | null>(null);
@@ -625,40 +625,34 @@ function JoyRouteLoadsInner() {
     void reload();
   }, [reload]);
 
+  const focusedNote = focusNote
+    ? data?.notes.find((note) => note.id === focusNote)
+    : focusWarehouse ? data?.notes.find((note) => note.routeWarehouseId === focusWarehouse && note.status !== "INVOICED") : undefined;
+  const financeView = step === "finance" || (
+    step !== "load" && step !== "leave" && step !== "dispatch" &&
+    (focusedNote?.status === "AWAITING_FINANCE" || focusedNote?.status === "INVOICING")
+  );
+  const queueHref = (queue: "dispatch" | "finance") => `?step=${queue}`;
+
   React.useEffect(() => {
     if (!data) return;
-    const note = focusNote
-      ? data.notes.find((row) => row.id === focusNote)
-      : data.notes.find((row) => row.routeWarehouseId === focusWarehouse && row.status !== "INVOICED");
-    const target = note
-      ? `note-${note.id}`
-      : focusWarehouse
-        ? `route-${focusWarehouse}`
-        : step === "load"
-          ? "step-load"
-          : step === "finance"
-            ? "step-finance"
-            : step === "leave"
-              ? "step-leave"
-              : "";
+    const target = focusedNote ? `note-${focusedNote.id}`
+      : focusWarehouse && !financeView ? `route-${focusWarehouse}`
+      : step === "leave" ? "step-leave" : "";
     if (target) document.getElementById(target)?.scrollIntoView({ block: "start" });
-  }, [data, focusNote, focusWarehouse, step]);
+  }, [data, focusedNote, focusWarehouse, financeView, step]);
 
-  if (!data) return <p className="text-sm text-muted-foreground">Loading routes…</p>;
+  if (!data) return <p className="p-3 text-sm text-muted-foreground">Loading routes…</p>;
 
   const loading = data.notes.filter((note) => note.status === "OPEN");
   const finance = data.notes.filter((note) => note.status === "AWAITING_FINANCE" || note.status === "INVOICING");
   const ready = data.notes.filter((note) => note.status === "INVOICED" && !note.departedAt);
   const left = data.notes.filter((note) => note.status === "INVOICED" && note.departedAt);
-  const showLoad = step === "all" || step === "load";
-  const showFinance = step === "all" || step === "finance";
-  const showLeave = step === "all" || step === "leave";
-  const hideEmpty = step === "all";
 
   const loadBlocks =
-    showLoad && (!hideEmpty || data.waiting.length || loading.length)
+    !financeView
       ? [
-          <Section key="waiting" id="step-load" title="1. Choose a truck" empty="No approved orders are waiting for a truck.">
+          <Section key="waiting" id="step-load" title="Choose a truck" empty="No approved orders are waiting for a truck.">
             {data.waiting.map((route) => (
               <WaitingRouteCard
                 key={route.warehouseId}
@@ -673,7 +667,7 @@ function JoyRouteLoadsInner() {
               />
             ))}
           </Section>,
-          <Section key="loading" id="step-loading" title="2. Confirm load" empty="No truck is being loaded.">
+          <Section key="loading" id="step-loading" title="Confirm load" empty="No truck is being loaded.">
             {loading.map((note) => (
               <LoadingNoteCard
                 key={note.id}
@@ -687,9 +681,9 @@ function JoyRouteLoadsInner() {
         ]
       : [];
   const financeBlock =
-    showFinance && (!hideEmpty || finance.length)
+    financeView
       ? [
-          <Section key="finance" id="step-finance" title="3. Finance review" empty="No loads need finance review.">
+          <Section key="finance" id="step-finance" title="Loads awaiting finance" empty="No loads need finance review.">
             {finance.map((note) => (
               <FinanceNoteCard key={`${note.id}:${note.status}`} note={note} canFinance={canFinance} onChanged={reload} />
             ))}
@@ -697,14 +691,14 @@ function JoyRouteLoadsInner() {
         ]
       : [];
   const leaveBlocks =
-    showLeave && (!hideEmpty || ready.length || left.length)
+    !financeView
       ? [
-          <Section key="ready" id="step-leave" title="4. Ready to leave" empty="No invoiced loads are waiting to leave.">
+          <Section key="ready" id="step-leave" title="Ready to leave" empty="No invoiced loads are waiting to leave.">
             {ready.map((note) => (
               <ReadyToLeaveCard key={note.id} note={note} canLoad={canLoad} onChanged={reload} />
             ))}
           </Section>,
-          <Section key="left" id="step-left" title="5. Left today" empty="No trucks have left yet today.">
+          <Section key="left" id="step-left" title="Left today" empty="No trucks have left yet today.">
             {left.map((note) => (
               <LeftTodayCard key={note.id} note={note} />
             ))}
@@ -712,21 +706,18 @@ function JoyRouteLoadsInner() {
         ]
       : [];
 
-  // Put the section with outstanding work first so the next action is obvious.
-  const sections =
-    finance.length && step === "all"
-      ? [...financeBlock, ...loadBlocks, ...leaveBlocks]
-      : ready.length && !loading.length && !data.waiting.length && step === "all"
-        ? [...leaveBlocks, ...loadBlocks, ...financeBlock]
-        : [...loadBlocks, ...financeBlock, ...leaveBlocks];
-
   return (
-    <div className="space-y-8">
-      <p className="text-sm text-muted-foreground">
-        Sales orders keep what was ordered. The loading note records what went on the truck. Invoices bill the loaded
-        quantity. Goods are picked from {placeLabel(data.dispatchWarehouseName)}.
-      </p>
-      {sections.length ? sections : <p className="text-sm text-muted-foreground">Nothing needs attention on this step.</p>}
+    <div className="space-y-4 p-3 sm:px-5">
+      <nav aria-label="Route load queues" className="flex flex-wrap gap-2">
+        <Button asChild size="sm" variant={financeView ? "ghost" : "secondary"}>
+          <Link href={queueHref("dispatch")} aria-current={financeView ? undefined : "page"}>Dispatch</Link>
+        </Button>
+        <Button asChild size="sm" variant={financeView ? "secondary" : "ghost"}>
+          <Link href={queueHref("finance")} aria-current={financeView ? "page" : undefined}>Finance Review <Badge variant="outline">{finance.length}</Badge></Link>
+        </Button>
+      </nav>
+      {!financeView && <p className="text-sm text-muted-foreground">Pick stock from {placeLabel(data.dispatchWarehouseName)}. Short loads go to Finance Review.</p>}
+      {financeView ? financeBlock : step === "leave" ? [...leaveBlocks, ...loadBlocks] : [...loadBlocks, ...leaveBlocks]}
     </div>
   );
 }

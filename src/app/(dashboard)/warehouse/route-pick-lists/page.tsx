@@ -39,7 +39,7 @@ export default function RoutePickListsPage() {
     <PageShell>
       <PageHeader
         title="Route loads"
-        description="Choose a truck, confirm what was loaded, invoice, then mark the truck as left. Short loads go to finance first. Sales orders keep the ordered quantities."
+        dense
       />
       <JoyRouteLoads />
     </PageShell>

@@ -11,6 +11,8 @@ describe("FMCG reporting workspace", () => {
     expect(screen.getByRole("link", { name: /Overdue Sales Orders/ })).toHaveAttribute("href", "/reports/operations/overdue-sales-orders");
     expect(screen.queryByRole("link", { name: /Sales vs Purchases/ })).toBeNull();
     expect(screen.queryByRole("link", { name: /Executable Orders/ })).toBeNull();
+    expect(screen.getByRole("searchbox")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Report module"), { target: { value: "Sales" } });
     fireEvent.change(screen.getByLabelText("Search FMCG reports"), { target: { value: "overdue" } });
     expect(screen.queryByRole("link", { name: /Sales Rep Report/ })).toBeNull();
     expect(screen.getByRole("link", { name: /Overdue Sales Orders/ })).toBeTruthy();

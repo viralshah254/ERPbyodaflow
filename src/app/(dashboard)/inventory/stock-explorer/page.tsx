@@ -1,9 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SCROLL_BODY_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
@@ -337,145 +336,134 @@ export default function InventoryStockExplorerPage() {
           { label: "Inventory", href: "/inventory/products" },
           { label: "Stock Explorer" },
         ]}
-        showCommandHint
+        dense
       />
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6">
-        <Card className="shrink-0">
-          <CardHeader className="space-y-4 pb-4">
-            <div>
-              <CardTitle>Global stock explorer</CardTitle>
-              <CardDescription>
-                Server-filtered inventory by SKU and warehouse. Search uses the product catalog index;
-                quantity, age, and status filters run on the API.
-              </CardDescription>
-            </div>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden p-3 sm:px-5">
+        <DataTableToolbar className="shrink-0 p-2"
+          searchPlaceholder="Name, SKU, code or barcode"
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
+          filters={[
+            {
+              id: "status",
+              label: "Stock status",
+              options: [
+                { label: "All statuses", value: "all" },
+                { label: "In Stock", value: "In Stock" },
+                { label: "Low Stock", value: "Low Stock" },
+                { label: "Out of Stock", value: "Out of Stock" },
+              ],
+              value: statusFilter,
+              onChange: (v) =>
+                setStatusFilter(v as "all" | "In Stock" | "Low Stock" | "Out of Stock"),
+            },
+            {
+              id: "ownership",
+              label: "Ownership",
+              options: [
+                { label: "All", value: "all" },
+                { label: "CoolCatch", value: "CoolCatch" },
+                { label: "Franchise", value: "Franchise" },
+              ],
+              value: ownershipFilter,
+              onChange: (v) => setOwnershipFilter(v as "all" | "CoolCatch" | "Franchise"),
+            },
+          ]}
+          activeFiltersCount={filterChips.length}
+          onClearFilters={clearFilters}
+          filterChips={filterChips}
+          onRemoveFilterChip={(id) => {
+            if (id === "status") setStatusFilter("all");
+            if (id === "ownership") setOwnershipFilter("all");
+            if (id === "q") setSearchInput("");
+            if (id === "ranges") {
+              setMinOnHand("");
+              setMaxOnHand("");
+              setMinAvailable("");
+              setMaxAvailable("");
+              setMinAge("");
+              setMaxAge("");
+            }
+          }}
+        />
 
-            <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
-              searchPlaceholder="Name, size, or barcode"
-              searchValue={searchInput}
-              onSearchChange={setSearchInput}
-              filters={[
-                {
-                  id: "status",
-                  label: "Stock status",
-                  options: [
-                    { label: "All statuses", value: "all" },
-                    { label: "In Stock", value: "In Stock" },
-                    { label: "Low Stock", value: "Low Stock" },
-                    { label: "Out of Stock", value: "Out of Stock" },
-                  ],
-                  value: statusFilter,
-                  onChange: (v) =>
-                    setStatusFilter(v as "all" | "In Stock" | "Low Stock" | "Out of Stock"),
-                },
-                {
-                  id: "ownership",
-                  label: "Ownership",
-                  options: [
-                    { label: "All", value: "all" },
-                    { label: "CoolCatch", value: "CoolCatch" },
-                    { label: "Franchise", value: "Franchise" },
-                  ],
-                  value: ownershipFilter,
-                  onChange: (v) => setOwnershipFilter(v as "all" | "CoolCatch" | "Franchise"),
-                },
-              ]}
-              activeFiltersCount={filterChips.length}
-              onClearFilters={clearFilters}
-              filterChips={filterChips}
-              onRemoveFilterChip={(id) => {
-                if (id === "status") setStatusFilter("all");
-                if (id === "ownership") setOwnershipFilter("all");
-                if (id === "q") setSearchInput("");
-                if (id === "ranges") {
-                  setMinOnHand("");
-                  setMaxOnHand("");
-                  setMinAvailable("");
-                  setMaxAvailable("");
-                  setMinAge("");
-                  setMaxAge("");
-                }
-              }}
-            />
+        <details className="shrink-0 rounded-lg border bg-muted/20 px-3 py-1.5">
+          <summary className="cursor-pointer text-sm font-medium">
 
-            <div className="rounded-lg border bg-muted/20 p-4 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Icons.SlidersHorizontal className="h-4 w-4 shrink-0" />
-                Quantity & age
-                {rangesPending && (
-                  <span className="text-xs font-normal text-muted-foreground">Applying…</span>
-                )}
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-                {(
-                  [
-                    ["minOH", "Min on hand", minOnHand, setMinOnHand],
-                    ["maxOH", "Max on hand", maxOnHand, setMaxOnHand],
-                    ["minAv", "Min unreserved", minAvailable, setMinAvailable],
-                    ["maxAv", "Max unreserved", maxAvailable, setMaxAvailable],
-                    ["minAge", "Min age (days)", minAge, setMinAge],
-                    ["maxAge", "Max age (days)", maxAge, setMaxAge],
-                  ] as const
-                ).map(([id, label, value, onChange]) => (
-                  <div key={id} className="space-y-1.5">
-                    <Label htmlFor={id} className="text-xs text-muted-foreground">
-                      {label}
-                    </Label>
-                    <Input
-                      id={id}
-                      inputMode="decimal"
-                      placeholder="Any"
-                      value={value}
-                      onChange={(e) => onChange(e.target.value)}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-0 border-t">
-            {initialLoading ? (
-              <div className="p-4">
-                <SkeletonDataTable
-                  rows={pageSize}
-                  columnWidths={["w-20", "w-32", "w-28", "w-20", "w-16", "w-16", "w-24", "w-16", "w-20"]}
+            Quantity & age
+            {rangesPending && (
+              <span className="text-xs font-normal text-muted-foreground">Applying…</span>
+            )}
+            {rangeFiltersActive && <span className="ml-2 text-xs text-muted-foreground">Applied</span>}
+          </summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+            {(
+              [
+                ["minOH", "Min on hand", minOnHand, setMinOnHand],
+                ["maxOH", "Max on hand", maxOnHand, setMaxOnHand],
+                ["minAv", "Min unreserved", minAvailable, setMinAvailable],
+                ["maxAv", "Max unreserved", maxAvailable, setMaxAvailable],
+                ["minAge", "Min age (days)", minAge, setMinAge],
+                ["maxAge", "Max age (days)", maxAge, setMaxAge],
+              ] as const
+            ).map(([id, label, value, onChange]) => (
+              <div key={id} className="space-y-1.5">
+                <Label htmlFor={id} className="text-xs text-muted-foreground">
+                  {label}
+                </Label>
+                <Input
+                  id={id}
+                  inputMode="decimal"
+                  placeholder="Any"
+                  value={value}
+                  onChange={(e) => onChange(e.target.value)}
                 />
               </div>
-            ) : (
-              <div>
-                <TableLinearProgress active={tableBusy} />
-                <div
-                  className={cn(
-                    "transition-opacity duration-200",
-                    tableBusy && "pointer-events-none opacity-60",
-                  )}
-                >
-                  <DataTable dataScope="page"
-                    data={rows}
-                    columns={columns}
-                    scrollMode="natural"
-                    emptyMessage="No stock rows match your filters." searchable={false}
-                  />
-                </div>
-              </div>
-            )}
-            <TablePagination
-              className="border-t px-4"
-              pageOffset={pageOffset}
-              pageSize={pageSize}
-              itemCount={initialLoading ? 0 : rows.length}
-              hasMore={hasMore}
-              loading={initialLoading}
-              busy={tableBusy}
-              onPrevious={goToPreviousPage}
-              onNext={goToNextPage}
-              entityLabel="stock rows"
-              pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
-              onPageSizeChange={setPageSize}
+            ))}
+          </div>
+        </details>
+      <div className={LIST_TABLE_SURFACE_CLASS}>
+        {initialLoading ? (
+          <div className="min-h-0 flex-1 overflow-hidden p-4">
+            <SkeletonDataTable
+              rows={pageSize}
+              columnWidths={["w-20", "w-32", "w-28", "w-20", "w-16", "w-16", "w-24", "w-16", "w-20"]}
             />
-          </CardContent>
-        </Card>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <TableLinearProgress active={tableBusy} />
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col transition-opacity duration-200",
+                tableBusy && "pointer-events-none opacity-60",
+              )}
+            >
+              <DataTable dataScope="page"
+                data={rows}
+                columns={columns}
+                scrollMode="fill"
+                size="compact"
+                emptyMessage="No stock rows match your filters." searchable={false}
+              />
+            </div>
+          </div>
+        )}
+        <TablePagination
+          className="shrink-0 border-t px-4"
+          pageOffset={pageOffset}
+          pageSize={pageSize}
+          itemCount={initialLoading ? 0 : rows.length}
+          hasMore={hasMore}
+          loading={initialLoading}
+          busy={tableBusy}
+          onPrevious={goToPreviousPage}
+          onNext={goToNextPage}
+          entityLabel="stock rows"
+          pageSizeOptions={[...PAGE_SIZE_OPTIONS]}
+          onPageSizeChange={setPageSize}
+        />
+      </div>
       </div>
     </PageShell>
   );

@@ -56,6 +56,9 @@ const CRON_BY_FREQUENCY: Record<string, string> = {
 export default function ReportsPage() {
   const templateId = useOrgContextStore((state) => state.templateId);
   const isFmcg = resolveIndustryCategoryFromTemplateId(templateId) === "FMCG";
+  const canReadLibrary = useHasPermission("reports.read");
+  const [search, setSearch] = React.useState("");
+  const matches = (value: string) => value.toLowerCase().includes(search.trim().toLowerCase());
   const canTax = useHasPermission("finance.tax.read");
   const canReadSchedules = useHasPermission("reports.schedule.read");
   const canReadExports = useHasPermission("reports.export.read");
@@ -92,15 +95,16 @@ export default function ReportsPage() {
     <PageShell>
       <PageHeader
         title="Report Library"
-        description="Reports, saved views, schedules, and exports"
         breadcrumbs={[{ label: "Reports" }]}
         sticky
-        showCommandHint
+        dense
       />
-      <div className="p-6 space-y-8">
-        <FmcgReportCoverage />
+      <div className="space-y-4 p-3 sm:px-5">
+        {isFmcg && canReadLibrary ? <FmcgReportCoverage search={search} onSearchChange={setSearch} /> : (
+          <Input type="search" aria-label="Search reports" placeholder="Search reports…" value={search} onChange={(event) => setSearch(event.target.value)} />
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {QUICK_LINKS.filter((link) => (!isFmcg || !["Commission reconciliation", "Batch Costing"].includes(link.label)) && (!["VAT summary", "WHT summary", "KRA CU numbers"].includes(link.label) || canTax) && (link.label !== "Scheduled" || canReadSchedules) && (!["Exports", "Snapshots"].includes(link.label) || canReadExports)).map(({ href, label, desc, icon }) => {
+          {QUICK_LINKS.filter((link) => matches(`${link.label} ${link.desc}`) && (!isFmcg || !["Commission reconciliation", "Batch Costing"].includes(link.label)) && (!["VAT summary", "WHT summary", "KRA CU numbers"].includes(link.label) || canTax) && (link.label !== "Scheduled" || canReadSchedules) && (!["Exports", "Snapshots"].includes(link.label) || canReadExports)).map(({ href, label, desc, icon }) => {
             const Icon = (Icons[icon] || Icons.FileText) as React.ComponentType<{ className?: string }>;
             const count =
               label === "Saved Views" ? savedCount :
@@ -129,14 +133,14 @@ export default function ReportsPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Report library</CardTitle>
+            <CardTitle>Report templates</CardTitle>
             <CardDescription>
-              Browse report templates, run them, and capture export history.
+              Run or schedule report templates.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {library.filter((r) => (!isFmcg || !r.id.startsWith("cool-catch") && r.id !== "batch-costing") && (!["vat-summary", "wht-summary"].includes(r.id) || canTax)).map((r) => (
+              {library.filter((r) => matches(`${r.name} ${r.description} ${r.category}`) && (!isFmcg || !r.id.startsWith("cool-catch") && r.id !== "batch-costing") && (!["vat-summary", "wht-summary"].includes(r.id) || canTax)).map((r) => (
                 <div
                   key={r.id}
                   className="flex items-start gap-3 rounded-lg border p-4 hover:bg-muted/30 transition-colors"
