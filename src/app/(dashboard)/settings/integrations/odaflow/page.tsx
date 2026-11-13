@@ -23,6 +23,7 @@ import {
   fetchOdaflowIntegrationApi,
   fetchOdaflowSyncStatus,
   fetchOdaflowProductMappings,
+  connectOdaflowSfaApi,
   generateOdaflowCredentialsApi,
   updateOdaflowIntegrationApi,
   type OdaflowCredentialsApiResponse,
@@ -36,6 +37,7 @@ import { OdaflowCustomerMatchingBoard } from "@/components/integrations/OdaflowC
 import { subscribeRealtimeInbox } from "@/lib/realtime-client";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { useSearchParams } from "next/navigation";
+import { manufacturerIdFromErpOrg } from "@/lib/integrations/manufacturer-from-org";
 
 type Tab = "setup" | "overview" | "queue" | "products" | "customers";
 
@@ -78,6 +80,7 @@ function channelLabel(eventType: string) {
 
 export default function OdaflowIntegrationPage() {
   const permissions = useAuthStore((s) => s.permissions ?? []);
+  const orgName = useAuthStore((s) => s.org?.name) || "this organisation";
   const canSave = hasRuntimePermission(permissions, "admin.settings");
   const { enrolled: sfaEnrolled, loading: sfaEnrollmentLoading } = useErpSfaEnrollment();
   const searchParams = useSearchParams();
@@ -96,6 +99,7 @@ export default function OdaflowIntegrationPage() {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [generating, setGenerating] = React.useState(false);
+  const [connecting, setConnecting] = React.useState(false);
   const [settings, setSettings] = React.useState<OdaflowIntegrationApiResponse | null>(null);
   const [generated, setGenerated] = React.useState<OdaflowCredentialsApiResponse | null>(null);
   const [allowedManufacturerId, setAllowedManufacturerId] = React.useState("");
@@ -156,19 +160,50 @@ export default function OdaflowIntegrationPage() {
       .catch(() => toast.error("Failed to load mappings"));
   }, [tab]);
 
+  const knownManufacturerId = manufacturerIdFromErpOrg(settings?.orgId || "");
+  const manufacturerId = knownManufacturerId || allowedManufacturerId.trim();
+
+  const handleConnect = async () => {
+    if (!canSave) {
+      toast.error("You need admin settings permission.");
+      return;
+    }
+    if (!manufacturerId) {
+      toast.error("Enter the Odaflow manufacturer ID first.");
+      return;
+    }
+    setConnecting(true);
+    try {
+      const data = await connectOdaflowSfaApi({
+        allowedManufacturerId: manufacturerId,
+      });
+      setSettings(data.settings);
+      setAllowedManufacturerId(data.settings.allowedManufacturerId || manufacturerId);
+      setGenerated(null);
+      await refreshStatus();
+      toast.success(
+        `${data.organizationName || orgName} is connected. People can grant ERP access.`
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not connect Odaflow.");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   const handleGenerate = async (rotate: boolean) => {
     if (!canSave) {
       toast.error("You need admin settings permission.");
       return;
     }
-    if (!allowedManufacturerId.trim()) {
+    if (!manufacturerId) {
       toast.error("Enter the Odaflow manufacturer ID first.");
       return;
     }
     setGenerating(true);
     try {
       const data = await generateOdaflowCredentialsApi({
-        allowedManufacturerId: allowedManufacturerId.trim(),
+        allowedManufacturerId: manufacturerId,
         rotate,
       });
       setGenerated(data);
@@ -191,7 +226,7 @@ export default function OdaflowIntegrationPage() {
     try {
       const data = await updateOdaflowIntegrationApi({
         isActive,
-        allowedManufacturerId: allowedManufacturerId.trim(),
+        allowedManufacturerId: manufacturerId || allowedManufacturerId.trim(),
       });
       setSettings(data);
       await refreshStatus();
@@ -255,14 +290,19 @@ export default function OdaflowIntegrationPage() {
             )}
 
             <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/40 dark:text-blue-50">
-              <p className="font-medium">Connect ERP to Odaflow in two steps</p>
-              <ol className="mt-2 list-decimal space-y-1 pl-4 text-sm">
-                <li>Generate your connection credentials on this page.</li>
-                <li>
-                  In Odaflow, open <strong>Workspace → ERP connection</strong> and paste the organisation ID, API key,
-                  and secret.
-                </li>
-              </ol>
+              <p className="font-medium">Connect {orgName}</p>
+              <p className="mt-1">
+                This saves the connector key on Odaflow. People can then tick Give ERP access. You do not copy a key
+                across.
+              </p>
+              <Button
+                type="button"
+                className="mt-3"
+                onClick={() => void handleConnect()}
+                disabled={connecting || !canSave || !manufacturerId}
+              >
+                {connecting ? "Connecting…" : settings?.apiKeyConfigured ? `Reconnect ${orgName}` : `Connect ${orgName}`}
+              </Button>
             </div>
 
             <Card>
@@ -312,13 +352,15 @@ export default function OdaflowIntegrationPage() {
                   <Label htmlFor="mfg-id">Odaflow manufacturer ID</Label>
                   <Input
                     id="mfg-id"
-                    value={allowedManufacturerId}
+                    value={knownManufacturerId || allowedManufacturerId}
                     onChange={(e) => setAllowedManufacturerId(e.target.value)}
                     placeholder="Paste the manufacturer ID from Odaflow"
-                    disabled={!canSave}
+                    disabled={!canSave || Boolean(knownManufacturerId)}
                   />
                   <p className="text-xs text-muted-foreground">
-                    Ask your Odaflow admin for this ID, or find it under your manufacturer workspace settings.
+                    {knownManufacturerId
+                      ? "Taken from this ERP organisation. Connect uses it automatically."
+                      : "Ask your Odaflow admin for this ID, or find it under your manufacturer workspace settings."}
                   </p>
                 </div>
 
@@ -386,8 +428,8 @@ export default function OdaflowIntegrationPage() {
                   <div className="space-y-1">
                     <p className="text-base font-medium">Finish connecting Odaflow</p>
                     <p className="text-sm text-muted-foreground max-w-xl">
-                      Your organisation is not linked to Odaflow yet. Generate credentials on Setup, then paste them
-                      into Odaflow under Workspace → ERP connection.
+                      Your organisation is not linked to Odaflow yet. Open Setup and choose Connect. That
+                      stores the connector key for People and for order sync.
                     </p>
                   </div>
                   <Button type="button" onClick={() => setTab("setup")}>

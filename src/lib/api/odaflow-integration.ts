@@ -174,6 +174,21 @@ export async function updateOdaflowIntegrationApi(
   });
 }
 
+export async function connectOdaflowSfaApi(input: {
+  allowedManufacturerId?: string;
+}): Promise<{
+  connected: boolean;
+  manufacturerId: string;
+  organizationName: string;
+  settings: OdaflowIntegrationApiResponse;
+}> {
+  requireLiveApi("Odaflow integration");
+  return apiRequest("/api/settings/integrations/odaflow/connect", {
+    method: "POST",
+    body: input,
+  });
+}
+
 export async function generateOdaflowCredentialsApi(input: {
   allowedManufacturerId: string;
   rotate?: boolean;
