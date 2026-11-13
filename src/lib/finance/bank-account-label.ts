@@ -28,6 +28,7 @@ function tidyBankTitle(raw: string): string {
     if (lower === "ac") return "AC";
     if (lower === "usd" || lower === "kes") return lower.toUpperCase();
     if (SMALL_WORDS.has(lower)) return lower;
+    if (word.length <= 3 && word === word.toUpperCase() && /[A-Z]/.test(word)) return word;
     return lower.charAt(0).toUpperCase() + lower.slice(1);
   });
   return titled.replace(/\(/g, " (").replace(/\s{2,}/g, " ").trim();

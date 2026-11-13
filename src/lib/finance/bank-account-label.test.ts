@@ -35,6 +35,22 @@ describe("statementReadyBankAccount", () => {
     expect(dollar.accountNumberMissing).toBe(true);
   });
 
+  it("keeps short bank codes in capitals", () => {
+    const vcb = statementReadyBankAccount({
+      name: "VCB USD",
+      accountNumber: "VCB-USD",
+      bankName: "VCB USD",
+    });
+    expect(vcb.name).toBe("VCB USD");
+    expect(vcb.bank).toBe("VCB USD");
+    const ir = statementReadyBankAccount({
+      name: "VCB USD IR",
+      accountNumber: "VCB-USD-IR",
+      bankName: "VCB USD IR",
+    });
+    expect(ir.name).toBe("VCB USD IR");
+  });
+
   it("keeps petty cash and the travel float off statement reconciliation", () => {
     expect(statementReadyBankAccount({ name: "Petty Cash 2020", accountNumber: "PETTY-CASH-2020" }).usesStatement).toBe(false);
     expect(statementReadyBankAccount({ name: "PETTY-CASH-GIKOMBA", accountNumber: "PETTY-CASH-GIKOMBA" }).usesStatement).toBe(false);
