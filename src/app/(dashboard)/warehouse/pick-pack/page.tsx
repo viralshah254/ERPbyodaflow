@@ -166,7 +166,7 @@ export default function PickPackPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, debouncedSearch, pageSize, pageOffset]);
+  }, [flowMode, statusFilter, debouncedSearch, pageSize, pageOffset]);
 
   const waiting = statusFilter === TO_PICK && !debouncedSearch;
   const orderWord = pickPackFirst ? "sales order" : "delivery note";

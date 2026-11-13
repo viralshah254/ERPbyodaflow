@@ -29,6 +29,7 @@ import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses"
 import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
 import { manufacturingAreaLabel } from "@/lib/terminology";
+import { productionTerms } from "@/lib/manufacturing/production-language";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useSessionReady } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -50,6 +51,7 @@ export default function NewBomPage() {
   const terminology = useTerminology();
   const areaLabel = manufacturingAreaLabel(terminology);
   const templateId = useOrgContextStore((s) => s.templateId);
+  const terms = productionTerms(templateId);
   const isCoolCatchTemplate = templateId === "cool-catch";
 
   const [uomCodes, setUomCodes] = React.useState<string[]>([]);
@@ -145,7 +147,7 @@ export default function NewBomPage() {
       return;
     }
     if (!name.trim() || !finishedProductId) {
-      setSubmitError(!finishedProductId ? "Select a finished product." : "Enter a recipe name.");
+      setSubmitError(!finishedProductId ? "Select a finished product." : `Enter a ${terms.formula} name.`);
       return;
     }
     submitting.current = true;
@@ -159,7 +161,7 @@ export default function NewBomPage() {
         type,
         ...(outputWarehouseId ? { outputWarehouseId } : {}),
       });
-      toast.success(`BOM ${bom.code ?? bom.id} created.`);
+      toast.success(`${terms.formulaTitle} ${bom.code ?? bom.id} created.`);
       router.push(`/manufacturing/boms/${encodeURIComponent(bom.id)}`);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to create BOM.");
@@ -172,8 +174,8 @@ export default function NewBomPage() {
   return (
     <PageShell>
       <PageHeader
-        title="New BOM"
-        description="Step 1: define the product and batch output. Add components after creating the BOM."
+        title={terms.newFormula}
+        description={`Step 1: name the ${terms.formula} and its finished product. Add components after it is created.`}
         help={<BomPilotHelp screen="new" steps={[
           { id: "identity", target: "[data-bom-identity]", title: "Name this recipe", description: "Give the BOM a recognizable name. The code shown is a preview; the numbering sequence assigns the final code on save.", instruction: "Enter a recipe name.", complete: !!name.trim() },
           { id: "product", target: "[data-bom-product]", title: "Choose the finished product", description: "Search the product catalogue and select the SKU this recipe describes. Components are added on the next screen, not in this picker.", instruction: "Select a finished product from the catalogue.", complete: !!finishedProductId },
@@ -184,7 +186,7 @@ export default function NewBomPage() {
         ]} />}
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
-          { label: "BOMs", href: "/manufacturing/boms" },
+          { label: terms.formulasTitle, href: "/manufacturing/boms" },
           { label: "New" },
         ]}
         sticky
@@ -221,8 +223,8 @@ export default function NewBomPage() {
                   </p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="bom-name">Recipe name <span className="text-muted-foreground">*</span></Label>
-                  <Input id="bom-name" autoComplete="off" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} placeholder="Widget A" required />
+                  <Label htmlFor="bom-name">{terms.nameLabel} <span className="text-muted-foreground">*</span></Label>
+                  <Input id="bom-name" autoComplete="off" maxLength={200} value={name} onChange={(e) => setName(e.target.value)} placeholder={terms.formulaTitle} required />
                 </div>
               </div>
               <div className="space-y-2" data-bom-product role="group" aria-labelledby="bom-product-label">
@@ -306,7 +308,7 @@ export default function NewBomPage() {
               <div className="flex gap-2 border-t pt-4">
                 <Button type="submit" disabled={hydrating || loadError || saving || !uomCodes.includes(uom)}>
                   <Icons.Check className="mr-2 h-4 w-4" />
-                  {saving ? "Creating BOM…" : "Create BOM"}
+                  {saving ? `Creating ${terms.formula}…` : `Create ${terms.formula}`}
                 </Button>
                 <Button type="button" variant="outline" asChild>
                   <Link href="/manufacturing/boms">Cancel</Link>
@@ -317,14 +319,14 @@ export default function NewBomPage() {
         </Card>
         <aside className="self-start rounded-xl border bg-muted/30 p-5 space-y-4" data-bom-review>
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">Batch preview</p>
-          <h2 className="break-words text-lg font-semibold">{name.trim() || "Your new recipe"}</h2>
+          <h2 className="break-words text-lg font-semibold">{name.trim() || `Your new ${terms.formula}`}</h2>
           <dl className="space-y-3 text-sm">
             <div><dt className="text-muted-foreground">Finished product</dt><dd className="break-words font-medium">{finishedProductOption?.label || "Select a product"}</dd></div>
             <div><dt className="text-muted-foreground">Batch output</dt><dd className="font-medium">{quantity || "—"} {uom}</dd></div>
             <div><dt className="text-muted-foreground">Method</dt><dd className="capitalize font-medium">{type}</dd></div>
             <div><dt className="text-muted-foreground">Output destination</dt><dd>{warehouses.find(w => w.id === outputWarehouseId)?.name || "Choose on the work order"}</dd></div>
           </dl>
-          <p className="border-t pt-4 text-xs leading-relaxed text-muted-foreground">Next: add components and quantities, then link a routing. Creating this recipe does not post inventory.</p>
+          <p className="border-t pt-4 text-xs leading-relaxed text-muted-foreground">Next: add components and quantities, then link a routing. Creating this {terms.formula} does not post inventory.</p>
         </aside>
       </div>
     </PageShell>

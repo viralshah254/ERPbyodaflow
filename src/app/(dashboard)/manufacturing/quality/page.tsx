@@ -10,11 +10,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useHasPermission } from "@/lib/rbac/use-write-guard";
+import { productionTerms } from "@/lib/manufacturing/production-language";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 
 type Lot = { _id: string; lotNumber: string; productName: string; warehouseName: string; remainingQuantity: number; expiryDate?: string };
 export default function ProductionQualityPage() {
   const canDecide = useHasPermission("inventory.qc.write");
+  const terms = productionTerms(useOrgContextStore((state) => state.templateId));
   const [rows, setRows] = React.useState<Lot[]>([]);
   const [selected, setSelected] = React.useState<Lot | null>(null);
   const [reason, setReason] = React.useState("");
@@ -36,7 +39,7 @@ export default function ProductionQualityPage() {
     } catch (e) { toast.error(e instanceof Error ? e.message : "QC decision failed."); }
     finally { setBusy(false); }
   }
-  return <PageShell><PageHeader title="Production quality release" description="Review finished batches before they become available for allocation." actions={<Button asChild variant="outline"><Link href="/manufacturing/work-orders">Production batches</Link></Button>} />
+  return <PageShell><PageHeader title="Production quality release" description={`Review finished ${terms.runs} before they become available for allocation.`} actions={<Button asChild variant="outline"><Link href="/manufacturing/work-orders">{terms.runs[0].toUpperCase()}{terms.runs.slice(1)}</Link></Button>} />
     <div className="space-y-4 p-6">{error && <p role="alert" className="text-destructive">{error}</p>}
       <div className="overflow-x-auto"><InteractiveTable className="w-full text-sm"><thead><tr className="border-b text-left"><th className="p-3">Lot</th><th>Product</th><th>Warehouse</th><th>Quantity</th><th /></tr></thead><tbody>{rows.map((lot) => <tr key={lot._id} className="border-b"><td className="p-3">{lot.lotNumber}</td><td>{lot.productName}</td><td>{lot.warehouseName}</td><td>{lot.remainingQuantity}</td><td>{canDecide && <Button size="sm" variant="outline" onClick={() => { setSelected(lot); setReason(""); setExpiry(lot.expiryDate?.slice(0, 10) ?? ""); }}>Review QC</Button>}</td></tr>)}</tbody></InteractiveTable></div>
       {!error && rows.length === 0 && <p className="text-muted-foreground">No production lots are awaiting QC.</p>}

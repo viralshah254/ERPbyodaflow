@@ -23,6 +23,7 @@ import {
 import { fetchWarehousesApi } from "@/lib/api/warehouses";
 import { listUoms } from "@/lib/data/uom.repo";
 import { manufacturingAreaLabel } from "@/lib/terminology";
+import { productionTerms } from "@/lib/manufacturing/production-language";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { useRouter } from "next/navigation";
@@ -47,6 +48,7 @@ export default function BomDetailPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const isPlant = ["fmcg-manufacturer", "fmcg-bakery", "bakex", "bakery"].includes(templateId ?? "");
   const terminology = useTerminology();
+  const terms = productionTerms(templateId);
   const areaLabel = manufacturingAreaLabel(terminology);
   const uoms = React.useMemo(() => listUoms().map((item) => item.code), []);
   const [bom, setBom] = React.useState<ManufacturingBom | null>(null);
@@ -218,7 +220,7 @@ export default function BomDetailPage() {
           <div><p className="text-xs text-muted-foreground">Version and lifecycle</p><p className="mt-1 font-medium">Version {bom.version}</p><p className="text-xs text-muted-foreground">{bom.lifecycle || "No lifecycle assigned"}</p></div>
           <div><p className="text-xs text-muted-foreground">Components</p><p className="mt-1 text-xl font-semibold tabular-nums">{bom.items.length}</p><p className="text-xs text-muted-foreground">{editable ? "Editable recipe" : "Read-only for your access or lifecycle"}</p></div>
         </div>
-        {!editable && <p className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">This recipe is read-only for your current access or revision lifecycle. Use Review revisions to inspect its governance.</p>}
+        {!editable && <p className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-muted-foreground">This {terms.formula} is read-only for your current access or revision lifecycle. Use Review revisions to inspect its governance.</p>}
         <Tabs value={section} onValueChange={setSection}>
         <TabsList data-bom-tabs aria-label="BOM record sections">
           <TabsTrigger value="components">Components</TabsTrigger>

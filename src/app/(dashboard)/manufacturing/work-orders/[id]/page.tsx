@@ -22,6 +22,8 @@ import {
 } from "@/lib/api/manufacturing";
 import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
+import { productionTerms } from "@/lib/manufacturing/production-language";
+import { storeDisplayName } from "@/lib/warehouse/store-label";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
@@ -68,11 +70,19 @@ export default function WorkOrderDetailPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const terms = productionTerms(templateId);
 
   const [order, setOrder] = React.useState<ManufacturingWorkOrder | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [acting, setActing] = React.useState(false);
   const [availLines, setAvailLines] = React.useState<MaterialAvailabilityLine[]>([]);
+  const storeNames = React.useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const line of availLines) {
+      if (line.warehouseId && line.warehouseName) names[line.warehouseId] = line.warehouseName;
+    }
+    return names;
+  }, [availLines]);
   const [availLoading, setAvailLoading] = React.useState(false);
   const [availError, setAvailError] = React.useState<string | null>(null);
   const [completionQuantity, setCompletionQuantity] = React.useState("");
@@ -236,7 +246,7 @@ export default function WorkOrderDetailPage() {
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives finished goods into the selected output store under QC hold. QC acceptance makes the lot available for allocation. Do not add the output again with a stock adjustment.</p></div>{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div>
             {canWrite && order.status === "DRAFT" && <WorkOrderPreparation order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
-            {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
+            {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             <Card data-tutorial-hint="work-order-lifecycle">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -316,7 +326,7 @@ export default function WorkOrderDetailPage() {
                                           {line.barcode.trim()}
                                         </span>
                                       ) : null}
-                                      <span className="block text-muted-foreground">{line.warehouseId}</span>
+                                      <span className="block text-muted-foreground">{storeDisplayName(line.warehouseId, line.warehouseName, storeNames)}</span>
                                     </td>
                                     {(["issue", "consume", "returnQty"] as const).map((field) => (
                                       <td key={field} className="p-1">
@@ -402,7 +412,7 @@ export default function WorkOrderDetailPage() {
                           receive those items first. A partial completion is available when the requested issue quantities are covered.
                         </p>
                       ) : (
-                        <p className="mb-3 text-sm text-muted-foreground">On-hand covers this recipe.</p>
+                        <p className="mb-3 text-sm text-muted-foreground">{terms.covered}</p>
                       )}
                       <Table>
                         <TableHeader>
