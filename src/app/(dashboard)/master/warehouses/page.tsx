@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
+import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
@@ -53,6 +53,7 @@ export default function MasterWarehousesPage() {
   const warehouseLabel = t("warehouse", terminology);
 
   const [search, setSearch] = React.useState("");
+  const [storeFilter, setStoreFilter] = React.useState<"all" | "active" | "purpose" | "approval">("all");
   const [rows, setRows] = React.useState<WarehouseRow[]>([]);
   const [branches, setBranches] = React.useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = React.useState(true);
@@ -96,16 +97,24 @@ export default function MasterWarehousesPage() {
     }
   }, [drawerOpen, editingId]);
 
+  const activeStores = rows.filter((row) => row.status !== "INACTIVE");
+  const storeFilters = [
+    { id: "all", label: "All", count: rows.length },
+    { id: "active", label: "Active", count: activeStores.length },
+    { id: "purpose", label: "Need purpose", count: activeStores.filter((row) => !row.purpose).length },
+    { id: "approval", label: "Awaiting approval", count: rows.filter((row) => row.dispositionPending).length },
+  ] as const;
+
   const filtered = React.useMemo(() => {
-    if (!search.trim()) return rows;
     const q = search.trim().toLowerCase();
-    return rows.filter(
-      (r) =>
-        r.code.toLowerCase().includes(q) ||
-        r.name.toLowerCase().includes(q) ||
-        (r.branch?.toLowerCase().includes(q))
-    );
-  }, [rows, search]);
+    return rows.filter((row) => {
+      if (storeFilter === "active" && row.status === "INACTIVE") return false;
+      if (storeFilter === "purpose" && (row.status === "INACTIVE" || row.purpose)) return false;
+      if (storeFilter === "approval" && !row.dispositionPending) return false;
+      return !q || [row.code, row.name, row.branch].some((value) => value?.toLowerCase().includes(q));
+    });
+  }, [rows, search, storeFilter]);
+  const hasFilters = storeFilter !== "all" || Boolean(search.trim());
 
   const openCreate = () => {
     setEditingId(null);
@@ -192,16 +201,15 @@ export default function MasterWarehousesPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title={warehouseLabel + "s"}
-        description="Know where stock belongs, which stores can supply demand and which need review."
         breadcrumbs={[
           { label: "Masters", href: "/master" },
-          { label: warehouseLabel + "s" },
         ]}
         sticky
-        showCommandHint
+        dense
         actions={
           canWrite ? (
             <Button
+              size="sm"
               onClick={openCreate}
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -210,12 +218,26 @@ export default function MasterWarehousesPage() {
           ) : undefined
         }
       />
-      <div className={LIST_PAGE_BODY_CLASS}>
-        <div className="grid shrink-0 gap-3 sm:grid-cols-3" aria-label="Warehouse setup summary">
-          {[{ label: "Active stores", value: rows.filter((row) => row.status !== "INACTIVE").length }, { label: "Need purpose", value: rows.filter((row) => row.status !== "INACTIVE" && !row.purpose).length }, { label: "Awaiting approval", value: rows.filter((row) => row.dispositionPending).length }].map((item) => <div key={item.label} className="rounded-xl border bg-card px-4 py-3"><p className="text-xs text-muted-foreground">{item.label}</p><p className="mt-1 text-2xl font-semibold tabular-nums">{loading ? "—" : item.value}</p></div>)}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden p-3 sm:px-5">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter stores">
+            {storeFilters.map(({ id, label, count }) => (
+              <Button key={id} type="button" size="sm"
+                variant={storeFilter === id ? "secondary" : "ghost"}
+                aria-pressed={storeFilter === id}
+                onClick={() => setStoreFilter(id)}
+              >
+                {label}
+                <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{loading ? "—" : count}</span>
+              </Button>
+            ))}
+          </div>
+          <Button variant="link" size="sm" asChild>
+            <Link href="/settings/fmcg-setup">Operational setup</Link>
+          </Button>
         </div>
-        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 rounded-xl border bg-muted/30 px-4 py-3 text-sm"><p className="max-w-3xl text-muted-foreground">Classify each store before use. Unclassified, inactive and held stores cannot supply sales or production. Disposition changes require independent approval.</p><Button variant="outline" size="sm" asChild><Link href="/settings/fmcg-setup">Operational setup</Link></Button></div>
         <DataTableToolbar
+          className="shrink-0 p-2"
           searchPlaceholder={`Search by code, name, branch...`}
           searchValue={search}
           onSearchChange={setSearch}
@@ -231,23 +253,28 @@ export default function MasterWarehousesPage() {
         {!loading && filtered.length === 0 ? (
           <EmptyState
             icon="MapPin"
-            title={`No ${warehouseLabel.toLowerCase()}s`}
-            description="Add your first warehouse."
-            action={canWrite ? {
+            title={hasFilters ? "No matching stores" : `No ${warehouseLabel.toLowerCase()}s`}
+            description={hasFilters ? "Try another search or clear the filters." : "Add your first warehouse."}
+            action={hasFilters ? {
+              label: "Clear filters",
+              onClick: () => { setSearch(""); setStoreFilter("all"); },
+            } : canWrite ? {
               label: `Add ${warehouseLabel}`,
               onClick: openCreate,
             } : undefined}
           />
         ) : (
-          <DataTable<WarehouseRow>
-            data={filtered}
-            columns={columns}
-            onRowClick={canWrite ? openEdit : undefined}
-            emptyMessage={`No ${warehouseLabel.toLowerCase()}s.`}
-            scrollMode="fill"
-            size="comfortable"
-            className="min-h-0 flex-1 border-0" searchable={false}
+          <div className={LIST_TABLE_SURFACE_CLASS}>
+            <DataTable<WarehouseRow>
+              data={filtered}
+              columns={columns}
+              onRowClick={canWrite ? openEdit : undefined}
+              emptyMessage={`No ${warehouseLabel.toLowerCase()}s.`}
+              scrollMode="fill"
+              size="compact"
+              className="min-h-0 flex-1 border-0" searchable={false}
             />
+          </div>
         )}
       </div>
 
