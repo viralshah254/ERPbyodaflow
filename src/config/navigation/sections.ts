@@ -686,7 +686,6 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "treasury-bank-accounts", label: "Bank accounts", href: "/treasury/bank-accounts", icon: "Landmark", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "treasury-cashflow", label: "Cashflow", href: "/treasury/cashflow", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.bank.read"] },
-      { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
     ],
   },
   {

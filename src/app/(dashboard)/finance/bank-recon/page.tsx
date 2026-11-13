@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
@@ -43,8 +44,10 @@ import {
   fetchControlAccountReconciliationApi,
   fetchBankReconOpenItemsApi,
   fetchBankReconSessionsApi,
+  clearBankReconOutstandingApi,
   fetchBankReconSnapshotApi,
   fetchBankReconSuggestionsApi,
+  markBankReconOutstandingApi,
   matchBankReconLinesApi,
   matchBankReconToDocumentApi,
   suggestBankAllocationApi,
@@ -52,11 +55,9 @@ import {
   type BankReconOpenItemSuggestion,
   type BankStatementLine,
   type BankReconSnapshot,
-  type SystemTransaction,
 } from "@/lib/api/bank-recon";
-import { fetchApPaymentsApi } from "@/lib/api/payments";
-import type { APPaymentRow } from "@/lib/types/ap";
-import type { BankReconciliationSessionRecord } from "@/lib/types/bank-recon";
+import type { BankReconciliationSessionRecord, SystemTransaction } from "@/lib/types/bank-recon";
+import { formatReconDate } from "@/lib/finance/bank-account-label";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
@@ -89,6 +90,23 @@ function formatMoney(amount: number, currency = "KES") {
     minimumFractionDigits: 2,
   }).format(amount);
 }
+
+function formatControlAmount(amount: number, currency = "KES") {
+  const formatted = formatMoney(Math.abs(amount), currency);
+  return amount < 0 ? `${formatted} credit` : formatted;
+}
+
+type BookItemDetail = {
+  id: string;
+  number: string;
+  date: string;
+  party: string;
+  amount: number;
+  currency?: string;
+  type?: "AR_RECEIPT" | "AP_PAYMENT";
+  allocations: NonNullable<SystemTransaction["allocations"]>;
+  outstandingReason?: string | null;
+};
 
 export default function BankReconPage() {
   const baseCurrency = useBaseCurrency();
@@ -136,13 +154,36 @@ export default function BankReconPage() {
   const [dateTo, setDateTo] = React.useState("");
   const [completing, setCompleting] = React.useState(false);
   const [sessions, setSessions] = React.useState<BankReconciliationSessionRecord[]>([]);
-  const [viewPaymentDetail, setViewPaymentDetail] = React.useState<APPaymentRow | null>(null);
-  const [loadingPaymentDetail, setLoadingPaymentDetail] = React.useState(false);
+  const [viewPaymentDetail, setViewPaymentDetail] = React.useState<BookItemDetail | null>(null);
+  const [outstandingFor, setOutstandingFor] = React.useState<string | null>(null);
+  const [outstandingReason, setOutstandingReason] = React.useState("");
   const [allocationProposals, setAllocationProposals] = React.useState<BankAllocationProposal[]>([]);
   const [controlAccounts, setControlAccounts] = React.useState<Array<{
     side: "AR" | "AP"; controlAccountCode: string; controlAccountName?: string;
     glBalance?: number; subledgerBalance?: number; difference?: number; reconciled?: boolean; error?: string;
+    mappingsHref?: string;
   }>>([]);
+
+  const clearAccountLists = React.useCallback((accountId?: string) => {
+    setSelectedStmt(null);
+    setSelectedSys(null);
+    setOutstandingFor(null);
+    setSessions([]);
+    setLoading(true);
+    setSnapshot((current) => {
+      if (!current) return current;
+      const account = accountId ? current.bankAccounts.find((item) => item.id === accountId) : undefined;
+      return {
+        ...current,
+        statements: [],
+        systemTxns: [],
+        position: null,
+        session: accountId
+          ? { ...current.session, bankAccountId: accountId, bankAccountName: account?.name ?? current.session.bankAccountName, status: "OPEN" }
+          : current.session,
+      };
+    });
+  }, []);
 
   const refreshSnapshot = React.useCallback(async (accountId?: string) => {
     const generation = ++snapshotRequest.current;
@@ -218,6 +259,14 @@ export default function BankReconPage() {
 
   const unmatchedStmt = statements.filter((s) => s.status !== "MATCHED");
   const unmatchedSys = systemTxns.filter((t) => !t.matchedId);
+  const unmarkedBook = unmatchedSys.filter((txn) => !txn.outstandingReason);
+  const outstandingReceipts = unmatchedSys.filter((txn) => txn.amount > 0).reduce((sum, txn) => sum + txn.amount, 0);
+  const outstandingPayments = unmatchedSys.filter((txn) => txn.amount < 0).reduce((sum, txn) => sum + Math.abs(txn.amount), 0);
+  const statementClosing = equation?.closing ?? null;
+  const bookBalance = snapshot?.position?.bookBalance ?? null;
+  const unexplainedDifference = bookBalance != null && statementClosing != null
+    ? Math.round((bookBalance - (statementClosing + outstandingReceipts - outstandingPayments)) * 100) / 100
+    : null;
 
   const selectedLine = statements.find((line) => line.id === selectedStmt) ?? null;
 
@@ -226,10 +275,18 @@ export default function BankReconPage() {
       toast.error("Select a bank account first.");
       return;
     }
+    if (statements.length === 0) {
+      toast.message("No statement lines were found.");
+      return;
+    }
     if (!canWrite || !beginMutation()) return;
     setAutoMatching(true);
     try {
       const result = await autoMatchBankReconApi(bankAccountId);
+      if (result.statementLines === 0) {
+        toast.message("No statement lines were found.");
+        return;
+      }
       toast.success(`Auto-matched ${result.matched} line(s). ${result.unmatched} still unmatched.`);
       await refreshSnapshot(bankAccountId);
     } catch (e) {
@@ -300,18 +357,55 @@ export default function BankReconPage() {
     }
   };
 
-  const handleViewSystemPayment = async (paymentId: string) => {
-    setLoadingPaymentDetail(true);
-    setViewPaymentDetail(null);
+  const openBookItem = (paymentId: string) => {
+    const txn = systemTxns.find((item) => item.id === paymentId) ?? snapshot?.systemTxns.find((item) => item.id === paymentId);
+    if (!txn) {
+      toast.info("Payment details not found.");
+      return;
+    }
+    setViewPaymentDetail({
+      id: txn.id,
+      number: txn.reference,
+      date: txn.date,
+      party: txn.description,
+      amount: Math.abs(txn.amount),
+      currency: txn.currency ?? currency,
+      type: txn.type ?? (txn.amount < 0 ? "AP_PAYMENT" : "AR_RECEIPT"),
+      allocations: txn.allocations ?? [],
+      outstandingReason: txn.outstandingReason,
+    });
+  };
+
+  const saveOutstanding = async (paymentId: string) => {
+    const reason = outstandingReason.trim();
+    if (reason.length < 3) {
+      toast.error("Give a short reason for leaving this item outstanding.");
+      return;
+    }
+    if (!bankAccountId || !canWrite || !beginMutation()) return;
     try {
-      const payments = await fetchApPaymentsApi();
-      const payment = payments.find((item) => item.id === paymentId) ?? null;
-      setViewPaymentDetail(payment);
-      if (!payment) toast.info("Payment details not found.");
+      await markBankReconOutstandingApi({ bankAccountId, paymentId, reason });
+      toast.success("Left outstanding. It will not block sign-off.");
+      setOutstandingFor(null);
+      setOutstandingReason("");
+      await refreshSnapshot(bankAccountId);
     } catch (e) {
-      toast.error((e as Error).message || "Failed to load payment details.");
+      toast.error((e as Error).message || "Could not leave this item outstanding.");
     } finally {
-      setLoadingPaymentDetail(false);
+      endMutation();
+    }
+  };
+
+  const clearOutstanding = async (paymentId: string) => {
+    if (!canWrite || !beginMutation()) return;
+    try {
+      await clearBankReconOutstandingApi(paymentId);
+      toast.success("Outstanding mark removed.");
+      await refreshSnapshot(bankAccountId);
+    } catch (e) {
+      toast.error((e as Error).message || "Could not clear the outstanding mark.");
+    } finally {
+      endMutation();
     }
   };
 
@@ -435,6 +529,7 @@ export default function BankReconPage() {
         ]}
         sticky
         showCommandHint
+        actionsBelow
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" asChild><Link href="/finance/legacy-fx">Legacy FX review</Link></Button>
@@ -479,7 +574,7 @@ export default function BankReconPage() {
               </li>
               <li className="flex items-start gap-2">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold">3</span>
-                <span><span className="font-medium">Complete</span> — resolve remaining items and sign off the reconciliation.</span>
+                <span><span className="font-medium">Complete</span> — match every statement line and every book receipt or payment, or leave a book item outstanding with a reason, then sign off.</span>
               </li>
             </ol>
           </CardContent>
@@ -538,7 +633,23 @@ export default function BankReconPage() {
                     <span className="font-medium">{row.side} · {row.controlAccountCode}</span>
                     <Badge variant={row.reconciled ? "default" : "destructive"}>{row.error ? "Missing" : row.reconciled ? "Reconciled" : "Difference"}</Badge>
                   </div>
-                  {!row.error ? <p className="mt-1 text-xs text-muted-foreground">GL {formatMoney(row.glBalance ?? 0, currency)} · Subledger {formatMoney(row.subledgerBalance ?? 0, currency)} · Difference {formatMoney(row.difference ?? 0, currency)}</p> : <p className="mt-1 text-xs text-destructive">{row.error}</p>}
+                  {!row.error ? (
+                    <dl className="mt-2 grid grid-cols-[5.5rem_minmax(0,1fr)] gap-y-1 text-xs">
+                      <dt className="text-muted-foreground">GL</dt>
+                      <dd className="whitespace-nowrap text-right">{formatControlAmount(row.glBalance ?? 0, currency)}</dd>
+                      <dt className="text-muted-foreground">Subledger</dt>
+                      <dd className="whitespace-nowrap text-right">{formatControlAmount(row.subledgerBalance ?? 0, currency)}</dd>
+                      <dt className="text-muted-foreground">Difference</dt>
+                      <dd className="whitespace-nowrap text-right">{formatControlAmount(row.difference ?? 0, currency)}</dd>
+                    </dl>
+                  ) : (
+                    <p className="mt-1 text-xs text-destructive">
+                      {row.error}{" "}
+                      <Link href={row.mappingsHref ?? "/settings/financial/posting-mappings"} className="font-medium underline">
+                        Open posting mappings
+                      </Link>
+                    </p>
+                  )}
                 </div>
               ))}
             </CardContent>
@@ -551,26 +662,23 @@ export default function BankReconPage() {
               <CardTitle className="text-base">Reconciliation session</CardTitle>
               <CardDescription>
                 {loading
-                  ? "Loading…"
+                  ? `Loading ${session?.bankAccountName ?? "account"}…`
                   : session
-                    ? `${session.bankAccountName} · ${unmatchedStmt.length} unmatched line(s)`
+                    ? `${session.bankAccountName} · ${unmatchedStmt.length} unmatched statement line(s) · ${unmarkedBook.length} book item(s) still to match`
                     : "No bank account configured"}
-                {equation
-                  ? ` · Opening ${equation.opening.toLocaleString()} + receipts ${equation.receipts.toLocaleString()} − payments ${equation.payments.toLocaleString()} ${equation.ties ? "ties" : "does not tie"} closing ${equation.closing.toLocaleString()}.`
-                  : ""}
               </CardDescription>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="w-56">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="w-full min-w-[16rem] sm:w-[28rem]">
+                <Label htmlFor="recon-account">Account</Label>
                 <Select
                   value={bankAccountId}
                   onValueChange={(value) => {
                     setBankAccountId(value);
-                    setSelectedStmt(null);
-                    setSelectedSys(null);
+                    clearAccountLists(value);
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="recon-account" className="w-full">
                     <SelectValue placeholder="Select bank account" />
                   </SelectTrigger>
                   <SelectContent>
@@ -582,33 +690,66 @@ export default function BankReconPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Input
-                type="date"
-                className="w-40"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                aria-label="Statement from date"
-              />
-              <Input
-                type="date"
-                className="w-40"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                aria-label="Statement to date"
-              />
+              <div className="space-y-1">
+                <Label htmlFor="recon-from">From</Label>
+                <Input
+                  id="recon-from"
+                  type="date"
+                  className="w-40"
+                  value={dateFrom}
+                  onChange={(e) => {
+                    setDateFrom(e.target.value);
+                    clearAccountLists();
+                  }}
+                  aria-label="Statement from date"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="recon-to">To</Label>
+                <Input
+                  id="recon-to"
+                  type="date"
+                  className="w-40"
+                  value={dateTo}
+                  onChange={(e) => {
+                    setDateTo(e.target.value);
+                    clearAccountLists();
+                  }}
+                  aria-label="Statement to date"
+                />
+              </div>
               <Badge variant={session?.status === "RECONCILED" ? "default" : "secondary"}>
                 {session?.status ?? "OPEN"}
               </Badge>
               <Button
                 size="sm"
                 data-tutorial-hint="bank-close"
-                disabled={!canWrite || mutating || completing || !bankAccountId || unmatchedStmt.length > 0 || statements.length === 0}
+                disabled={!canWrite || mutating || completing || !bankAccountId || unmatchedStmt.length > 0 || statements.length === 0 || unmarkedBook.length > 0}
+                title={unmarkedBook.length > 0 ? "Match each book receipt and payment, or leave it outstanding with a reason." : undefined}
                 onClick={() => void handleCompleteReconciliation()}
               >
                 {completing ? "Completing…" : "Complete reconciliation"}
               </Button>
             </div>
           </CardHeader>
+          <CardContent className="grid gap-3 border-t pt-4 sm:grid-cols-2 xl:grid-cols-5">
+            <BalanceFigure label="Book balance" value={loading ? null : bookBalance} currency={currency} note={loading ? undefined : snapshot?.position?.note} empty={loading ? "Loading…" : "—"} />
+            <BalanceFigure label="Statement closing" value={loading ? null : statementClosing} currency={currency} empty={loading ? "Loading…" : "No statement"} />
+            <BalanceFigure label="Outstanding receipts" value={loading ? null : outstandingReceipts} currency={currency} empty="Loading…" />
+            <BalanceFigure label="Outstanding payments" value={loading ? null : outstandingPayments} currency={currency} empty="Loading…" />
+            <BalanceFigure
+              label="Unexplained difference"
+              value={loading ? null : unexplainedDifference}
+              currency={currency}
+              empty={loading ? "Loading…" : statementClosing == null ? "Needs a statement" : snapshot?.position?.note ? "Book balance unavailable" : "—"}
+              emphasize
+            />
+          </CardContent>
+          {(snapshot?.cashAccounts.length ?? 0) > 0 ? (
+            <CardContent className="pt-0 text-xs text-muted-foreground">
+              Petty cash and the upcountry travel float stay on <Link href="/treasury/bank-accounts" className="underline">Bank accounts</Link>. They are not reconciled with a bank statement.
+            </CardContent>
+          ) : null}
         </Card>
 
         <div
@@ -653,7 +794,7 @@ export default function BankReconPage() {
                         data-state={selectedStmt === line.id ? "selected" : undefined}
                         className={selectedStmt === line.id ? "bg-primary/5" : undefined}
                       >
-                        <TableCell className="whitespace-nowrap text-sm">{line.date}</TableCell>
+                        <TableCell className="whitespace-nowrap text-sm">{formatReconDate(line.date)}</TableCell>
                         <TableCell>
                           <div className="max-w-xs">
                             <p className="text-sm font-medium truncate">{line.description}</p>
@@ -691,7 +832,7 @@ export default function BankReconPage() {
                                 <button
                                   type="button"
                                   className="block text-xs text-primary hover:underline text-left"
-                                  onClick={() => void handleViewSystemPayment(line.matchedId!)}
+                                  onClick={() => openBookItem(line.matchedId!)}
                                 >
                                   View payment
                                 </button>
@@ -788,18 +929,20 @@ export default function BankReconPage() {
               <CardHeader>
                 <CardTitle className="text-sm">System payments</CardTitle>
                 <CardDescription className="text-xs">
-                  Match statement lines to existing posted payments ({unmatchedSys.length} unmatched).
+                  Match statement lines to book receipts and payments ({unmarkedBook.length} still to match, {unmatchedSys.length - unmarkedBook.length} left outstanding).
                 </CardDescription>
               </CardHeader>
-              {statements.length === 0 ? (
+              {!loading && statements.length === 0 ? (
                 <CardContent className="pb-2">
                   <div className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">
                     Import a bank statement CSV first, then select a statement line and a system payment to match them.
                   </div>
                 </CardContent>
               ) : null}
-              <CardContent className={`space-y-2 max-h-[320px] overflow-auto ${statements.length === 0 ? "opacity-80" : ""}`}>
-                {systemTxns.length === 0 ? (
+              <CardContent className={`space-y-2 max-h-[320px] overflow-auto ${!loading && statements.length === 0 ? "opacity-80" : ""}`}>
+                {loading ? (
+                  <p className="text-sm text-muted-foreground">Loading book receipts and payments…</p>
+                ) : systemTxns.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No system payments for this account.</p>
                 ) : (
                   systemTxns.map((txn) => (
@@ -811,11 +954,21 @@ export default function BankReconPage() {
                       onSelect={() =>
                         setSelectedSys((prev) => (prev === txn.id ? null : txn.id))
                       }
-                      onView={
-                        txn.type === "AP_PAYMENT" || txn.amount < 0
-                          ? () => void handleViewSystemPayment(txn.id)
-                          : undefined
-                      }
+                      onView={() => openBookItem(txn.id)}
+                      leavingOutstanding={outstandingFor === txn.id}
+                      reason={outstandingReason}
+                      onReasonChange={setOutstandingReason}
+                      onStartOutstanding={() => {
+                        setOutstandingFor(txn.id);
+                        setOutstandingReason(txn.outstandingReason ?? "");
+                      }}
+                      onCancelOutstanding={() => {
+                        setOutstandingFor(null);
+                        setOutstandingReason("");
+                      }}
+                      onSaveOutstanding={() => void saveOutstanding(txn.id)}
+                      onClearOutstanding={() => void clearOutstanding(txn.id)}
+                      canWrite={canWrite && !mutating}
                     />
                   ))
                 )}
@@ -1037,56 +1190,58 @@ export default function BankReconPage() {
         </SheetContent>
       </Sheet>
 
-      <Sheet open={!!viewPaymentDetail || loadingPaymentDetail} onOpenChange={(open) => !open && setViewPaymentDetail(null)}>
+      <Sheet open={!!viewPaymentDetail} onOpenChange={(open) => !open && setViewPaymentDetail(null)}>
         <SheetContent side="right" className="w-full">
           <SheetHeader>
-            <SheetTitle>{viewPaymentDetail?.number ?? "Payment details"}</SheetTitle>
-            <SheetDescription>Linked bills and payment information</SheetDescription>
+            <SheetTitle>{viewPaymentDetail?.type === "AP_PAYMENT" ? "Payment" : "Receipt"} {viewPaymentDetail?.number}</SheetTitle>
+            <SheetDescription>
+              {viewPaymentDetail?.type === "AP_PAYMENT" ? "Supplier payment and the bills it settles." : "Customer receipt and the invoices it settles."}
+            </SheetDescription>
           </SheetHeader>
-          {loadingPaymentDetail ? (
-            <p className="mt-6 text-sm text-muted-foreground">Loading payment details…</p>
-          ) : viewPaymentDetail ? (
+          {viewPaymentDetail ? (
             <div className="mt-6 space-y-4">
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground">Supplier</p>
+                  <p className="text-muted-foreground">{viewPaymentDetail.type === "AP_PAYMENT" ? "Supplier" : "Customer"}</p>
                   <p className="font-medium">{viewPaymentDetail.party}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Amount</p>
-                  <p className="font-medium">{formatMoney(viewPaymentDetail.amount, viewPaymentDetail.currency ?? currency)}</p>
+                  <p className="whitespace-nowrap font-medium">{formatMoney(viewPaymentDetail.amount, viewPaymentDetail.currency ?? currency)}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Date</p>
-                  <p className="font-medium">{viewPaymentDetail.date.slice(0, 10)}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground">Status</p>
-                  <p className="font-medium">{viewPaymentDetail.status}</p>
+                  <p className="font-medium">{formatReconDate(viewPaymentDetail.date)}</p>
                 </div>
               </div>
+              {viewPaymentDetail.outstandingReason ? (
+                <p className="text-sm text-muted-foreground">Outstanding: {viewPaymentDetail.outstandingReason}</p>
+              ) : null}
               <div className="space-y-2">
-                <Label>Linked bills</Label>
+                <Label>{viewPaymentDetail.type === "AP_PAYMENT" ? "Linked bills" : "Linked invoices"}</Label>
                 <div className="rounded border divide-y">
-                  {(viewPaymentDetail.allocations ?? []).length === 0 ? (
-                    <div className="p-3 text-sm text-muted-foreground">No linked bills.</div>
+                  {viewPaymentDetail.allocations.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground">No linked documents.</div>
                   ) : (
-                    (viewPaymentDetail.allocations ?? []).map((allocation) => (
-                      <div key={`${allocation.documentId}-${allocation.amount}`} className="flex items-center justify-between gap-3 p-3 text-sm">
-                        <div>
-                          <p className="font-medium">{allocation.documentNumber ?? allocation.documentId}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatMoney(allocation.amount, viewPaymentDetail.currency ?? currency)}
-                          </p>
+                    viewPaymentDetail.allocations.map((allocation) => {
+                      const documentKind = allocation.documentType === "bill" || viewPaymentDetail.type === "AP_PAYMENT" ? "bill" : "invoice";
+                      return (
+                        <div key={`${allocation.documentId}-${allocation.amount}`} className="flex items-center justify-between gap-3 p-3 text-sm">
+                          <div>
+                            <p className="font-medium">{allocation.documentNumber ?? allocation.documentId}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatMoney(allocation.amount, viewPaymentDetail.currency ?? currency)}
+                            </p>
+                          </div>
+                          <Button variant="outline" size="sm" asChild>
+                            <Link href={`/docs/${documentKind}/${allocation.documentId}`}>
+                              <Icons.FileText className="mr-2 h-4 w-4" />
+                              View {documentKind}
+                            </Link>
+                          </Button>
                         </div>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/docs/bill/${allocation.documentId}`}>
-                            <Icons.FileText className="mr-2 h-4 w-4" />
-                            View bill
-                          </Link>
-                        </Button>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
               </div>
@@ -1098,18 +1253,60 @@ export default function BankReconPage() {
   );
 }
 
+function BalanceFigure({
+  label,
+  value,
+  currency,
+  note,
+  empty = "—",
+  emphasize = false,
+}: {
+  label: string;
+  value: number | null;
+  currency: string;
+  note?: string;
+  empty?: string;
+  emphasize?: boolean;
+}) {
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`mt-1 whitespace-nowrap text-sm ${emphasize ? "font-semibold" : "font-medium"}`}>
+        {value == null ? empty : formatMoney(value, currency)}
+      </p>
+      {note && value == null ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
+    </div>
+  );
+}
+
 function SystemTxnRow({
   txn,
   currency,
   selected,
   onSelect,
   onView,
+  leavingOutstanding,
+  reason,
+  onReasonChange,
+  onStartOutstanding,
+  onCancelOutstanding,
+  onSaveOutstanding,
+  onClearOutstanding,
+  canWrite,
 }: {
   txn: SystemTransaction;
   currency: string;
   selected: boolean;
   onSelect: () => void;
-  onView?: () => void;
+  onView: () => void;
+  leavingOutstanding: boolean;
+  reason: string;
+  onReasonChange: (value: string) => void;
+  onStartOutstanding: () => void;
+  onCancelOutstanding: () => void;
+  onSaveOutstanding: () => void;
+  onClearOutstanding: () => void;
+  canWrite: boolean;
 }) {
   const isIn = txn.amount >= 0;
   const typeLabel = txn.type === "AP_PAYMENT" ? "AP Payment" : txn.type === "AR_RECEIPT" ? "AR Receipt" : isIn ? "Receipt" : "Payment";
@@ -1126,29 +1323,28 @@ function SystemTxnRow({
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-medium text-sm break-all">{txn.reference}</p>
               <Badge variant="outline" className="text-[10px]">{typeLabel}</Badge>
+              {txn.outstandingReason ? <Badge variant="secondary" className="text-[10px]">Outstanding</Badge> : null}
             </div>
             <p className="text-xs text-muted-foreground break-words">{txn.description}</p>
-            <p className="text-xs text-muted-foreground">{txn.date}</p>
+            <p className="text-xs text-muted-foreground">{formatReconDate(txn.date)}</p>
           </button>
-          {onView ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="shrink-0"
-              onClick={(e) => {
-                e.stopPropagation();
-                onView();
-              }}
-              aria-label={`View payment ${txn.reference}`}
-            >
-              <Icons.Eye className="h-4 w-4" />
-            </Button>
-          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onView();
+            }}
+            aria-label={`Open ${txn.type === "AP_PAYMENT" ? "payment" : "receipt"} ${txn.reference}`}
+          >
+            <Icons.Eye className="h-4 w-4" />
+          </Button>
         </div>
         <button type="button" onClick={onSelect} className="w-full text-left">
           <span
-            className={`font-mono text-sm ${
+            className={`whitespace-nowrap font-mono text-sm ${
               isIn ? "text-green-600 dark:text-green-400" : "text-destructive"
             }`}
           >
@@ -1157,10 +1353,32 @@ function SystemTxnRow({
           </span>
           {txn.matchedId ? (
             <p className="text-xs text-muted-foreground mt-1">Matched</p>
+          ) : txn.outstandingReason ? (
+            <p className="text-xs text-muted-foreground mt-1">{txn.outstandingReason}</p>
           ) : (
             <p className="text-xs text-muted-foreground mt-1">Click to select for matching</p>
           )}
         </button>
+        {!txn.matchedId && canWrite ? (
+          txn.outstandingReason && !leavingOutstanding ? (
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onClearOutstanding}>
+              Clear outstanding
+            </Button>
+          ) : leavingOutstanding ? (
+            <div className="space-y-2">
+              <Label htmlFor={`outstanding-${txn.id}`}>Reason this stays outstanding</Label>
+              <Textarea id={`outstanding-${txn.id}`} value={reason} onChange={(event) => onReasonChange(event.target.value)} rows={2} />
+              <div className="flex gap-2">
+                <Button type="button" size="sm" onClick={onSaveOutstanding}>Save</Button>
+                <Button type="button" size="sm" variant="outline" onClick={onCancelOutstanding}>Cancel</Button>
+              </div>
+            </div>
+          ) : (
+            <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={onStartOutstanding}>
+              Leave outstanding
+            </Button>
+          )
+        ) : null}
       </div>
     </div>
   );

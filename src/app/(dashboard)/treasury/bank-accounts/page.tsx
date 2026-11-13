@@ -38,6 +38,7 @@ import type { BankAccountRow } from "@/lib/types/treasury";
 import { fetchFinanceAccountsApi, type FinanceAccount } from "@/lib/api/finance";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { downloadCsv } from "@/lib/export/csv";
+import { statementReadyBankAccount } from "@/lib/finance/bank-account-label";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -101,9 +102,13 @@ export default function BankAccountsPage() {
 
   const columns = React.useMemo(
     () => [
-      { id: "name", header: "Name", accessor: (r: BankAccountRow) => <span className="font-medium">{r.name}</span>, sticky: true },
-      { id: "accountNumber", header: "Account", accessor: "accountNumber" as keyof BankAccountRow },
-      { id: "bank", header: "Bank", accessor: "bank" as keyof BankAccountRow },
+      { id: "name", header: "Name", accessor: (r: BankAccountRow) => <span className="font-medium">{statementReadyBankAccount(r).name}</span>, sticky: true },
+      { id: "accountNumber", header: "Account", accessor: (r: BankAccountRow) => {
+        const ready = statementReadyBankAccount({ name: r.name, accountNumber: r.accountNumber, bankName: r.bank });
+        return ready.accountNumberMissing ? <span className="text-muted-foreground">Not on the statement</span> : ready.accountNumber;
+      } },
+      { id: "bank", header: "Bank", accessor: (r: BankAccountRow) => statementReadyBankAccount({ name: r.name, accountNumber: r.accountNumber, bankName: r.bank }).bank },
+      { id: "statement", header: "Reconciled with", accessor: (r: BankAccountRow) => statementReadyBankAccount(r).usesStatement ? "Bank statement" : "Cash register" },
       { id: "currency", header: "Currency", accessor: "currency" as keyof BankAccountRow },
       { id: "gl", header: "GL account", accessor: (r: BankAccountRow) => r.glAccountCode ? `${r.glAccountCode} — ${r.glAccountName ?? ""}` : "—" },
       { id: "active", header: "Active", accessor: (r: BankAccountRow) => (r.active ? "Yes" : "No") },
@@ -163,7 +168,7 @@ export default function BankAccountsPage() {
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Accounts</h3>
             <p className="text-xs text-muted-foreground">
-              Account name/number, bank, branch, currency, GL mapping. Enable/disable.
+              The bank column is the institution. The account column is the number on the statement. Petty cash and the travel float stay on this register and are not imported as bank statements.
             </p>
           </div>
           <DataTable<BankAccountRow>
@@ -191,7 +196,7 @@ export default function BankAccountsPage() {
             </div>
             <div className="space-y-2">
               <Label>Account number</Label>
-              <Input value={form.accountNumber} onChange={(e) => setForm((p) => ({ ...p, accountNumber: e.target.value }))} placeholder="Last 4 digits or full" />
+              <Input value={form.accountNumber} onChange={(e) => setForm((p) => ({ ...p, accountNumber: e.target.value }))} placeholder="Number printed on the statement" />
             </div>
             <div className="space-y-2">
               <Label>Bank</Label>

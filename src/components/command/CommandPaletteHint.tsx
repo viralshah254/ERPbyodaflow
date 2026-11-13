@@ -18,12 +18,12 @@ export function CommandPaletteHint({ className }: CommandPaletteHintProps) {
       data-tour-step="command-hint"
       onClick={() => setOpen(true)}
       className={cn(
-        "hidden sm:inline-flex h-6 items-center gap-1 rounded border bg-muted px-2 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground",
+        "hidden shrink-0 whitespace-nowrap sm:inline-flex h-6 items-center gap-1 rounded border bg-muted px-2 font-mono text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground",
         className
       )}
-      title="Open command palette (⌘K)"
+      title="Open command palette (Cmd K)"
     >
-      <span className="text-xs">⌘</span>K
+      Cmd K
     </button>
   );
 }

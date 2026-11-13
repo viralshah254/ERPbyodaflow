@@ -6,6 +6,7 @@ import type {
   ReconcileSession,
   SystemTransaction,
 } from "@/lib/types/bank-recon";
+import { statementReadyBankAccount, tidyCounterpartyName } from "@/lib/finance/bank-account-label";
 import { apiRequest, requireLiveApi } from "./client";
 
 export type { BankStatementLine, ReconcileSession, SystemTransaction, BankReconOpenItemSuggestion };
@@ -14,6 +15,10 @@ type BankAccount = {
   id: string;
   name: string;
   currency: string;
+  accountNumber?: string;
+  bankName?: string;
+  bank?: string;
+  usesStatement?: boolean;
 };
 
 type BackendBankStatementLine = {
@@ -37,14 +42,27 @@ type BackendPayment = {
   partyId: string;
   partyName?: string;
   amount: number;
+  currency?: string;
   type?: "AR_RECEIPT" | "AP_PAYMENT";
+  allocations?: Array<{ documentType?: string; documentId: string; documentNumber?: string; amount: number }>;
+};
+
+export type BankReconPosition = {
+  bookBalance: number | null;
+  currency: string;
+  glAccountCode?: string;
+  glAccountName?: string;
+  note?: string;
+  outstanding: Array<{ paymentId: string; reason: string }>;
 };
 
 export type BankReconSnapshot = {
   bankAccounts: BankAccount[];
+  cashAccounts: BankAccount[];
   session: ReconcileSession;
   statements: BankStatementLine[];
   systemTxns: SystemTransaction[];
+  position: BankReconPosition | null;
 };
 
 function toStatementLine(
@@ -92,18 +110,25 @@ export async function fetchBankReconSnapshotApi(
   requireLiveApi("Bank reconciliation");
 
   const bankAccountsRes = await apiRequest<{ items: BankAccount[] }>("/api/treasury/bank-accounts");
-  const selectedAccount = bankAccountId ? bankAccountsRes.items.find((account) => account.id === bankAccountId) : bankAccountsRes.items[0];
+  const prepared = bankAccountsRes.items.map((account) => {
+    const ready = statementReadyBankAccount(account);
+    return { ...account, name: ready.name, bank: ready.bank, accountNumber: ready.accountNumber, usesStatement: ready.usesStatement };
+  });
+  const statementAccounts = prepared.filter((account) => account.usesStatement !== false);
+  const cashAccounts = prepared.filter((account) => account.usesStatement === false);
+  const selectedAccount = bankAccountId ? statementAccounts.find((account) => account.id === bankAccountId) : statementAccounts[0];
   if (bankAccountId && !selectedAccount) throw new Error("The selected bank account is no longer available. Refresh and select an account.");
   const statementParams: Record<string, string> = { bankAccountId: selectedAccount?.id ?? "" };
   if (opts?.dateFrom) statementParams.dateFrom = opts.dateFrom;
   if (opts?.dateTo) statementParams.dateTo = opts.dateTo;
-  const [statementsRes, paymentsRes] = selectedAccount ? await Promise.all([
+  const [statementsRes, paymentsRes, position] = selectedAccount ? await Promise.all([
     apiRequest<{ items: BackendBankStatementLine[] }>("/api/finance/bank-recon", { params: statementParams }),
     apiRequest<{ items: BackendPayment[] }>("/api/finance/payments", { params: { bankAccountId: selectedAccount.id } }),
-  ]) : [{ items: [] as BackendBankStatementLine[] }, { items: [] as BackendPayment[] }];
+    fetchBankReconPositionApi(selectedAccount.id, opts?.dateTo),
+  ]) : [{ items: [] as BackendBankStatementLine[] }, { items: [] as BackendPayment[] }, null];
 
   const accountCurrency = (id: string) =>
-    bankAccountsRes.items.find((account) => account.id === id)?.currency ?? "KES";
+    prepared.find((account) => account.id === id)?.currency ?? "KES";
 
   const statementByPayment = new Map(
     statementsRes.items
@@ -115,23 +140,48 @@ export async function fetchBankReconSnapshotApi(
     toStatementLine(item, accountCurrency(item.bankAccountId))
   );
 
+  const outstandingByPayment = new Map((position?.outstanding ?? []).map((mark) => [mark.paymentId, mark.reason]));
   const systemTxns: SystemTransaction[] = paymentsRes.items.map((item) => ({
     id: item.id,
     date: item.date.slice(0, 10),
     reference: item.number,
-    description: item.partyName ?? item.partyId,
+    description: tidyCounterpartyName(item.partyName ?? item.partyId),
     amount: (item.bankSettlement?.bankAmount ?? item.amount) * (item.type === "AP_PAYMENT" ? -1 : 1),
+    currency: item.bankSettlement?.bankCurrency ?? item.currency,
     type: item.type,
     matchedId: statementByPayment.get(item.id) ?? null,
+    outstandingReason: outstandingByPayment.get(item.id) ?? null,
+    allocations: item.allocations,
   }));
 
-  const session = buildSession(bankAccountsRes.items, bankAccountId, statements);
+  const session = buildSession(statementAccounts, bankAccountId, statements);
   return {
-    bankAccounts: bankAccountsRes.items,
+    bankAccounts: statementAccounts,
+    cashAccounts,
     session,
     statements,
     systemTxns,
+    position,
   };
+}
+
+async function fetchBankReconPositionApi(bankAccountId: string, asOf?: string): Promise<BankReconPosition | null> {
+  try {
+    const result = await apiRequest<Partial<BankReconPosition>>("/api/finance/bank-recon/position", {
+      params: { bankAccountId, ...(asOf ? { asOf } : {}) },
+    });
+    return {
+      bookBalance: typeof result.bookBalance === "number" ? result.bookBalance : null,
+      currency: result.currency ?? "KES",
+      glAccountCode: result.glAccountCode,
+      glAccountName: result.glAccountName,
+      note: result.note,
+      outstanding: Array.isArray(result.outstanding) ? result.outstanding : [],
+    };
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) return null;
+    throw error;
+  }
 }
 
 export async function matchBankReconLinesApi(
@@ -169,7 +219,7 @@ export async function fetchBankReconSuggestionsApi(
 
 export async function autoMatchBankReconApi(
   bankAccountId: string
-): Promise<{ matched: number; alreadyMatched: number; unmatched: number }> {
+): Promise<{ matched: number; alreadyMatched: number; unmatched: number; statementLines?: number }> {
   requireLiveApi("Bank reconciliation auto-match");
   return apiRequest("/api/finance/bank-recon/auto-match", {
     method: "POST",
@@ -285,6 +335,16 @@ export async function advanceBankAllocationProposalApi(
   );
 }
 
+export async function markBankReconOutstandingApi(body: { bankAccountId: string; paymentId: string; reason: string }): Promise<void> {
+  requireLiveApi("Leave a book item outstanding");
+  await apiRequest("/api/finance/bank-recon/outstanding", { method: "POST", body });
+}
+
+export async function clearBankReconOutstandingApi(paymentId: string): Promise<void> {
+  requireLiveApi("Clear an outstanding book item");
+  await apiRequest("/api/finance/bank-recon/outstanding", { method: "DELETE", body: { paymentId } });
+}
+
 export async function fetchControlAccountReconciliationApi() {
   const result = await apiRequest<{
     items: Array<{
@@ -296,6 +356,7 @@ export async function fetchControlAccountReconciliationApi() {
       difference?: number;
       reconciled?: boolean;
       error?: string;
+      mappingsHref?: string;
     }>;
   }>("/api/finance/control-account-reconciliation");
   return result.items ?? [];
