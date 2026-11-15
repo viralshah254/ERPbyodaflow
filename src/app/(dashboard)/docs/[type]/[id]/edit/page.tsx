@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
@@ -30,7 +31,8 @@ export default function DocEditPage() {
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
   const orgId = useAuthStore((state) => state.org?.orgId);
-  const explicitSheetEdit = usesInlineQuantitySheet({ type, orgId, editing: true });
+  const operatingProfile = useOperatingProfile(orgId);
+  const explicitSheetEdit = usesInlineQuantitySheet({ type, editing: true, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
   const sessionReady = useSessionReady();
 
   const [loading, setLoading] = React.useState(true);

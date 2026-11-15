@@ -180,7 +180,7 @@ export async function reviewTallyImportWithGaia(
   }));
   const reply = await sendGaiaMessage(
     [
-      "You are reviewing a Tally stock-group import for Top Food EA Ltd.",
+      "You are reviewing a Tally stock-group import for this organisation.",
       "Titles are Finished Goods, Packaging Material, Raw Material. Categories are brands/types like CANDY KENYA or CARTON.",
       "Suggest which rows should NOT become products (junk groups, rollups, samples, discontinued leftovers, group names without a SKU).",
       "Reply with JSON only: {\"exclude\":[{\"row\":123,\"reason\":\"one line\"}]}",

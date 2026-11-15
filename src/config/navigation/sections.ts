@@ -1,5 +1,5 @@
 import type { NavSectionConfig } from "./types";
-import { FMCG_BAKERY_TEMPLATE_ID, FMCG_COMMERCE_TEMPLATE_IDS, FMCG_SELLING_TEMPLATE_IDS } from "../industry";
+import { FMCG_COMMERCE_TEMPLATE_IDS, FMCG_SELLING_TEMPLATE_IDS } from "../industry";
 
 export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
   {
@@ -223,8 +223,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "inventory-costing", label: "Costing", href: "/inventory/costing", icon: "Calculator", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-stock-explorer", label: "Stock Explorer", href: "/inventory/stock-explorer", icon: "Search", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-valuation", label: "Valuation", href: "/inventory/valuation", icon: "Scale", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
-      { key: "inventory-transfers", label: "Transfers", href: "/warehouse/transfers", icon: "Truck", moduleKey: "inventory", requiresFlags: ["multiWarehouse"], requiresPermissions: ["inventory.write"] },
-      { key: "inventory-stocktake", label: "Stocktake / Cycle Count", href: "/warehouse/cycle-counts", icon: "ClipboardCheck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
+      { key: "inventory-quality", label: "Losses, damages & recalls", href: "/inventory/quality", icon: "ShieldAlert", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-warehouses", label: "Warehouses & Locations", href: "/inventory/warehouses", icon: "MapPin", moduleKey: "inventory", termKey: "warehouse", requiresPermissions: ["inventory.read"] },
     ],
   },
@@ -248,7 +247,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       { key: "warehouse-dispatch-returns", label: "Driver returns", href: "/warehouse/dispatch-returns", icon: "Undo2", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
-      { key: "warehouse-route-settlement", label: "Route settlement", href: "/warehouse/route-settlement", icon: "Wallet", moduleKey: "inventory", requiresPermissions: ["inventory.read"], requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS] },
+      { key: "warehouse-route-settlement", label: "Route close", href: "/warehouse/route-settlement", icon: "Wallet", moduleKey: "inventory", requiresPermissions: ["finance.read"], requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS] },
       {
         key: "warehouse-route-pick-lists",
         label: "Route pick lists",
@@ -256,11 +255,11 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         icon: "ClipboardList",
         moduleKey: "inventory",
         requiresPermissions: ["inventory.write"],
-        requiresTemplates: [FMCG_BAKERY_TEMPLATE_ID],
+        requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS],
       },
       { key: "warehouse-putaway", label: "Putaway", href: "/warehouse/putaway", icon: "MapPin", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
       { key: "warehouse-bin-locations", label: "Bin locations", href: "/warehouse/bin-locations", icon: "LayoutGrid", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
-      { key: "warehouse-cycle-counts", label: "Cycle counts", href: "/warehouse/cycle-counts", icon: "ClipboardCheck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
+      { key: "warehouse-cycle-counts", label: "Stocktake / cycle counts", href: "/warehouse/cycle-counts", icon: "ClipboardCheck", moduleKey: "inventory", requiresPermissions: ["inventory.write"] },
     ],
   },
   {
@@ -547,6 +546,8 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.bank.read"] },
       { key: "finance-bank-recon", label: "Bank Reconciliation", href: "/finance/bank-recon", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
+      { key: "finance-payment-matching", label: "Payment matching", href: "/finance/payment-matching", icon: "Sparkles", moduleKey: "finance", requiresPermissions: ["finance.bank.read"] },
+      { key: "finance-uncredited-returns", label: "Uncredited route returns", href: "/finance/uncredited-returns", icon: "Undo2", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-mpesa-recon", label: "M-Pesa Till Reconciliation", href: "/finance/mpesa-recon", icon: "Smartphone", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-coolcatch-bs", label: "CoolCatch BS Inventory", href: "/finance/coolcatch-bs-inventory", icon: "Layers", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.read", "inventory.read"] },
       { key: "finance-coolcatch-month-end", label: "CoolCatch Month-End", href: "/finance/coolcatch-month-end", icon: "CalendarCheck", moduleKey: "finance", requiresFlags: ["commissionEngine"], requiresPermissions: ["finance.write"] },
@@ -685,7 +686,6 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "treasury-ap-statements", label: "Supplier statements", href: "/ap/statements", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "treasury-bank-accounts", label: "Bank accounts", href: "/treasury/bank-accounts", icon: "Landmark", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "treasury-cashflow", label: "Cashflow", href: "/treasury/cashflow", icon: "TrendingUp", moduleKey: "finance", requiresPermissions: ["finance.read"] },
-      { key: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.bank.read"] },
     ],
   },
   {
@@ -724,10 +724,10 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
     order: 18,
     items: [
       { key: "analytics-hub", label: "Analytics Studio", href: "/analytics", icon: "BarChart3", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
+      { key: "analytics-fmcg", label: "FMCG performance", href: "/analytics/fmcg", icon: "TrendingUp", moduleKey: "analytics", requiresPermissions: ["reports.read", "finance.read"], requiresTemplates: [...FMCG_SELLING_TEMPLATE_IDS] },
       { key: "analytics-explore", label: "Explore", href: "/analytics/explore", icon: "Compass", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
       { key: "analytics-insights", label: "Insights", href: "/analytics/insights", icon: "Lightbulb", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
       { key: "analytics-anomalies", label: "Anomalies", href: "/analytics/anomalies", icon: "AlertTriangle", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
-      { key: "analytics-simulations", label: "Simulations", href: "/analytics/simulations", icon: "SlidersHorizontal", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
       { key: "analytics-products", label: "Products", href: "/analytics/products", icon: "Package", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
       { key: "analytics-pricing", label: "Pricing", href: "/analytics/pricing", icon: "TrendingUp", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },
       { key: "analytics-inventory", label: "Inventory", href: "/analytics/inventory", icon: "Warehouse", moduleKey: "analytics", requiresPermissions: ["reports.read", "admin.settings"] },

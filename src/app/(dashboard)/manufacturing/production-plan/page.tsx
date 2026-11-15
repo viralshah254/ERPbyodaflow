@@ -5,7 +5,7 @@ import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav"
 
 import * as React from "react";
 import { useAuthStore } from "@/stores/auth-store";
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { ProductionOutputEntry } from "@/components/manufacturing/ProductionOutputEntry";
 import Link from "next/link";
 import { LIST_TABLE_WORKLIST_CLASS, PageShell } from "@/components/layout/page-shell";
@@ -133,9 +133,12 @@ function plannedNameList(rowsById: Record<string, ProductionPlanRow>, qtyById: R
   return `${names.slice(0, 3).join(", ")} + ${names.length - 3} more`;
 }
 
+/** Settings → Sales document flow → Production recording decides which screen the floor uses. */
 export default function ProductionPlanPage() {
   const orgId = useAuthStore((s) => s.org?.orgId);
-  return orgId === JOY_SUPERBAKERS_ORG_ID ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
+  const profile = useOperatingProfile(orgId);
+  if (!profile.ready) return null;
+  return profile.productionRecording === "record_output" ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
 }
 
 function PlannedProductionPage() {

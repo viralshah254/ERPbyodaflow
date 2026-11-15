@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,7 +57,7 @@ const METHODS: Array<{ id: ReceiptMethod; label: string }> = [
   { id: "MPESA", label: "M-Pesa" },
 ];
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayNairobiYmd();
 
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;

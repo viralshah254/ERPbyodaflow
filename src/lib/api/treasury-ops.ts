@@ -1,3 +1,4 @@
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { apiRequest, downloadFile, isApiConfigured, requireLiveApi } from "@/lib/api/client";
 import type { BankAccountRow, BillDueRow, OverdueInvoiceRow, PaymentMethod, PaymentRunRow } from "@/lib/types/treasury";
 
@@ -228,7 +229,7 @@ export async function fetchCollectionsApi(): Promise<OverdueInvoiceRow[]> {
       exchangeRate?: number;
     }>;
   }>("/api/ar/open-invoices");
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayNairobiYmd();
   return payload.items
     .filter((item) => (item.dueDate ?? item.date) < today)
     .map((item) => {

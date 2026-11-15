@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -84,7 +85,7 @@ import {
 } from "@/lib/api/pricing";
 import { isPlantCatalogueTemplate } from "@/config/industry";
 import { usesInlineQuantitySheet, sameEditableLines, storedEditableUnitPrice } from "@/lib/docs/inline-quantity-sheet";
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
@@ -167,7 +168,7 @@ function storedRateFromDocPerBase(docPerBase: number): number {
 }
 
 function getDefaultValues(baseCurrency: string): FormValues {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayNairobiYmd();
   return {
     date: today,
     party: "",
@@ -563,7 +564,9 @@ export function DocumentCreateWizard({
   const { settings: financialSettings } = useFinancialSettings();
   const baseCurrency = financialSettings.baseCurrency;
   const currentOrgId = useAuthStore((s) => s.org?.orgId);
-  const joyDeliveryWarehouse = currentOrgId === JOY_SUPERBAKERS_ORG_ID && type === "sales-order";
+  const operatingProfile = useOperatingProfile(currentOrgId);
+  /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
+  const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -595,7 +598,7 @@ export function DocumentCreateWizard({
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
-  const sheetFinishedGoods = usesInlineQuantitySheet({ type, orgId: currentOrgId, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods });
+  const sheetFinishedGoods = usesInlineQuantitySheet({ type, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
   const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
@@ -822,7 +825,7 @@ export function DocumentCreateWizard({
     allowLeaveRef.current = false;
     const storedRate = doc.exchangeRate ?? 1;
     form.reset({
-      date: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      date: doc.date ? doc.date.slice(0, 10) : todayNairobiYmd(),
       party: doc.partyId ?? "",
       reference: "",
       supplierInvoiceNumber: doc.supplierInvoiceNumber ?? "",
@@ -835,7 +838,7 @@ export function DocumentCreateWizard({
       linesAreTaxInclusive: doc.linesAreTaxInclusive ?? false,
       currency: doc.currency ?? baseCurrency,
       exchangeRate: storedRate,
-      fxDate: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      fxDate: doc.date ? doc.date.slice(0, 10) : todayNairobiYmd(),
       totalAmount: doc.total ?? 0,
     });
     const prefilled: DocumentLine[] = (doc.lines ?? []).map((l, i) => {
@@ -1631,7 +1634,7 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (!joyDeliveryWarehouse) return false;
+    if (!routeDeliveryStore) return false;
     if (String(form.getValues("warehouse") ?? "").trim()) return false;
     form.setError("warehouse", {
       type: "required",
@@ -1639,7 +1642,7 @@ export function DocumentCreateWizard({
     });
     toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
-  }, [form, joyDeliveryWarehouse]);
+  }, [form, routeDeliveryStore]);
 
   const goToStep = React.useCallback(
     async (targetStep: number) => {
@@ -2085,7 +2088,7 @@ export function DocumentCreateWizard({
     required: true,
   };
   const headerFields =
-    joyDeliveryWarehouse && !baseHeaderFields.some((field) => field.id === "warehouse")
+    routeDeliveryStore && !baseHeaderFields.some((field) => field.id === "warehouse")
       ? (() => {
           const branchIndex = baseHeaderFields.findIndex((field) => field.id === "branch");
           if (branchIndex < 0) return [deliveryWarehouseField, ...baseHeaderFields];
@@ -2125,7 +2128,7 @@ export function DocumentCreateWizard({
   ]);
 
   const selectedCurrency = form.watch("currency") || baseCurrency;
-  const selectedFxDate = form.watch("fxDate") || form.watch("date") || new Date().toISOString().slice(0, 10);
+  const selectedFxDate = form.watch("fxDate") || form.watch("date") || todayNairobiYmd();
   /** Stored: base per 1 doc unit. Shown in UI: doc per 1 base (inverse). */
   const storedExchangeRate = form.watch("exchangeRate") ?? 1;
   const displayDocPerBaseRate =
@@ -2722,16 +2725,16 @@ export function DocumentCreateWizard({
                       field={f}
                       form={form}
                       options={
-                        joyDeliveryWarehouse && f.id === "warehouse"
+                        routeDeliveryStore && f.id === "warehouse"
                           ? (fieldOptions[f.id] ?? []).filter((option) => !/dispatch/i.test(option.label))
                           : fieldOptions[f.id]
                       }
                       selectedPartyOption={selectedPartyOption}
                       selectedWarehouseOption={selectedWarehouseOption}
                       warehouseOptionsLoading={!branchWarehouseReady}
-                      branchId={joyDeliveryWarehouse && f.id === "warehouse" ? undefined : watchedBranch}
+                      branchId={routeDeliveryStore && f.id === "warehouse" ? undefined : watchedBranch}
                       hint={
-                        joyDeliveryWarehouse && f.id === "warehouse"
+                        routeDeliveryStore && f.id === "warehouse"
                           ? "This store is the route the order is delivered on."
                           : undefined
                       }
@@ -2999,7 +3002,7 @@ export function DocumentCreateWizard({
             <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
-              joyFinishedGoods={currentOrgId === JOY_SUPERBAKERS_ORG_ID && lineEditorMode === "sales"}
+              packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
@@ -3017,7 +3020,7 @@ export function DocumentCreateWizard({
                 lineEditorMode === "sales" && !fmcgOrg ? catalogPricesByProductId : undefined
               }
               fmcgCatalogByProductId={
-                lineEditorMode === "sales" && fmcgOrg && (currentOrgId !== JOY_SUPERBAKERS_ORG_ID || salesPricingReady)
+                lineEditorMode === "sales" && fmcgOrg && (!operatingProfile.packSizeFromName || salesPricingReady)
                   ? fmcgCatalogByProductId : undefined
               }
               fmcgOrg={fmcgOrg}
@@ -3117,7 +3120,7 @@ export function DocumentCreateWizard({
                         : "Tax-exclusive (VAT added on top)"}
                   </p>
                 </div>
-                {joyDeliveryWarehouse ? (
+                {routeDeliveryStore ? (
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Route warehouse</span>
                     <p className="font-medium">

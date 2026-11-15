@@ -56,6 +56,7 @@ import {
   type BankStatementLine,
   type BankReconSnapshot,
 } from "@/lib/api/bank-recon";
+import { describeMatchingRun, runPaymentMatchingApi } from "@/lib/api/payment-matching";
 import type { BankReconciliationSessionRecord, SystemTransaction } from "@/lib/types/bank-recon";
 import { formatReconDate } from "@/lib/finance/bank-account-label";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
@@ -319,6 +320,13 @@ export default function BankReconPage() {
         return;
       }
       toast.success(`Auto-matched ${result.matched} line(s). ${result.unmatched} still unmatched.`);
+      try {
+        const engine = await runPaymentMatchingApi(bankAccountId);
+        const text = describeMatchingRun(engine);
+        if (text) toast.message(text);
+      } catch (e) {
+        toast.error((e as Error).message || "Payment matching did not run.");
+      }
       await refreshSnapshot(bankAccountId);
     } catch (e) {
       toast.error((e as Error).message || "Auto-match failed.");

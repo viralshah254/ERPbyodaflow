@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import * as React from "react";
 import {
   DndContext,
@@ -175,9 +176,12 @@ export default function SidebarSettingsPage() {
     templateId,
   } = useOrgContextStore();
 
+  const operatingProfile = useOperatingProfile(org?.orgId);
   const navParams = React.useMemo(
     (): ComputeDashboardSidebarSectionsParams => ({
       ctxOrgType,
+      orgId: org?.orgId,
+      productionRecording: operatingProfile.productionRecording,
       orgOrgType: org?.orgType,
       enabledModules,
       featureFlags: featureFlags ?? {},
@@ -188,7 +192,7 @@ export default function SidebarSettingsPage() {
       franchisePersona,
       templateId,
     }),
-    [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona, templateId]
+    [ctxOrgType, org?.orgId, operatingProfile.productionRecording, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona, templateId]
   );
 
   const baseSections = React.useMemo(() => computeDashboardSidebarSections(navParams), [navParams]);

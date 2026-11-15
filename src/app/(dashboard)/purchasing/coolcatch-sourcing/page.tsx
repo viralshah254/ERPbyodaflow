@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
@@ -124,7 +125,7 @@ export default function CoolcatchSourcingPage() {
         sourcingModel: model,
         supplierName: supplier.trim() || undefined,
         farmLocation: farm.trim() || undefined,
-        sourcingDate: new Date().toISOString().slice(0, 10),
+        sourcingDate: todayNairobiYmd(),
         inputKg: Number(inputKg),
         sellableKg: Number(sellableKg),
         productPricePerKg: Number(pricePerKg),

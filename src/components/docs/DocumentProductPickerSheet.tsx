@@ -49,7 +49,7 @@ type DocumentProductPickerSheetProps = {
   /** purchasable | sellable | all — matches document line filter. */
   productFilter?: "purchasable" | "sellable" | "all";
   fmcgOrg?: boolean;
-  /** Top Food and bakery catalogues. Type filter uses item role, including packaging. */
+  /** Plant catalogues. Type filter uses item role, including packaging. */
   plantCatalogue?: boolean;
   /** Finished goods with numeric or alphanumeric identifiers. Hides raw, packaging, and semi-finished. */
   sheetFinishedGoods?: boolean;

@@ -34,7 +34,7 @@ export type JoyPickList = {
   emailedTo?: string;
 };
 
-export const JOY_WHERE_NOW = [
+export const ROUTE_WHERE_NOW = [
   "Still on the vehicle",
   "Back in the route warehouse",
   "Returned to dispatch",

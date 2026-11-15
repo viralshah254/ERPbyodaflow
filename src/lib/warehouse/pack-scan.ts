@@ -105,7 +105,7 @@ function resolveScanRaw(fromField: string, fromBuffer: string): string {
 
 /**
  * A supermarket scanner types into whatever is focused and ends with Enter.
- * Top Food EAN-13 pack labels often send barcode, then Tab, then piece count.
+ * EAN-13 pack labels from some scanners often send barcode, then Tab, then piece count.
  * Rapid keys are captured even when a product row is focused. Slow typing in
  * another field is left alone.
  */

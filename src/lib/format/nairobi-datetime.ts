@@ -199,3 +199,18 @@ export function formatDueWhen(value?: string | null): string {
   }
   return dayDelta === 1 ? "1 day overdue" : `${dayDelta} days overdue`;
 }
+
+/** Today's calendar date in the company timezone as YYYY-MM-DD (never the UTC date). */
+export function todayNairobiYmd(now: Date = new Date()): string {
+  const p = nairobiParts(now);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
+
+/** "14 Nov 2026" for a timestamp, read in the company timezone. */
+export function formatNairobiDate(value?: string | Date | null): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const p = nairobiParts(date);
+  return `${p.day} ${MONTH_NAMES[p.month - 1] ?? ""} ${p.year}`;
+}

@@ -66,6 +66,7 @@ export default function APPaymentsPage() {
   const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [bankAccountId, setBankAccountId] = React.useState("");
   const [openBills, setOpenBills] = React.useState<OpenBillRow[]>([]);
+  const [openBillsError, setOpenBillsError] = React.useState("");
   const [allocations, setAllocations] = React.useState<Record<string, number>>({});
   const [saving, setSaving] = React.useState(false);
   const [selectedPayment, setSelectedPayment] = React.useState<APPaymentRow | null>(null);
@@ -87,9 +88,16 @@ export default function APPaymentsPage() {
   }, []);
 
   React.useEffect(() => {
+    let current = true;
+    setOpenBills([]);
+    setOpenBillsError("");
     fetchOpenBillsApi(supplierId || undefined)
-      .then(setOpenBills)
-      .catch(() => setOpenBills([]));
+      .then((rows) => { if (current) setOpenBills(rows); })
+      .catch((error) => {
+        // An empty list here would look like "nothing to pay" and let a payment post unallocated.
+        if (current) setOpenBillsError((error as Error).message || "Open bills could not be loaded.");
+      });
+    return () => { current = false; };
   }, [supplierId]);
 
   const filtered = React.useMemo(() => {
@@ -305,7 +313,9 @@ export default function APPaymentsPage() {
               <Label>Open bills</Label>
               <TooltipProvider delayDuration={200}>
                 <div className="rounded border divide-y max-h-80 overflow-auto">
-                  {openBills.length === 0 ? (
+                  {openBillsError ? (
+                    <div className="p-3 text-sm text-destructive">{openBillsError} Reopen the supplier to retry before paying.</div>
+                  ) : openBills.length === 0 ? (
                     <div className="p-3 text-sm text-muted-foreground">No open bills for this supplier.</div>
                   ) : (
                     openBills.map((bill) => {
@@ -410,7 +420,7 @@ export default function APPaymentsPage() {
             </div>
             <SheetFooter>
               <Button variant="outline" onClick={() => setWizardOpen(false)}>Cancel</Button>
-              <Button disabled={saving} onClick={handleCreatePayment}>
+              <Button disabled={saving || Boolean(openBillsError)} onClick={handleCreatePayment}>
                 {saving ? "Saving..." : "Create payment"}
               </Button>
             </SheetFooter>

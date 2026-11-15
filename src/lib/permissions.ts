@@ -49,6 +49,7 @@ export const Permissions = {
   INVENTORY_READ: "inventory.read",
   INVENTORY_WRITE: "inventory.write",
   INVENTORY_ADJUST: "inventory.adjust",
+  INVENTORY_LOSS_APPROVE: "inventory.loss.approve",
   INVENTORY_TRANSFER: "inventory.transfer",
   
   // Sales

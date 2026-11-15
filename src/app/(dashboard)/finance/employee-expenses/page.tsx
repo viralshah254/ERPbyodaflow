@@ -1,4 +1,5 @@
 "use client";
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import React, { useEffect, useState } from 'react';
 import { PageLayout } from '@/components/layout/page-layout';
 import { Button } from '@/components/ui/button';
@@ -14,7 +15,7 @@ export default function EmployeeExpenses() {
   const [payable, setPayable] = useState('');
   const [credit, setCredit] = useState('');
   const [reference, setReference] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(todayNairobiYmd());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function load() {

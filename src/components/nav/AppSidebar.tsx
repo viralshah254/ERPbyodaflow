@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -100,10 +101,12 @@ export function AppSidebar({ className }: AppSidebarProps) {
     };
   }, [sidebarPreferencesRevision, isAuthenticated, isLoading]);
 
+  const operatingProfile = useOperatingProfile(org?.orgId);
   const navParams = React.useMemo(
     () => ({
       ctxOrgType,
       orgId: org?.orgId,
+      productionRecording: operatingProfile.productionRecording,
       orgOrgType: org?.orgType,
       enabledModules,
       featureFlags: featureFlags ?? {},
@@ -117,6 +120,7 @@ export function AppSidebar({ className }: AppSidebarProps) {
     [
       ctxOrgType,
       org?.orgId,
+      operatingProfile.productionRecording,
       org?.orgType,
       enabledModules,
       featureFlags,

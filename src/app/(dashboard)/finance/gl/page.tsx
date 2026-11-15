@@ -1,5 +1,6 @@
 "use client";
 
+import { downloadCsv } from "@/lib/export/csv";
 import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,10 +42,27 @@ export default function GeneralLedgerPage() {
   }, []);
 
   React.useEffect(() => {
+    let current = true;
     fetchLedgerEntriesApi(accountId || undefined, periodId || undefined)
-      .then(setEntries)
-      .catch((error) => toast.error((error as Error).message || "Failed to load ledger entries."));
+      .then((rows) => { if (current) setEntries(rows); })
+      .catch((error) => { if (current) toast.error((error as Error).message || "Failed to load ledger entries."); });
+    return () => { current = false; };
   }, [accountId, periodId]);
+
+  const exportCsv = React.useCallback(() => {
+    const period = periods.find((row) => row.id === periodId);
+    const account = accounts.find((row) => row.id === accountId);
+    const name = ["general-ledger", account?.code, period ? `${period.fiscalYear}-P${period.periodNumber}` : undefined].filter(Boolean).join("-");
+    downloadCsv(`${name}.csv`, entries.map((entry) => ({
+      Date: entry.date.slice(0, 10),
+      Account: `${entry.accountCode} ${entry.accountName}`,
+      Description: entry.description,
+      Source: entry.documentNumber,
+      Debit: entry.debit || 0,
+      Credit: entry.credit || 0,
+      ...(accountId ? { Balance: entry.balance } : {}),
+    })));
+  }, [accountId, accounts, entries, periodId, periods]);
 
   const columns = React.useMemo(() => [
     { id: 'date', header: 'Date', accessor: (entry: (typeof entries)[number]) => entry.date.slice(0, 10), sortValue: (entry: (typeof entries)[number]) => entry.date },
@@ -53,15 +71,16 @@ export default function GeneralLedgerPage() {
     { id: 'source', header: 'Source', accessor: (entry: (typeof entries)[number]) => <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => setPostingSource({ sourceType: entry.sourceType, sourceId: entry.sourceId })}>{entry.documentNumber}</Button>, sortValue: (entry: (typeof entries)[number]) => entry.documentNumber },
     { id: 'debit', header: 'Debit', className: 'text-right', accessor: (entry: (typeof entries)[number]) => entry.debit ? formatMoney(entry.debit, baseCurrency) : '—', sortValue: (entry: (typeof entries)[number]) => entry.debit },
     { id: 'credit', header: 'Credit', className: 'text-right', accessor: (entry: (typeof entries)[number]) => entry.credit ? formatMoney(entry.credit, baseCurrency) : '—', sortValue: (entry: (typeof entries)[number]) => entry.credit },
-    { id: 'balance', header: 'Balance', className: 'text-right', accessor: (entry: (typeof entries)[number]) => formatMoney(entry.balance, baseCurrency), sortValue: (entry: (typeof entries)[number]) => entry.balance },
-  ], [baseCurrency]);
+    // A running balance only means something inside one account.
+    ...(accountId ? [{ id: 'balance', header: 'Balance', className: 'text-right', accessor: (entry: (typeof entries)[number]) => formatMoney(entry.balance, baseCurrency), sortValue: (entry: (typeof entries)[number]) => entry.balance }] : []),
+  ], [accountId, baseCurrency]);
 
   return (
     <PageLayout
       title="General Ledger"
       description="View all accounting transactions"
       actions={
-        <Button variant="outline">
+        <Button variant="outline" disabled={entries.length === 0} onClick={exportCsv}>
           <Icons.Download className="mr-2 h-4 w-4" />
           Export
         </Button>

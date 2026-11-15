@@ -63,6 +63,8 @@ export default function WorkOrderDetailPage() {
   const canWrite = useCanWriteManufacturing();
   const canApprove = useHasPermission("manufacturing.production.approve");
   const [varianceReason, setVarianceReason] = React.useState("");
+  const [wasteQuantity, setWasteQuantity] = React.useState("");
+  const [wasteReason, setWasteReason] = React.useState("");
   const completionRetry = React.useRef<{ fingerprint: string; key: string }>();
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
@@ -99,6 +101,7 @@ export default function WorkOrderDetailPage() {
       setOrder(next);
       setCompletionQuantity(String(next.openQuantity));
       setActualInputs(completionInputDefaults(next, next.openQuantity));
+      setWasteQuantity(""); setWasteReason("");
       setMeasuredWeight(""); setDeviceReadingId("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load work order.");
@@ -152,6 +155,8 @@ export default function WorkOrderDetailPage() {
             ? Number(completionQuantity)
             : undefined,
         idempotencyKey: action === "complete" ? completionRetry.current.key : undefined,
+        scrapQuantity: action === "complete" && Number(wasteQuantity) > 0 ? Number(wasteQuantity) : undefined,
+        wasteReason: action === "complete" && Number(wasteQuantity) > 0 ? wasteReason.trim() || undefined : undefined,
         varianceReason: action === "complete" ? varianceReason : undefined,
         measuredWeight: action === "complete" && measuredWeight ? Number(measuredWeight) : undefined,
         deviceReadingId: action === "complete" ? deviceReadingId || undefined : undefined,
@@ -173,6 +178,7 @@ export default function WorkOrderDetailPage() {
       setOrder(next);
       setCompletionQuantity(String(next.openQuantity));
       setActualInputs(completionInputDefaults(next, next.openQuantity));
+      if (action === "complete") { setWasteQuantity(""); setWasteReason(""); }
       toast.success(
         action === "release"
           ? "Released. Floor can start this batch."
@@ -304,6 +310,19 @@ export default function WorkOrderDetailPage() {
                           <div className="space-y-1.5">
                             <Label htmlFor="measured-weight">Measured weight</Label>
                             <Input id="measured-weight" readOnly={order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE"} type="number" min="0.001" step="0.001" value={measuredWeight} onChange={(event) => setMeasuredWeight(event.target.value)} />
+                          </div>
+                        )}
+                        <div className="space-y-1.5">
+                          <Label htmlFor="waste-quantity">Waste ({order.outputLines.find((line) => line.productId === order.productId)?.uom || "product units"})</Label>
+                          <Input id="waste-quantity" type="number" min="0" step="0.001" value={wasteQuantity} onChange={(event) => setWasteQuantity(event.target.value)} placeholder="0" />
+                        </div>
+                        {Number(wasteQuantity) > 0 && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="waste-reason">Why was it wasted?</Label>
+                            <select id="waste-reason" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={wasteReason} onChange={(event) => setWasteReason(event.target.value)}>
+                              <option value="">Choose a reason</option>
+                              {["Burnt or over-baked", "Under-proofed or mis-shaped", "Spoilt mix or dough", "Packaging fault", "Floor spill or dropped", "Machine stoppage", "Trial or sample", "Other"].map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
                           </div>
                         )}
                         {(order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && (

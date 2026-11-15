@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { fetchUomsApi, createUomApi, updateUomApi, deleteUomApi, replaceUomCatalogApi } from "@/lib/api/uom";
+import { fetchUomsApi, createUomApi, updateUomApi, deleteUomApi } from "@/lib/api/uom";
 import {
   createUomConversionApi,
   deleteUomConversionApi,
@@ -82,7 +82,6 @@ export default function UomSettingsPage() {
   const [editingUom, setEditingUom] = React.useState<UomDefinition | null>(null);
   const [editingConversion, setEditingConversion] = React.useState<UomConversion | null>(null);
   const [deleting, setDeleting] = React.useState<string | null>(null);
-  const [replacing, setReplacing] = React.useState(false);
 
   const validation = React.useMemo(() => validateLive(uoms, conversions), [uoms, conversions]);
 
@@ -121,32 +120,18 @@ export default function UomSettingsPage() {
     }
   };
 
-  const handleReplaceCatalog = async () => {
-    if (
-      !confirm(
-        "Replace this org catalog with Bag, Carton, Drum, Kilogram, Liters, and Pieces? Extra units will be removed. Product UOMs that used a removed code will be remapped."
-      )
-    ) {
-      return;
-    }
-    setReplacing(true);
-    try {
-      const result = await replaceUomCatalogApi();
-      await refresh();
-      toast.success(
-        `Catalog set to ${result.kept.join(", ")}. Removed ${result.deleted.length || 0} extra unit${result.deleted.length === 1 ? "" : "s"}.`
-      );
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setReplacing(false);
-    }
-  };
-
   const handleDeleteConversion = async (c: UomConversion) => {
-    await deleteUomConversionApi(c.id);
-    await refresh();
-    toast.success("Conversion removed.");
+    if (!confirm(`Remove the conversion 1 ${c.fromUom} = ${c.factor} ${c.toUom}? Products that rely on it will need their own packaging set.`)) return;
+    setDeleting(c.id);
+    try {
+      await deleteUomConversionApi(c.id);
+      await refresh();
+      toast.success("Conversion removed.");
+    } catch (e) {
+      toast.error((e as Error).message || "Could not remove the conversion.");
+    } finally {
+      setDeleting(null);
+    }
   };
 
   return (
@@ -163,14 +148,6 @@ export default function UomSettingsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void handleReplaceCatalog()}
-              disabled={replacing}
-            >
-              {replacing ? "Replacing…" : "Keep Bag / Carton / Drum / KG / Liters / Pieces"}
-            </Button>
             <Button size="sm" onClick={openAddUom}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Add UOM
@@ -301,7 +278,7 @@ export default function UomSettingsPage() {
                       <TableCell className="text-sm">1 {c.fromUom} = {c.factor} {c.toUom}</TableCell>
                       <TableCell className="space-x-1">
                         <Button variant="ghost" size="sm" onClick={() => openEditConversion(c)}>Edit</Button>
-                        <Button variant="ghost" size="sm" className="text-destructive" onClick={() => void handleDeleteConversion(c)}>
+                        <Button variant="ghost" size="sm" className="text-destructive" disabled={deleting === c.id} onClick={() => void handleDeleteConversion(c)}>
                           Delete
                         </Button>
                       </TableCell>

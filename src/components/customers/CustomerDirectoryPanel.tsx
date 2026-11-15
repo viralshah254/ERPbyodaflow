@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -77,7 +78,7 @@ export type CustomerDirectoryPanelProps = {
   /** Controlled tab — e.g. switch to Distributors after creating one. */
   activeTab?: TabId;
   onActiveTabChange?: (tab: TabId) => void;
-  /** Joy and Top Food: SFA customers waiting to be added to this list. */
+  /** Field-app (SFA) customers waiting to be added to this list. */
   showApprovalTab?: boolean;
   approvalOpen?: boolean;
   approvalPendingCount?: number;
@@ -104,7 +105,8 @@ export function CustomerDirectoryPanel({
   const router = useRouter();
   const canWrite = useCanWriteSales();
   const orgId = useAuthStore((s) => s.org?.orgId);
-  const directoryTabs = customerDirectoryTabsForOrg(orgId);
+  const operatingProfile = useOperatingProfile(orgId);
+  const directoryTabs = customerDirectoryTabsForOrg(operatingProfile.vanSalesBook);
   const user = useAuthStore((s) => s.user);
   const canReadAr = can(user, "finance.ar.read");
   const { settings } = useFinancialSettings();

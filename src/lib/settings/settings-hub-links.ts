@@ -4,7 +4,7 @@ export type SettingsHubLink = {
   description: string;
   icon: string;
   requiresPermissions?: string[];
-  /** OdaFlow platform console only — hidden for customer org sessions (e.g. Top Food). */
+  /** OdaFlow platform console only — hidden for customer org sessions. */
   requiresPlatformOperator?: boolean;
   /** FMCG manufacturer and bakery selling orgs. */
   requiresFmcg?: boolean;
@@ -61,6 +61,7 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     title: "People & access",
     links: [
       { href: "/settings/users-roles", label: "Users & roles", description: "Users, roles, and permissions", icon: "Users", requiresPermissions: ["settings.users.read"] },
+      { href: "/settings/teams", label: "Teams", description: "Groups of users with a lead, by branch", icon: "UsersRound", requiresPermissions: ["settings.users.read"] },
       { href: "/settings/preferences", label: "Preferences", description: "Org-wide preferences", icon: "Settings", requiresPermissions: ["settings.preferences.read"] },
       { href: "/settings/sequences", label: "Numbering sequences", description: "Document and reference numbering", icon: "Hash", requiresPermissions: ["settings.sequences.read"] },
       { href: "/settings/approval-policy", label: "Approval policy", description: "Maker-checker rules by document type", icon: "CheckCircle2", requiresPermissions: ["settings.org.read"] },
@@ -106,11 +107,20 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
     links: [
       { href: "/settings/customer-categories", label: "Customer categories", description: "Segments and category rules", icon: "Tag", requiresPermissions: ["settings.org.read"] },
       { href: "/settings/supplier-categories", label: "Supplier categories", description: "Creditor groups for purchasing and AP", icon: "Tags", requiresPermissions: ["settings.org.read"] },
+      { href: "/settings/purchasing/receiving", label: "Receiving policy", description: "Supplier invoice before receipt, and quality holds on goods received", icon: "PackageCheck", requiresPermissions: ["admin.settings"] },
       {
         href: "/settings/sales/document-flow",
         label: "Document flow",
         description: "Sales order, pick & pack, invoice, delivery note, and proof of delivery",
         icon: "GitBranch",
+        requiresPermissions: ["settings.org.read"],
+        requiresFmcg: true,
+      },
+      {
+        href: "/settings/sales/returns-policy",
+        label: "Returns policy",
+        description: "What happens to returned goods by product category, return reasons, and the returns allowance",
+        icon: "Undo2",
         requiresPermissions: ["settings.org.read"],
         requiresFmcg: true,
       },

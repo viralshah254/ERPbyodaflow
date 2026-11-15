@@ -68,7 +68,7 @@ export default function BomDetailPage() {
       const [nextBom, nextRoutes, nextWarehouses] = await Promise.all([
         fetchManufacturingBom(id),
         fetchManufacturingRoutes(),
-        fetchWarehousesApi().catch(() => []),
+        fetchWarehousesApi(),
       ]);
       setBom(nextBom);
       setRoutes(nextRoutes);

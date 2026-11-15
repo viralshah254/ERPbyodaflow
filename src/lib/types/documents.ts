@@ -10,6 +10,10 @@ export type DocListRow = {
   partyId?: string;
   total?: number;
   currency?: string;
+  /** Invoices and bills: amount still owed (0 when settled). */
+  balance?: number;
+  dueDate?: string;
+  overdue?: boolean;
   exchangeRate?: number;
   /** @deprecated Use individual landed-cost bills instead of rolled-up additional costs. */
   landedAllocated?: number;
@@ -341,7 +345,7 @@ export type DocumentDetailRecord = {
   kraSigning?: KraSigningRecord | null;
   /** FMCG sales document flow: separate status tracks and the next warehouse action. */
   salesFlow?: {
-    mode: "classic" | "pick_pack_first" | "joy_dispatch";
+    mode: "classic" | "pick_pack_first" | "route_dispatch" | "joy_dispatch";
     steps: string[];
     actions: string[];
     pickPack?: { id: string; number: string; status: string } | null;

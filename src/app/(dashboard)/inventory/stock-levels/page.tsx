@@ -1,5 +1,6 @@
 "use client";
 
+import { downloadCsv } from "@/lib/export/csv";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -646,7 +647,27 @@ export default function StockLevelsPage() {
         showCommandHint
         actions={
           <>
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              disabled={filteredItems.length === 0}
+              onClick={() =>
+                downloadCsv(
+                  "stock-levels.csv",
+                  filteredItems.map((row) => ({
+                    SKU: row.sku,
+                    Product: row.name,
+                    Store: row.warehouse,
+                    Unit: row.uom ?? "",
+                    "On hand": row.quantity,
+                    Reserved: row.reserved,
+                    Available: row.available,
+                    "Reorder level": row.reorderLevel,
+                    Status: row.status,
+                    "Average cost": row.averageCost ?? "",
+                  }))
+                )
+              }
+            >
               <Icons.Download className="mr-2 h-4 w-4" />
               Export
             </Button>

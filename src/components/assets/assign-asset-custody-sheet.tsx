@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +51,7 @@ function defaultAssignForm(
     custodyType: lockedOutletId ? "FRANCHISE_OUTLET" : defaultCustodyType,
     custodianOutletId: lockedOutletId ?? "",
     custodianEmployeeId: "",
-    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveFrom: todayNairobiYmd(),
     monthlyEquipmentFee: "",
     securityDepositAmount: "",
     notes: "",

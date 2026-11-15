@@ -22,6 +22,7 @@ type BackendUser = {
   status?: string;
   copilotEnabled?: boolean;
   branchIds?: string[];
+  allBranches?: boolean;
   roleIds?: string[];
   roleNames?: string[];
   hasSignIn?: boolean;
@@ -67,6 +68,8 @@ function mapUser(user: BackendUser): UserRow {
     copilotEnabled: user.copilotEnabled ?? false,
     roleIds: user.roleIds ?? [],
     roleNames: user.roleNames ?? [],
+    branchIds: user.branchIds ?? [],
+    allBranches: user.allBranches === true,
     hasSignIn: user.hasSignIn,
     phoneNumber: user.phoneNumber ?? null,
     nationalId: user.nationalId ?? null,

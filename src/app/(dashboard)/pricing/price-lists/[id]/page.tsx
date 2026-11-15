@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
@@ -54,7 +55,7 @@ import { canonicalPathId } from "@/lib/api/path-id";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayNairobiYmd();
 }
 
 function fmtCcy(n: number | null | undefined, currency: string): string {

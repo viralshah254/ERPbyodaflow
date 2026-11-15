@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
@@ -134,7 +135,7 @@ export default function ControlTowerPage() {
     return d.toISOString().slice(0, 10);
   });
   const [dateTo, setDateTo] = React.useState(
-    () => new Date().toISOString().slice(0, 10)
+    () => todayNairobiYmd()
   );
 
   // ——— Refresh control ———

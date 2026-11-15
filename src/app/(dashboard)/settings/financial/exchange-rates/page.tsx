@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -30,7 +31,7 @@ import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-const today = new Date().toISOString().slice(0, 10);
+const today = todayNairobiYmd();
 
 export default function ExchangeRatesSettingsPage() {
   const { settings } = useFinancialSettings();

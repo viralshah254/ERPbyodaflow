@@ -61,7 +61,7 @@ export function Step3OrgDetails({ onNext, onBack }: Step3OrgDetailsProps) {
           <Label htmlFor="orgName">Company name</Label>
           <Input
             id="orgName"
-            placeholder="e.g. Top Food Ea Ltd"
+            placeholder="e.g. Acme Foods Ltd"
             autoComplete="organization"
             {...register("orgName")}
           />

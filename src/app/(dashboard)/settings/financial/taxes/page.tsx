@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -44,7 +45,7 @@ export default function TaxesSettingsPage() {
     name: "",
     rate: 0,
     inclusive: false,
-    effectiveFrom: new Date().toISOString().slice(0, 10),
+    effectiveFrom: todayNairobiYmd(),
     effectiveTo: "" as string | null,
   });
 
@@ -122,7 +123,7 @@ export default function TaxesSettingsPage() {
       name: "",
       rate: 0,
       inclusive: false,
-      effectiveFrom: new Date().toISOString().slice(0, 10),
+      effectiveFrom: todayNairobiYmd(),
       effectiveTo: null,
     });
     setDrawerOpen(true);

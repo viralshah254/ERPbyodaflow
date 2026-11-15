@@ -22,7 +22,7 @@ import {
   type DispatchBatchRow,
   type DistributionVehicleRow,
 } from "@/lib/api/logistics";
-import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
+import { fetchSalesDocumentFlowApi, isRouteDispatchMode } from "@/lib/api/sales-document-flow";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 import { SearchableSelect } from "@/components/ui/searchable-select";
@@ -117,7 +117,7 @@ export default function WarehouseDispatchPage() {
     void fetchSalesDocumentFlowApi()
       .then((flow) => {
         if (cancelled) return;
-        if (flow.mode === "joy_dispatch") {
+        if (isRouteDispatchMode(flow.mode)) {
           router.replace("/warehouse/route-pick-lists?step=leave");
           return;
         }

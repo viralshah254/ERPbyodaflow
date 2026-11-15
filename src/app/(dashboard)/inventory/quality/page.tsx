@@ -28,6 +28,15 @@ export default function InventoryQualityPage() {
   const [saving, setSaving] = React.useState(false);
   const [lotQuery, setLotQuery] = React.useState("");
   const [lotOptions, setLotOptions] = React.useState<InventoryLotOption[]>([]);
+  // Other screens (production QC, driver returns) open this page with ?kind=LOSS&lot=<lot number> to raise a case.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const presetKind = params.get("kind");
+    if (presetKind === "LOSS" || presetKind === "QUALITY" || presetKind === "RECALL") setKind(presetKind);
+    const presetLot = params.get("lot");
+    if (presetLot) setLotQuery(presetLot);
+  }, []);
   const [quantity, setQuantity] = React.useState("");
   const [reason, setReason] = React.useState("");
   const [capa, setCapa] = React.useState<Record<string, string>>({});

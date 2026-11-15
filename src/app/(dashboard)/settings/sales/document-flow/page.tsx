@@ -8,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
-import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
 import { isApiConfigured } from "@/lib/api/client";
 import {
   fetchSalesDocumentFlowApi,
@@ -17,6 +16,8 @@ import {
   type SalesDocumentFlowSettings,
 } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
+import { fetchWarehouseOptions } from "@/lib/api/lookups";
+import { forgetCachedOperatingProfile } from "@/lib/fmcg/operating-profile";
 
 const CLASSIC_STEPS = [
   "Sales order",
@@ -35,7 +36,7 @@ const PICK_PACK_FIRST_STEPS = [
   "Proof of delivery",
 ];
 
-const JOY_DISPATCH_STEPS = [
+const ROUTE_DISPATCH_STEPS = [
   "Approved sales orders by delivery route",
   "Loading note on one truck",
   "Confirm load from DISPATCH",
@@ -128,6 +129,10 @@ const DEFAULTS: SalesDocumentFlowSettings = {
   allowPartialReceipt: true,
   sendPodNotification: true,
   prefillSalesOrderFinishedGoods: false,
+  productionRecording: "planned",
+  finishedGoodsSalesUnit: "product_pack",
+  approveNewFieldCustomers: false,
+  vanSalesBook: true,
 };
 
 function FlowSteps({ steps }: { steps: string[] }) {
@@ -145,11 +150,53 @@ function FlowSteps({ steps }: { steps: string[] }) {
   );
 }
 
+function ChoiceRow(props: {
+  label: string;
+  hint: string;
+  value: string;
+  disabled?: boolean;
+  options: Array<[string, string]>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{props.label}</Label>
+      <p className="text-sm text-muted-foreground">{props.hint}</p>
+      <div className="flex flex-wrap gap-2">
+        {props.options.map(([value, label]) => (
+          <Button
+            key={value}
+            type="button"
+            size="sm"
+            variant={props.value === value ? "default" : "outline"}
+            disabled={props.disabled}
+            onClick={() => props.onChange(value)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SwitchRow(props: { id: string; label: string; hint: string; checked: boolean; disabled?: boolean; onChange: (checked: boolean) => void }) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-1">
+        <Label htmlFor={props.id}>{props.label}</Label>
+        <p className="text-sm text-muted-foreground">{props.hint}</p>
+      </div>
+      <Switch id={props.id} checked={props.checked} disabled={props.disabled} onCheckedChange={props.onChange} />
+    </div>
+  );
+}
+
 export default function SalesDocumentFlowPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
-  const routeDispatch = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
+  const [stores, setStores] = React.useState<Array<{ id: string; label: string }>>([]);
   const [settings, setSettings] = React.useState<SalesDocumentFlowSettings>(DEFAULTS);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -175,11 +222,21 @@ export default function SalesDocumentFlowPage() {
     };
   }, []);
 
+  React.useEffect(() => {
+    if (!fmcg || !isApiConfigured()) return;
+    let current = true;
+    void fetchWarehouseOptions()
+      .then((rows) => { if (current) setStores(rows.map((row) => ({ id: row.id, label: row.label }))); })
+      .catch(() => { if (current) toast.error("Could not load stores for the dispatch store list."); });
+    return () => { current = false; };
+  }, [fmcg]);
+
+  const routeMode = settings.mode === "route_dispatch" || settings.mode === "joy_dispatch";
   const steps =
     settings.mode === "pick_pack_first"
       ? PICK_PACK_FIRST_STEPS
-      : settings.mode === "joy_dispatch"
-        ? JOY_DISPATCH_STEPS
+      : routeMode
+        ? ROUTE_DISPATCH_STEPS
         : CLASSIC_STEPS;
 
   const save = async () => {
@@ -187,6 +244,7 @@ export default function SalesDocumentFlowPage() {
     try {
       const updated = await updateSalesDocumentFlowApi(settings);
       setSettings({ ...DEFAULTS, ...updated });
+      forgetCachedOperatingProfile();
       toast.success("Sales document flow saved.");
     } catch (err) {
       toast.error((err as Error).message);
@@ -211,9 +269,9 @@ export default function SalesDocumentFlowPage() {
         <CardContent className="space-y-5">
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
-              <Label htmlFor="prefillSalesOrderFinishedGoods">Show all finished goods on new sales orders</Label>
+              <Label htmlFor="prefillSalesOrderFinishedGoods">Enter sales orders on the full finished-goods sheet</Label>
               <p className="text-sm text-muted-foreground">
-                Raw materials, packaging, and semi-finished items stay off the order. Other organisations can turn this on here.
+                New and edited sales orders and invoices list every finished good. Raw materials, packaging and semi-finished items stay off the order.
               </p>
             </div>
             <Switch
@@ -249,15 +307,14 @@ export default function SalesDocumentFlowPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className={`grid gap-3 ${routeDispatch ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+              <div className="grid gap-3 sm:grid-cols-3">
                 {(
                   [
                     ["classic", "Current flow", "Delivery note first, then pick & pack, then invoice after the signed note."],
                     ["pick_pack_first", "Pick & pack first", "Pick from the sales order, then invoice and delivery note, then proof of delivery."],
-                    ["joy_dispatch", "Route dispatch", "Group orders by delivery route, load one truck from DISPATCH, invoice the loaded quantity, then mark the truck as left."],
+                    ["route_dispatch", "Route dispatch", "Group orders by delivery route, load one truck from the dispatch store, invoice the loaded quantity, then mark the truck as left. Driver returns draft a credit note."],
                   ] as Array<[SalesDocumentFlowMode, string, string]>
                 )
-                  .filter(([mode]) => mode !== "joy_dispatch" || routeDispatch)
                   .map(([mode, label, hint]) => (
                   <button
                     key={mode}
@@ -265,7 +322,7 @@ export default function SalesDocumentFlowPage() {
                     disabled={loading}
                     onClick={() => setSettings((prev) => ({ ...prev, mode }))}
                     className={`rounded-lg border p-4 text-left transition ${
-                      settings.mode === mode ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
+                      settings.mode === mode || (mode === "route_dispatch" && routeMode) ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40"
                     }`}
                   >
                     <p className="font-medium">{label}</p>
@@ -274,6 +331,65 @@ export default function SalesDocumentFlowPage() {
                 ))}
               </div>
               <FlowSteps steps={steps} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>How this organisation operates</CardTitle>
+              <CardDescription>Choices that change screens across sales, dispatch and production. Each organisation sets its own.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {routeMode ? (
+                <div className="space-y-2">
+                  <Label htmlFor="dispatchWarehouseId">Dispatch store</Label>
+                  <p className="text-sm text-muted-foreground">Route trucks are loaded from this store. If empty, the store coded DISPATCH is used.</p>
+                  <select
+                    id="dispatchWarehouseId"
+                    className="h-10 w-full max-w-md rounded-md border bg-background px-3 text-sm"
+                    value={settings.dispatchWarehouseId ?? ""}
+                    disabled={loading}
+                    onChange={(e) => setSettings((prev) => ({ ...prev, dispatchWarehouseId: e.target.value || undefined }))}
+                  >
+                    <option value="">Store coded DISPATCH</option>
+                    {stores.map((store) => (
+                      <option key={store.id} value={store.id}>{store.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <ChoiceRow
+                label="Production recording"
+                hint="Planned production runs plan → work order → issue → complete. Record output starts from what was produced and posts the frozen recipe."
+                value={settings.productionRecording ?? "planned"}
+                disabled={loading}
+                options={[["planned", "Planned production"], ["record_output", "Record output"]]}
+                onChange={(value) => setSettings((prev) => ({ ...prev, productionRecording: value as "planned" | "record_output" }))}
+              />
+              <ChoiceRow
+                label="Finished-goods sales unit"
+                hint="Use each product's own pack setup, or read the pack size from the product name (e.g. 'ROLLS 6 PCS' sells as a pack)."
+                value={settings.finishedGoodsSalesUnit ?? "product_pack"}
+                disabled={loading}
+                options={[["product_pack", "Each product's pack"], ["pack_size_in_name", "Pack size in product name"]]}
+                onChange={(value) => setSettings((prev) => ({ ...prev, finishedGoodsSalesUnit: value as "product_pack" | "pack_size_in_name" }))}
+              />
+              <SwitchRow
+                id="approveNewFieldCustomers"
+                label="Approve new customers from field reps"
+                hint="Customers created in the field app wait in Customer approvals until someone accepts them."
+                checked={settings.approveNewFieldCustomers === true}
+                disabled={loading}
+                onChange={(checked) => setSettings((prev) => ({ ...prev, approveNewFieldCustomers: checked }))}
+              />
+              <SwitchRow
+                id="vanSalesBook"
+                label="Keep a van-sales customer book"
+                hint="Shows the Van sales tab in the customer directory."
+                checked={settings.vanSalesBook !== false}
+                disabled={loading}
+                onChange={(checked) => setSettings((prev) => ({ ...prev, vanSalesBook: checked }))}
+              />
             </CardContent>
           </Card>
 

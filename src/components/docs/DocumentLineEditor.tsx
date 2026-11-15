@@ -1,5 +1,5 @@
 "use client";
-import { joyFinishedGoodSalesUnit, joyRetailPackPricingRows } from "@/lib/docs/joy-sales-uom";
+import { salesUnitFromPackSizeInName, retailPackPricingRows } from "@/lib/docs/finished-goods-sales-unit";
 import { Table as InteractiveTable } from "@/components/ui/table";
 
 
@@ -156,7 +156,7 @@ interface DocumentLineEditorProps {
   fmcgOrg?: boolean;
   /** Manufacturer and bakery plants. The picker lists finished goods, raw materials, and packaging. */
   plantCatalogue?: boolean;
-  joyFinishedGoods?: boolean;
+  packSizeFromName?: boolean;
   /** Load packaging / pricing for products just added from the picker. */
   onProductsAdded?: (productIds: string[]) => void;
   /** FMCG: a pack was saved from the line UOM menu. Replace that product's packaging. */
@@ -268,7 +268,7 @@ export function DocumentLineEditor({
   fmcgCatalogByProductId,
   fmcgOrg = false,
   plantCatalogue = false,
-  joyFinishedGoods = false,
+  packSizeFromName = false,
   onProductsAdded,
   onPackagingUpdated,
   onCatalogReadyChange,
@@ -409,7 +409,7 @@ export function DocumentLineEditor({
     setCatalogError(false);
     setSheetCatalogReady(false);
     setFilteredProducts(null);
-    const load = sheetFinishedGoods ? fetchAllFinishedGoods(joyFinishedGoods) : fetchProductsForDocumentLines(productFilter);
+    const load = sheetFinishedGoods ? fetchAllFinishedGoods(packSizeFromName) : fetchProductsForDocumentLines(productFilter);
     load
       .then(async (rows) => {
         if (sheetFinishedGoods && isApiConfigured()) {
@@ -440,7 +440,7 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, joyFinishedGoods, catalogRetry]);
+  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
@@ -475,13 +475,13 @@ export function DocumentLineEditor({
       const packaging = packagingByProductId?.[productId];
       if (fmcgOrg) {
         const product = products.find((p) => p.id === productId) ?? getProductById(productId);
-        const rows = joyFinishedGoods ? joyRetailPackPricingRows(product, packaging, fmcgCatalogByProductId?.[productId]?.packPrices) : packaging;
+        const rows = packSizeFromName ? retailPackPricingRows(product, packaging, fmcgCatalogByProductId?.[productId]?.packPrices) : packaging;
         const unitsPer = resolveUnitsPerPiece(uom, rows, product?.baseUom ?? product?.unit);
         return Math.round(qty * unitsPer * 1000) / 1000;
       }
       return getBaseQty(productId, uom, qty, packaging);
     },
-    [fmcgOrg, joyFinishedGoods, fmcgCatalogByProductId, packagingByProductId, products]
+    [fmcgOrg, packSizeFromName, fmcgCatalogByProductId, packagingByProductId, products]
   );
 
   // Resolve price: daily (seafood) → FMCG piece×pack → flat catalog → tiered product_pricing.
@@ -512,8 +512,8 @@ export function DocumentLineEditor({
             discountOverride != null && Number.isFinite(discountOverride)
               ? discountOverride
               : fmcgItem.discountPercent,
-          packaging: joyFinishedGoods
-            ? joyRetailPackPricingRows(product, packagingByProductId?.[productId], fmcgItem.packPrices)
+          packaging: packSizeFromName
+            ? retailPackPricingRows(product, packagingByProductId?.[productId], fmcgItem.packPrices)
             : packagingByProductId?.[productId],
           productBaseUom: product?.baseUom ?? product?.unit,
         });
@@ -553,7 +553,7 @@ export function DocumentLineEditor({
       useCostPricing,
       computeBaseQty,
       fmcgOrg,
-      joyFinishedGoods,
+      packSizeFromName,
       dailyPricesByProductId,
       fmcgCatalogByProductId,
       catalogPricesByProductId,
@@ -628,8 +628,8 @@ export function DocumentLineEditor({
           const packaging = packagingByProductId?.[p.id] ?? [];
           // Quantity-sheet rows start in the SKU's own unit, as before batching.
           // A pack (PK/CTN) is an explicit selection, never a timing-dependent default.
-          const joyUnit = joyFinishedGoods ? joyFinishedGoodSalesUnit(p, packaging, fmcgCatalogByProductId?.[p.id]?.packPrices) : undefined;
-          const uom = joyUnit ?? (sheetFinishedGoods ? documentLineBaseUom(p, fmcgOrg) : defaultLineUom(packaging, mode, p, fmcgOrg));
+          const nameRuleUnit = packSizeFromName ? salesUnitFromPackSizeInName(p, packaging, fmcgCatalogByProductId?.[p.id]?.packPrices) : undefined;
+          const uom = nameRuleUnit ?? (sheetFinishedGoods ? documentLineBaseUom(p, fmcgOrg) : defaultLineUom(packaging, mode, p, fmcgOrg));
           const baseQty = q > 0 ? computeBaseQty(p.id, uom, q) : 0;
           const { price, reason, discount } = resolvePrice(p.id, priceQty, uom);
           const draft: DocumentLine = {
@@ -709,13 +709,13 @@ export function DocumentLineEditor({
       taxCodes,
       useCostPricing,
       sheetFinishedGoods,
-      joyFinishedGoods,
+      packSizeFromName,
       fmcgCatalogByProductId,
     ]
   );
 
   React.useEffect(() => {
-    if (!sheetFinishedGoods || !sheetCatalogReady || (joyFinishedGoods && !fmcgCatalogByProductId)) return;
+    if (!sheetFinishedGoods || !sheetCatalogReady || (packSizeFromName && !fmcgCatalogByProductId)) return;
     if (!filteredProducts?.length) return;
     const existingIds = new Set(lines.map((line) => line.productId));
     const missingProducts = filteredProducts.filter((product) => !existingIds.has(product.id));
@@ -725,7 +725,7 @@ export function DocumentLineEditor({
       undefined,
       false
     );
-  }, [sheetFinishedGoods, sheetCatalogReady, joyFinishedGoods, fmcgCatalogByProductId, filteredProducts, lines, commitProducts]);
+  }, [sheetFinishedGoods, sheetCatalogReady, packSizeFromName, fmcgCatalogByProductId, filteredProducts, lines, commitProducts]);
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -885,7 +885,7 @@ export function DocumentLineEditor({
   const setProduct = (lineId: string, productId: string) => {
     const applyRow = (row: ProductRow) => {
       const packaging = packagingByProductId?.[productId] ?? [];
-      const uom = (joyFinishedGoods ? joyFinishedGoodSalesUnit(row, packaging, fmcgCatalogByProductId?.[row.id]?.packPrices) : undefined) ??
+      const uom = (packSizeFromName ? salesUnitFromPackSizeInName(row, packaging, fmcgCatalogByProductId?.[row.id]?.packPrices) : undefined) ??
         defaultLineUom(packaging, mode, row, fmcgOrg);
       const line = linesRef.current.find((l) => l.id === lineId);
       const qty = line?.qty ?? 1;
@@ -1103,12 +1103,12 @@ export function DocumentLineEditor({
     (p: ProductRow) => {
       if (useCostPricing) return "";
       const packaging = packagingByProductId?.[p.id] ?? [];
-      const uom = (joyFinishedGoods ? joyFinishedGoodSalesUnit(p, packaging, fmcgCatalogByProductId?.[p.id]?.packPrices) : undefined) ??
+      const uom = (packSizeFromName ? salesUnitFromPackSizeInName(p, packaging, fmcgCatalogByProductId?.[p.id]?.packPrices) : undefined) ??
         defaultLineUom(packaging, mode, p, fmcgOrg);
       const { price } = resolvePrice(p.id, 1, uom);
       return formatMoney(price, currency);
     },
-    [currency, fmcgOrg, fmcgCatalogByProductId, joyFinishedGoods, mode, packagingByProductId, resolvePrice, useCostPricing]
+    [currency, fmcgOrg, fmcgCatalogByProductId, packSizeFromName, mode, packagingByProductId, resolvePrice, useCostPricing]
   );
 
   const searchSplit = splitProductSearchQuantity(searchQuery);
@@ -1500,8 +1500,8 @@ export function DocumentLineEditor({
               <tbody>
           {displayedLines.map((l) => {
             const product = products.find((p) => p.id === l.productId) ?? getProductById(l.productId);
-            const joyUnit = joyFinishedGoods && product
-              ? joyFinishedGoodSalesUnit(product, packagingByProductId?.[l.productId], fmcgCatalogByProductId?.[l.productId]?.packPrices)
+            const nameRuleUnit = packSizeFromName && product
+              ? salesUnitFromPackSizeInName(product, packagingByProductId?.[l.productId], fmcgCatalogByProductId?.[l.productId]?.packPrices)
               : undefined;
             const taxCode = taxCodes.find((t) => t.id === l.taxCodeId);
             const baseQtyShown = lineColumnLabels?.baseQtyBasis === "stock" ? l.baseQty : (l.poQty ?? l.baseQty);
@@ -1586,12 +1586,12 @@ export function DocumentLineEditor({
                       productName={l.name || product?.name}
                       value={l.uom}
                       onChange={setUom}
-                      packagingForProduct={joyUnit === "PACK"
-                        ? joyRetailPackPricingRows(product, packagingByProductId?.[l.productId], fmcgCatalogByProductId?.[l.productId]?.packPrices)
+                      packagingForProduct={nameRuleUnit === "PACK"
+                        ? retailPackPricingRows(product, packagingByProductId?.[l.productId], fmcgCatalogByProductId?.[l.productId]?.packPrices)
                         : packagingByProductId?.[l.productId]}
                       fmcgOrg={fmcgOrg}
                       baseUom={documentLineBaseUom(product ?? {}, fmcgOrg)}
-                      equivalentUnit={joyUnit === "PCS" ? joyUnit : undefined}
+                      equivalentUnit={nameRuleUnit === "PCS" ? nameRuleUnit : undefined}
                       onPackagingUpdated={onPackagingUpdated}
                     />
                   </td>

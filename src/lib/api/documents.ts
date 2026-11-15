@@ -245,6 +245,9 @@ type ChainNode = {
 };
 
 type BackendDocumentListItem = {
+  balance?: number;
+  dueDate?: string;
+  overdue?: boolean;
   id: string;
   number: string;
   date: string;
@@ -679,6 +682,9 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     partyId: item.partyId,
     total: item.total,
     currency: item.currency,
+    balance: item.balance,
+    dueDate: item.dueDate,
+    overdue: item.overdue,
     exchangeRate: item.exchangeRate,
     landedAllocated: item.landedAllocated,
     landedBreakdown: item.landedBreakdown,
@@ -756,6 +762,8 @@ export type FetchDocumentListOpts = {
   warehouseId?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** Invoices and bills: "open", "overdue" or "settled". */
+  balance?: string;
   /** Limit the list to these document ids (this vehicle's invoices). */
   ids?: string[];
 };
@@ -794,6 +802,7 @@ export async function fetchDocumentListPageApi(
   if (opts?.dateFrom?.trim()) params.set("dateFrom", opts.dateFrom.trim());
   if (opts?.dateTo?.trim()) params.set("dateTo", opts.dateTo.trim());
   if (opts?.ids?.length) params.set("ids", opts.ids.join(","));
+  if (opts?.balance?.trim()) params.set("balance", opts.balance.trim());
 
   const payload = await apiRequest<BackendDocumentListResponse>(`/api/documents/${encodeURIComponent(type)}`, {
     params,
