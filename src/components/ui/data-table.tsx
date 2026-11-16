@@ -245,8 +245,7 @@ export function DataTable<T extends object>({
           role={responsiveRows ? "table" : undefined}
           className={cn(
             "caption-bottom text-sm",
-            "w-full min-w-0",
-            scrollMode === "natural" && "min-w-full",
+            "w-max min-w-full",
             tableSizeClass,
           )}
         >
