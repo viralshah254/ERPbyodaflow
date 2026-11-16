@@ -393,10 +393,10 @@ export async function uploadFormData<T = unknown>(path: string, formData: FormDa
 /**
  * POST multipart form data (file upload). Returns JSON body or throws.
  */
-export async function uploadFile(
+export async function uploadFile<T = { jobId?: string; imported?: number; message?: string }>(
   path: string,
   file: File,
-  onSuccess: (data: { jobId?: string; imported?: number; message?: string }) => void,
+  onSuccess: (data: T) => void,
   onError: (message: string) => void,
   formFields?: Record<string, string>
 ): Promise<void> {
@@ -420,7 +420,7 @@ export async function uploadFile(
     );
     const data = await res.json().catch(() => ({}));
     if (res.ok || res.status === 202) {
-      onSuccess(data as { jobId?: string; imported?: number; message?: string });
+      onSuccess(data as T);
       return;
     }
     onError((data as { error?: string }).error ?? `Upload failed (${res.status}).`);
