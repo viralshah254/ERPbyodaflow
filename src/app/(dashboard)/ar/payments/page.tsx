@@ -2,33 +2,25 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LIST_PAGE_SHELL_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-  SheetFooter,
-} from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
-import type { PaymentRow, OpenInvoiceRow } from "@/lib/types/ar";
+import type { PaymentRow } from "@/lib/types/ar";
 import { CustomerLink } from "@/components/customers/CustomerLink";
 import {
-  allocateArPaymentApi,
   downloadArReceiptPdfApi,
   fetchArPaymentsPageApi,
-  fetchOpenInvoicesApi,
   submitArPaymentApi,
 } from "@/lib/api/payments";
+import { ArChequeBatchSheet } from "@/components/finance/ArChequeBatchSheet";
+import type { BankAccountRow } from "@/lib/types/treasury";
+import { ArReconciliationSheet } from "@/components/finance/ArReconciliationSheet";
 import { ArSettlementSheet, type ReceivePrefill } from "@/components/finance/ArSettlementSheet";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -63,13 +55,15 @@ import { useHasPermission } from "@/lib/rbac/use-write-guard";
 
 export default function ARPaymentsPage() {
   const canRecord = useHasPermission("finance.write", "finance.receipts.write");
+  const router = useRouter();
   const searchParams = useSearchParams();
   const templateId = useOrgContextStore((s) => s.templateId);
   const issueReceipt = isFmcgTemplateId(templateId);
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
-  const [searchInput, setSearchInput] = React.useState("");
-  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  const [searchInput, setSearchInput] = React.useState(() => searchParams.get("paymentSearch") ?? "");
+  const [debouncedSearch, setDebouncedSearch] = React.useState(searchInput);
+  const [pendingAdviceId, setPendingAdviceId] = React.useState(() => searchParams.get("adviceId") ?? "");
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState<number>(10);
   const [hasMore, setHasMore] = React.useState(false);
@@ -79,14 +73,12 @@ export default function ARPaymentsPage() {
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [receiveSession, setReceiveSession] = React.useState(0);
   const [receivePrefill, setReceivePrefill] = React.useState<ReceivePrefill | null>(null);
-  const [selectedPaymentId, setSelectedPaymentId] = React.useState<string | null>(null);
-  const [allocateSheetOpen, setAllocateSheetOpen] = React.useState(false);
-  const [allocateAmounts, setAllocateAmounts] = React.useState<Record<string, number>>({});
-  const [allocating, setAllocating] = React.useState(false);
+  const [batchOpen, setBatchOpen] = React.useState(() => searchParams.has("adviceId"));
+  const [batchPayment, setBatchPayment] = React.useState<PaymentRow>();
+  const [selectedPaymentId, setSelectedPaymentId] = React.useState<string | null>(() => searchParams.get("reconcile"));
   const [submittingId, setSubmittingId] = React.useState<string | null>(null);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
-  const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [allocateInvoices, setAllocateInvoices] = React.useState<OpenInvoiceRow[]>([]);
+  const [bankAccountOptions, setBankAccountOptions] = React.useState<BankAccountRow[]>([]);
   const openedFromQuery = React.useRef(false);
 
   React.useEffect(() => {
@@ -139,9 +131,7 @@ export default function ARPaymentsPage() {
 
   React.useEffect(() => {
     fetchBankAccountsApi()
-      .then((nextBankAccounts) =>
-        setBankAccountOptions(nextBankAccounts.map((item) => ({ id: item.id, name: item.name })))
-      )
+      .then(setBankAccountOptions)
       .catch(() => setBankAccountOptions([]));
   }, []);
 
@@ -165,13 +155,6 @@ export default function ARPaymentsPage() {
       amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
     });
   }, [openReceive, searchParams]);
-
-  const openAllocateRef = React.useRef<(payment: PaymentRow) => void>(() => {});
-  openAllocateRef.current = (payment: PaymentRow) => {
-    setSelectedPaymentId(payment.id);
-    setAllocateAmounts({});
-    setAllocateSheetOpen(true);
-  };
 
   const columns = React.useMemo(
     () => [
@@ -248,9 +231,16 @@ export default function ARPaymentsPage() {
                 {submittingId === r.id ? "Submitting…" : "Submit"}
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={() => openAllocateRef.current(r as PaymentRow)}>
-              Allocate
-            </Button>
+            {canRecord && (r.status === "POSTED" || r.status === "ALLOCATED") && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedPaymentId(r.id)}>
+                Reconcile
+              </Button>
+            )}
+            {canRecord && r.paymentMethod === "CHEQUE" && (r.status === "POSTED" || r.status === "ALLOCATED") && (
+              <Button variant="ghost" size="sm" onClick={() => { setBatchPayment(r); setBatchOpen(true); }}>
+                Reconcile with advice
+              </Button>
+            )}
             {issueReceipt && (r.status === "POSTED" || r.status === "ALLOCATED") && (
               <Button
                 variant="ghost"
@@ -266,50 +256,23 @@ export default function ARPaymentsPage() {
         ),
       },
     ],
-    [issueReceipt, refreshData, submittingId]
+    [canRecord, issueReceipt, refreshData, submittingId]
   );
-
-  const selectedPayment = selectedPaymentId ? payments.find((p) => p.id === selectedPaymentId) : null;
-
-  React.useEffect(() => {
-    if (!selectedPayment?.customerId) {
-      setAllocateInvoices([]);
-      return;
-    }
-    fetchOpenInvoicesApi(selectedPayment.customerId)
-      .then(setAllocateInvoices)
-      .catch(() => setAllocateInvoices([]));
-  }, [selectedPayment?.customerId]);
-
-  const handleAllocateSubmit = async () => {
-    if (!selectedPaymentId) return;
-    const invoiceIds = Object.keys(allocateAmounts).filter((k) => (allocateAmounts[k] ?? 0) > 0);
-    const amounts = invoiceIds.map((k) => allocateAmounts[k] ?? 0);
-    if (invoiceIds.length === 0) {
-      toast.error("Enter at least one allocation amount.");
-      return;
-    }
-    setAllocating(true);
-    try {
-      await allocateArPaymentApi(
-        selectedPaymentId,
-        invoiceIds.map((documentId, index) => ({ documentId, amount: amounts[index] ?? 0 }))
-      );
-      await refreshData();
-      toast.success("Allocation saved.");
-      setAllocateSheetOpen(false);
-      setSelectedPaymentId(null);
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setAllocating(false);
-    }
-  };
 
   const handleDraftReminder = () => {
     openWithPrompt(
       "Draft a payment reminder for the overdue invoices on this customer's account. Include invoice numbers, amounts, and the due dates."
     );
+  };
+
+  const clearPendingAdvice = () => {
+    setPendingAdviceId("");
+    if (!searchParams.has("adviceId")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("adviceId");
+    next.delete("paymentSearch");
+    const query = next.toString();
+    router.replace(query ? `/ar/payments?${query}` : "/ar/payments", { scroll: false });
   };
 
   return (
@@ -332,6 +295,7 @@ export default function ARPaymentsPage() {
                 Draft payment reminder
               </Button>
             ) : null}
+            {canRecord && <Button variant="outline" onClick={() => { setBatchPayment(undefined); setBatchOpen(true); }}>Reconcile cheques</Button>}
             <Button variant="outline" asChild>
               <Link href="/ar/receipts">Collect receipts</Link>
             </Button>
@@ -407,47 +371,27 @@ export default function ARPaymentsPage() {
           void refreshData();
         }}
       />
-      <Sheet open={allocateSheetOpen} onOpenChange={setAllocateSheetOpen}>
-        <SheetContent side="right" className="w-full">
-          <SheetHeader>
-            <SheetTitle>Allocate to invoices</SheetTitle>
-            <SheetDescription>
-              {selectedPayment ? `Payment ${selectedPayment.number} · ${formatMoney(selectedPayment.amount, "KES")}` : ""}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            {allocateInvoices.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No open invoices for this customer.</p>
-            ) : (
-              <div className="rounded border divide-y max-h-64 overflow-auto">
-                {allocateInvoices.map((inv) => (
-                  <div key={inv.id} className="flex items-center justify-between p-2 text-sm gap-2">
-                    <span className="truncate">{inv.number} · {formatMoney(inv.outstanding, "KES")}</span>
-                    <Input
-                      type="number"
-                      className="w-28 h-8 shrink-0"
-                      placeholder="Amount"
-                      value={allocateAmounts[inv.id] ?? ""}
-                      onChange={(e) =>
-                        setAllocateAmounts((a) => ({
-                          ...a,
-                          [inv.id]: parseFloat(e.target.value) || 0,
-                        }))
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
-            <SheetFooter>
-              <Button variant="outline" onClick={() => setAllocateSheetOpen(false)}>Cancel</Button>
-              <Button disabled={allocating || allocateInvoices.length === 0} onClick={handleAllocateSubmit}>
-                Submit allocation
-              </Button>
-            </SheetFooter>
-          </div>
-        </SheetContent>
-      </Sheet>
+      {canRecord && batchOpen && (
+        <ArChequeBatchSheet
+          initialPayment={batchPayment}
+          initialAdviceId={pendingAdviceId || undefined}
+          bankAccounts={bankAccountOptions}
+          onClose={() => { setBatchOpen(false); clearPendingAdvice(); }}
+          onSaved={() => { clearPendingAdvice(); void refreshData(); }}
+        />
+      )}
+      {canRecord && selectedPaymentId && (
+        <ArReconciliationSheet
+          key={selectedPaymentId}
+          paymentId={selectedPaymentId}
+          onClose={() => setSelectedPaymentId(null)}
+          onSaved={() => {
+            clearPendingAdvice();
+            setSelectedPaymentId(null);
+            void refreshData();
+          }}
+        />
+      )}
     </PageShell>
   );
 }

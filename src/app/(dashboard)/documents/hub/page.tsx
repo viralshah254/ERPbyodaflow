@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -423,9 +424,11 @@ function Detail({
             <CardTitle className="truncate text-base">{item.fields.partyName || item.fileName}</CardTitle>
             <p className="truncate text-sm text-muted-foreground">{item.fileName}</p>
           </div>
-          <Button type="button" size="sm" variant="outline" onClick={onDelete}>
-            Delete
-          </Button>
+          {!item.reconciledReceipt && (
+            <Button type="button" size="sm" variant="outline" onClick={onDelete}>
+              Delete
+            </Button>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-5 p-4 pt-2 text-sm">
@@ -439,6 +442,24 @@ function Detail({
           />
         ) : item.postedRecord ? (
           <p className="font-medium">{item.postedRecord.number} is in the books.</p>
+        ) : item.documentType === "remittance_advice" ? (
+          <div className="space-y-2">
+            <p>{item.reconciledReceipt
+              ? `Linked receipts · ${(item.reconciledReceipts ?? [item.reconciledReceipt]).map((receipt) => receipt.number).join(", ")}`
+              : "Add new or existing cheques and review the invoice and credit note split."}</p>
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/ar/payments?${new URLSearchParams(item.reconciledReceipt
+                ? { reconcile: item.reconciledReceipt.id }
+                : { adviceId: item._id, paymentSearch: item.fields.chequeNumber || item.fields.partyName || "" })}`}>
+                {item.reconciledReceipt ? "Open receipt reconciliation" : "Reconcile in AR Payments"}
+              </Link>
+            </Button>
+            {(item.reconciledReceipts ?? []).slice(1).map((receipt) => (
+              <Button key={receipt.id} asChild size="sm" variant="outline">
+                <Link href={`/ar/payments?reconcile=${encodeURIComponent(receipt.id)}`}>{receipt.number}</Link>
+              </Button>
+            ))}
+          </div>
         ) : item.status === "ready_for_approval" ? (
           <div className="space-y-2">
             <p>Approve to put this {labelize(item.documentType)} in the system. The original file stays attached.</p>
@@ -577,7 +598,7 @@ function Detail({
             ))}
           </div>
         </Section>
-        {item.allocation ? (
+        {item.allocation && item.documentType !== "remittance_advice" ? (
           <Section title="Cheque allocation">
             <div className="grid grid-cols-3 gap-2 rounded-lg border p-3">
               <Field label="Face value" value={formatMoney(item.allocation.faceValue, item.fields.currency || "KES")} />

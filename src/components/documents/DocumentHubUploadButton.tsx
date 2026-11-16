@@ -9,11 +9,13 @@ import * as Icons from "lucide-react";
 
 export function DocumentHubUploadButton({
   sourceTransaction,
+  purpose,
   label = "Scan or upload",
   onPendingChange,
   onUploaded,
 }: {
   sourceTransaction?: { docType: string; docId: string };
+  purpose?: "remittance_advice";
   label?: string;
   onPendingChange?: (fileNames: string[]) => void;
   onUploaded?: (result: Awaited<ReturnType<typeof uploadDocumentHubFiles>>) => void | Promise<void>;
@@ -30,7 +32,7 @@ export function DocumentHubUploadButton({
     setReadingName(files.length === 1 ? files[0].name : `${files.length} files`);
     onPendingChange?.(files.map((file) => file.name));
     try {
-      const result = await uploadDocumentHubFiles(files, sourceTransaction);
+      const result = await uploadDocumentHubFiles(files, sourceTransaction, purpose);
       onPendingChange?.([]);
       const count = result.uploads.reduce((sum, upload) => sum + upload.items.length, 0);
       toast.success(count === 1 ? "Read. It\u2019s in the inbox." : `Read. ${count} documents are in the inbox.`);

@@ -106,6 +106,8 @@ export interface ScannedDocument {
   ledgerPosting: string;
   ledgerPostingNote?: string;
   postedRecord?: { kind: string; id: string; number: string };
+  reconciledReceipt?: { id: string; number: string };
+  reconciledReceipts?: Array<{ id: string; number: string }>;
   createdAt?: string;
   updatedAt?: string;
 }
