@@ -21,6 +21,47 @@ function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision =
 }
 beforeEach(() => { api.configured = false; vi.mocked(fetchProductApi).mockClear(); vi.mocked(fetchProductVariantsApi).mockClear(); vi.mocked(fetchDocumentProductDataApi).mockReset().mockResolvedValue({}); setProductsCache([]); vi.mocked(fetchProductsPageApi).mockReset().mockResolvedValue({ items: products, hasMore: false, nextCursor: null } as never); });
 
+it("moves from product to quantity and back to a fresh product search with Enter", async () => {
+  function LineByLineForm() {
+    const [lines, setLines] = React.useState<DocumentLine[]>([]);
+    return (
+      <DocumentLineEditor
+        currency="KES"
+        fmcgOrg
+        lineByLine
+        productFilter="sellable"
+        lines={lines}
+        onLinesChange={setLines}
+        catalogPricesByProductId={{ queen: 40, cake: 100 }}
+      />
+    );
+  }
+  render(<LineByLineForm />);
+  const search = () => screen.getByRole("combobox", { name: "Search products to add" });
+  await waitFor(() => expect(search()).toBeEnabled());
+  expect(screen.queryByRole("button", { name: /Add products|Browse/ })).not.toBeInTheDocument();
+  fireEvent.change(search(), { target: { value: "Queen" } });
+  fireEvent.keyDown(search(), { key: "Enter" });
+
+  const quantity = await screen.findByLabelText("Quantity for Queen cakes");
+  await waitFor(() => expect(quantity).toHaveFocus());
+  expect(quantity).toHaveValue("");
+  fireEvent.keyDown(quantity, { key: "Enter" });
+  expect(quantity).toHaveFocus();
+  fireEvent.change(quantity, { target: { value: "2.5" } });
+  fireEvent.keyDown(quantity, { key: "Enter" });
+  expect(search()).toHaveFocus();
+  expect(search()).toHaveValue("");
+
+  fireEvent.change(search(), { target: { value: "6164000350467" } });
+  fireEvent.click(screen.getByRole("option", { name: /Celebration cake/ }));
+  const nextQuantity = await screen.findByLabelText("Quantity for Celebration cake");
+  await waitFor(() => expect(nextQuantity).toHaveFocus());
+  expect(nextQuantity).toHaveValue("");
+  expect(quantity).toHaveValue("2.5");
+  expect(within(quantity.closest("tr")!).getByText("KES 100.00")).toBeInTheDocument();
+});
+
 it("loads 100 inline rows with one metadata batch and no per-product detail or variant requests", async () => {
   api.configured = true;
   const rows = Array.from({ length: 100 }, (_, i) => ({ ...products[0], id: `fg-${i}`, sku: String(i), code: String(i), name: `Finished ${i}` }));

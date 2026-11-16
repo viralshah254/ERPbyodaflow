@@ -2,6 +2,7 @@ import { apiRequest, requireLiveApi } from "./client";
 
 /** "joy_dispatch" is the legacy saved name of "route_dispatch". */
 export type SalesDocumentFlowMode = "classic" | "pick_pack_first" | "route_dispatch" | "joy_dispatch";
+export type SalesLineItemLayout = "picker" | "line_by_line" | "catalogue";
 
 export function isRouteDispatchMode(mode: string | null | undefined): boolean {
   return mode === "route_dispatch" || mode === "joy_dispatch";
@@ -24,6 +25,7 @@ export type SalesDocumentFlowSettings = {
   sendPodNotification: boolean;
   prefillSalesOrderFinishedGoods: boolean;
   routeCollectionsEnabled?: boolean;
+  lineItemLayout?: SalesLineItemLayout;
   /** Route dispatch: the store trucks are loaded from. */
   dispatchWarehouseId?: string;
   productionRecording?: "planned" | "record_output";
@@ -31,6 +33,10 @@ export type SalesDocumentFlowSettings = {
   approveNewFieldCustomers?: boolean;
   vanSalesBook?: boolean;
 };
+
+export function resolveSalesLineItemLayout(flow: Partial<SalesDocumentFlowSettings>): SalesLineItemLayout {
+  return flow.lineItemLayout ?? (flow.prefillSalesOrderFinishedGoods ? "catalogue" : "picker");
+}
 
 export async function fetchSalesDocumentFlowApi(): Promise<SalesDocumentFlowSettings> {
   requireLiveApi("Sales document flow");

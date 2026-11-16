@@ -105,7 +105,6 @@ import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
-import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -600,13 +599,16 @@ export function DocumentCreateWizard({
   const skipEditAutosaveRef = React.useRef(false);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
-  const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
-  const sheetFinishedGoods = usesInlineQuantitySheet({ type, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
+  const usesSalesLayout = type === "sales-order" || type === "invoice";
+  const salesLayoutReady = !usesSalesLayout || !currentOrgId || operatingProfile.ready;
+  const sheetFinishedGoods = usesInlineQuantitySheet({ type, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
+  const lineByLine = usesSalesLayout && operatingProfile.lineItemLayout === "line_by_line";
+  const skipEmptyQuantities = sheetFinishedGoods || lineByLine;
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
   const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
-    () => (sheetFinishedGoods ? lines.filter((line) => line.qty > 0) : lines),
-    [lines, sheetFinishedGoods]
+    () => (skipEmptyQuantities ? lines.filter((line) => line.qty > 0) : lines),
+    [lines, skipEmptyQuantities]
   );
   const linesOperational = React.useMemo(
     () => documentLinesOperational(billableLines),
@@ -614,10 +616,10 @@ export function DocumentCreateWizard({
   );
   const linesBlockedMessage = React.useCallback(
     (context: "continue" | "review" | "submit") =>
-      sheetFinishedGoods && lines.length > 0 && billableLines.length === 0
+      skipEmptyQuantities && lines.length > 0 && billableLines.length === 0
         ? "Enter a quantity for at least one product."
         : documentLinesOperationalErrorMessage(billableLines, context),
-    [billableLines, lines.length, sheetFinishedGoods]
+    [billableLines, lines.length, skipEmptyQuantities]
   );
   const [submitting, setSubmitting] = React.useState(false);
   const [invoiceCopyFile, setInvoiceCopyFile] = React.useState<File | null>(null);
@@ -801,19 +803,6 @@ export function DocumentCreateWizard({
     if (isEditMode) return;
     deleteDocumentDraftApi(type).catch(() => {});
   }, [type, isEditMode]);
-
-  React.useEffect(() => {
-    if (isEditMode || type !== "sales-order" || !isApiConfigured()) return;
-    let cancelled = false;
-    fetchSalesDocumentFlowApi()
-      .then((settings) => {
-        if (!cancelled) setPrefillFinishedGoods(settings.prefillSalesOrderFinishedGoods);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isEditMode, type]);
 
   React.useEffect(() => {
     if (!scanId || isEditMode) return;
@@ -1145,12 +1134,16 @@ export function DocumentCreateWizard({
     []
   );
 
+  const lineProductIdsKey = React.useMemo(
+    () => JSON.stringify([...new Set(lines.map((line) => line.productId).filter(Boolean))]),
+    [lines]
+  );
   React.useEffect(() => {
     if (step !== 2) return;
     // Purchasing docs use cost-based / manual pricing; bulk prefetching all packaging
     // and price-list data for every product creates hundreds of parallel API calls.
     // Skip for purchasing flows — data will be fetched lazily per selected line.
-    if (sheetFinishedGoods) return;
+    if (!salesLayoutReady || sheetFinishedGoods) return;
     const isPurchasingDoc =
       type === "bill" || type === "purchase-order" || type === "grn" ||
       type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note";
@@ -1160,7 +1153,7 @@ export function DocumentCreateWizard({
       setLinePackagingReady(true);
       return;
     }
-    const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))] as string[];
+    const productIds: string[] = JSON.parse(lineProductIdsKey);
     if (!productIds.length) {
       setLinePackagingReady(true);
       return;
@@ -1170,7 +1163,7 @@ export function DocumentCreateWizard({
     return () => {
       cancelled = true;
     };
-  }, [step, type, lines, prefetchLineProductData, sheetFinishedGoods]);
+  }, [step, type, lineProductIdsKey, prefetchLineProductData, salesLayoutReady, sheetFinishedGoods]);
 
   const selectedPartyOption = React.useMemo(() => {
     if (selectedPartyDetail) return toPartyLookupOption(selectedPartyDetail);
@@ -1205,7 +1198,7 @@ export function DocumentCreateWizard({
     partyDetailLoading,
   ]);
 
-  const linesStepReady = lineCatalogReady && linePackagingReady && salesPricingReady;
+  const linesStepReady = salesLayoutReady && lineCatalogReady && linePackagingReady && salesPricingReady;
 
   React.useEffect(() => {
     if (step !== 2) {
@@ -1269,14 +1262,14 @@ export function DocumentCreateWizard({
     (next: DocumentLine[] | ((prev: DocumentLine[]) => DocumentLine[])) => {
       setLines((prev) => {
         const resolved = typeof next === "function" ? next(prev) : next;
-        const counted = sheetFinishedGoods ? resolved.filter((line) => line.qty > 0) : resolved;
+        const counted = skipEmptyQuantities ? resolved.filter((line) => line.qty > 0) : resolved;
         const total = counted.reduce((s, l) => s + l.amount, 0);
         form.setValue("linesCount", counted.length);
         form.setValue("totalAmount", total);
         return resolved;
       });
     },
-    [form, sheetFinishedGoods]
+    [form, skipEmptyQuantities]
   );
 
   const handlePackagingUpdated = React.useCallback((productId: string, items: ProductPackaging[]) => {
@@ -1626,7 +1619,7 @@ export function DocumentCreateWizard({
 
   const persistEditDraft = React.useCallback(
     (immediate = false) => {
-      if (explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
+      if (!salesLayoutReady || explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
       const doSave = () => {
         if (isOdaflowFmcgEdit && odaflowBaselineRef.current) {
           const baseline = odaflowBaselineRef.current;
@@ -1650,7 +1643,7 @@ export function DocumentCreateWizard({
       }
       editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
     },
-    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, type]
+    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, salesLayoutReady, type]
   );
 
   const persistWizardProgress = React.useCallback(
@@ -3075,9 +3068,10 @@ export function DocumentCreateWizard({
                 </a>
               </div>
             )}
-            <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
-            <DocumentLineEditor
+            <div className={cn(!linesStepReady && !skipEmptyQuantities && "pointer-events-none opacity-60")}>
+            {salesLayoutReady ? <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
+              lineByLine={lineByLine}
               packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}
@@ -3121,7 +3115,7 @@ export function DocumentCreateWizard({
                     }
                   : undefined
               }
-            />
+            /> : null}
             </div>
             {fmcgOrg && effectiveTaxConfig ? (
               <div className="mt-4 rounded-lg border p-3 text-sm">
@@ -3351,7 +3345,7 @@ export function DocumentCreateWizard({
           </Button>
         </div>
         <div className="flex gap-2">
-          {step < 3 ? (
+          {step < 3 && !(lineByLine && step === 2) ? (
             <Button
               onClick={() => void validateAndNext()}
               disabled={stepAdvanceBlocked}
@@ -3359,14 +3353,14 @@ export function DocumentCreateWizard({
             >
               Next
             </Button>
-          ) : (
+          ) : step === 3 ? (
             <Button onClick={() => void onSubmit()} disabled={submitting}>
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
-          )}
+          ) : null}
           {step < 3 && (
             <Button
-              variant="outline"
+              variant={lineByLine && step === 2 ? "default" : "outline"}
               onClick={() => void onReview()}
               disabled={step === 2 && (!linesStepReady || !linesOperational)}
               title={

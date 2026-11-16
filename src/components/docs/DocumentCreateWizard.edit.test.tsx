@@ -4,10 +4,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest";
 import { DocumentCreateWizard } from "./DocumentCreateWizard";
 import { fetchJoyOrderRoute } from "@/lib/api/joy-route-orders";
-import { patchDocumentApi } from "@/lib/api/documents";
+import { patchDocumentApi, previewDocumentPostingApi } from "@/lib/api/documents";
 import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
-const state = vi.hoisted(() => ({ push: vi.fn(), orgId: "org-sfa-6a890b7765042fb41c9d89a6", defaults: vi.fn(), taxDefaults: vi.fn() }));
+const state = vi.hoisted(() => ({ push: vi.fn(), orgId: "org-sfa-6a890b7765042fb41c9d89a6", lineByLine: false, defaults: vi.fn(), taxDefaults: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/stores/auth-store", () => ({ useAuthStore: (selector: any) => selector({ org: { orgId: state.orgId } }) }));
 vi.mock("@/stores/orgContextStore", () => ({ useTerminology: () => ({}), useOrgContextStore: (selector: any) => selector({ templateId: "bakex", orgRole: "MANUFACTURER" }) }));
@@ -52,11 +52,11 @@ vi.mock("@/lib/api/uom", () => ({ fetchProductUomsApi: vi.fn().mockResolvedValue
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]), fetchProductPricingApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/fmcg/operating-profile", () => ({
   useOperatingProfile: () => ({
-    ready: true, routeDispatch: state.orgId !== "org-other", routeCollectionsEnabled: state.orgId !== "org-other", fullCatalogueOrderSheet: true,
+    ready: true, routeDispatch: state.orgId !== "org-other", routeCollectionsEnabled: state.orgId !== "org-other", fullCatalogueOrderSheet: !state.lineByLine,
+    lineItemLayout: state.lineByLine ? "line_by_line" : "catalogue",
     productionRecording: "record_output", packSizeFromName: true, vanSalesBook: true,
   }),
 }));
-vi.mock("@/lib/api/sales-document-flow", () => ({ fetchSalesDocumentFlowApi: vi.fn().mockResolvedValue({ prefillSalesOrderFinishedGoods: true }) }));
 vi.mock("@/lib/data/products.repo", () => ({ hydrateProductsFromApi: vi.fn().mockResolvedValue([]), listProducts: () => [] }));
 vi.mock("@/lib/api/parties", () => ({ fetchPartyByIdApi: vi.fn().mockResolvedValue({ id: "customer", name: "Synthetic QA customer" }), fetchPartyCreditSummaryApi: vi.fn().mockResolvedValue(null), toPartyLookupOption: (row: any) => ({ id: row.id, label: row.name }) }));
 vi.mock("@/components/customers/CustomerLink", () => ({ CustomerLink: ({ label }: any) => <span>{label}</span> }));
@@ -67,7 +67,7 @@ vi.mock("@/components/docs/DocumentLineEditor", async (original) => {
   return { ...actual, DocumentLineEditor: (props: any) => {
     const { onCatalogReadyChange } = props;
     React.useEffect(() => { const timer = setTimeout(() => onCatalogReadyChange?.(true), 0); return () => clearTimeout(timer); }, [onCatalogReadyChange]);
-    return <div data-testid="edit-sheet" data-inline={String(props.sheetFinishedGoods)} data-inclusive={String(props.linesAreTaxInclusive)} data-price-tag={props.priceListId} data-reprice={props.repriceExistingRevision}>
+    return <div data-testid="edit-sheet" data-inline={String(props.sheetFinishedGoods)} data-line-by-line={String(props.lineByLine)} data-inclusive={String(props.linesAreTaxInclusive)} data-price-tag={props.priceListId} data-reprice={props.repriceExistingRevision}>
       <button onClick={() => props.onLinesChange((old: any[]) => [...old, { id: "unused", productId: "other", name: "Unused", sku: "2", uom: "PCS", qty: 0, baseQty: 0, price: 50, priceReason: "Price list", amount: 0 }])}>Add zero catalogue row</button>
     </div>;
   } };
@@ -77,7 +77,7 @@ function doc(type: "sales-order" | "invoice"): DocumentDetailRecord {
     ...(type === "sales-order" ? { warehouseId: "wh-c4-friday" } : {}),
     lines: [{ id: "original-line", productId: "queen", productSku: "1", description: "Queen cakes", qty: 2, unit: "PCS", unitPrice: 43.1, amount: 86.2, tax: 11.89, taxCodeId: "vat" }] };
 }
-beforeEach(() => { vi.mocked(deleteDocumentDraftApi).mockClear(); vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; });
+beforeEach(() => { vi.mocked(deleteDocumentDraftApi).mockClear(); vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); vi.mocked(previewDocumentPostingApi).mockClear(); state.lineByLine = false; state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; });
 it.each(["sales-order", "invoice"] as const)("opens existing %s inline without autosaving and saves only positive lines explicitly", async (type) => {
   render(<DocumentCreateWizard type={type} mode="edit" existingDocument={doc(type)} />);
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
@@ -97,6 +97,27 @@ it.each(["sales-order", "invoice"] as const)("opens existing %s inline without a
   fireEvent.click(save);
   await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
   expect(patchDocumentApi).toHaveBeenCalledWith(type, "synthetic-doc", expect.objectContaining({ priceListId: "stored", taxConfigId: "stored-tax", linesAreTaxInclusive: true, lines: [expect.objectContaining({ productId: "queen", quantity: 2, lineId: "original-line", sourceLineId: "original-line", unitPrice: 43.1 })] }));
+});
+
+it.each(["sales-order", "invoice"] as const)("omits incomplete line-by-line rows from %s preview and save", async (type) => {
+  state.orgId = "org-other";
+  state.lineByLine = true;
+  render(<DocumentCreateWizard type={type} mode="edit" existingDocument={doc(type)} />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
+  fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
+  expect(await screen.findByTestId("edit-sheet")).toHaveAttribute("data-line-by-line", "true");
+  fireEvent.click(screen.getByRole("button", { name: "Add zero catalogue row" }));
+  const review = screen.getByRole("button", { name: "Review & Submit" });
+  await waitFor(() => expect(review).toBeEnabled());
+  fireEvent.click(review);
+
+  const payload = expect.objectContaining({
+    lines: [expect.objectContaining({ productId: "queen", quantity: 2 })],
+  });
+  expect(previewDocumentPostingApi).toHaveBeenCalledWith(type, payload);
+  fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(state.push).toHaveBeenCalledWith(`/docs/${type}/synthetic-doc`));
+  expect(patchDocumentApi).toHaveBeenLastCalledWith(type, "synthetic-doc", payload);
 });
 
 it("changes price and VAT tags locally without changing customer defaults or autosaving", async () => {
