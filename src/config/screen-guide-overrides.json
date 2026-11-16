@@ -615,5 +615,47 @@
       "Do not send the same purchasing commitment to another supplier. Agree cancellation with the supplier and use the controlled cancellation/replacement process; retain the audit trail and linked requisition quantities.",
       "When goods arrive, create the linked GRN and record actual quantities, lots and QC. Match and post the supplier bill separately, then settle approved AP balances through finance."
     ]
+  },
+  "/analytics/fmcg": {
+    "title": "FMCG performance",
+    "summary": "Review sales after returns, collections, route closes and production waste across a selected period.",
+    "tasks": [
+      "Set the From and To dates and refresh the dashboard.",
+      "Compare sales and collections with route activity, returns and waste for the same period.",
+      "Open the related sales, returns or production records to check an unexpected total."
+    ]
+  },
+  "/finance/payment-matching": {
+    "title": "Payment matching",
+    "summary": "Review statement suggestions before matching payments to invoices or recorded receipts.",
+    "tasks": [
+      "Import the statement in Bank Reconciliation, then select its account in Payment matching.",
+      "Review the receipt reference, amount, confidence and matching evidence. For Joy M-Pesa, check the statement till against the invoice till.",
+      "Reverify matches below 99% for Joy M-Pesa and enter what you checked before confirming and posting."
+    ]
+  },
+  "/finance/uncredited-returns": {
+    "title": "Uncredited route returns",
+    "summary": "Find returned route stock that is still included on a customer invoice.",
+    "tasks": [
+      "Review returned quantities alongside the customer and invoice references.",
+      "Check the source return and its credit history before opening a new credit note for the remaining eligible quantity."
+    ]
+  },
+  "/settings/sales/returns-policy": {
+    "title": "Returns policy",
+    "summary": "Configure how customer and route returns are handled for the current organisation.",
+    "tasks": [
+      "Review the default return action, category exceptions and the shelf-life limit for resale.",
+      "Check allowances and disposition rules with the returns team, then save and reopen the policy to verify it."
+    ]
+  },
+  "/settings/teams": {
+    "title": "Teams",
+    "summary": "Group staff by branch or function and assign a team lead and members.",
+    "tasks": [
+      "Open New team or edit an existing crew and confirm the branch, name and purpose.",
+      "Select the team lead and members, save and check the resulting team in the list."
+    ]
   }
 }
