@@ -18,13 +18,17 @@ import {
   type PendingWarehouseDropRow,
 } from "@/lib/api/dispatch-warehouse";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
+import { fetchReturnsPolicyApi, type ReturnReason } from "@/lib/api/returns-policy";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
 
 type ReturnLineState = {
-  returnedQty: string;
-  condition: "GOOD" | "DAMAGED";
+  goodQty: string;
+  damagedQty: string;
+  reasonCode: string;
 };
+
+const EMPTY_LINE: ReturnLineState = { goodQty: "", damagedQty: "", reasonCode: "" };
 
 export default function DispatchReturnDetailPage() {
   const params = useParams();
@@ -40,6 +44,7 @@ export default function DispatchReturnDetailPage() {
   const [warehouseId, setWarehouseId] = React.useState("");
   const [warehouses, setWarehouses] = React.useState<LookupOption[]>([]);
   const [posting, setPosting] = React.useState(false);
+  const [reasons, setReasons] = React.useState<ReturnReason[]>([]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -53,7 +58,7 @@ export default function DispatchReturnDetailPage() {
         if (road) {
           const init: Record<string, ReturnLineState> = {};
           for (const line of road.lines) {
-            init[line.lineId] = { returnedQty: "", condition: "GOOD" };
+            init[line.lineId] = { ...EMPTY_LINE };
           }
           setReturns(init);
           if (road.warehouseId) setWarehouseId(road.warehouseId);
@@ -72,8 +77,13 @@ export default function DispatchReturnDetailPage() {
           toast.error(error instanceof Error ? error.message : "Could not load this return.");
         }
       });
-    void fetchWarehouseOptions()
-      .then(setWarehouses)
+    void fetchReturnsPolicyApi()
+      .then((policy) => { if (!cancelled) setReasons(policy.reasons.filter((r) => r.active)); })
+      .catch(() => {
+        /* Reasons are optional; the form still posts without them. */
+      });
+    void fetchWarehouseOptions({ includeTransferEligibility: true })
+      .then((rows) => setWarehouses(rows.filter((row) => !row.transferSourceBlock)))
       .catch(() => {
         /* Warehouse list is required to post; the form shows an empty selector. */
       });
@@ -92,12 +102,24 @@ export default function DispatchReturnDetailPage() {
       toast.error("Select the warehouse taking the goods back.");
       return;
     }
-    const lines = onRoad.lines.map((line) => ({
-      lineId: line.lineId,
-      returnedQty: Number(returns[line.lineId]?.returnedQty || 0),
-      condition: returns[line.lineId]?.condition ?? "GOOD",
-    }));
-    if (!lines.some((line) => line.returnedQty > 0)) {
+    const lines: Array<{ lineId: string; returnedQty: number; condition: "GOOD" | "DAMAGED"; reasonCode?: string }> = [];
+    for (const line of onRoad.lines) {
+      const state = returns[line.lineId] ?? EMPTY_LINE;
+      const good = Number(state.goodQty || 0);
+      const damaged = Number(state.damagedQty || 0);
+      if (!Number.isFinite(good) || !Number.isFinite(damaged) || good < 0 || damaged < 0) {
+        toast.error(`Check the quantities on ${line.description || line.lineId}.`);
+        return;
+      }
+      if (good + damaged > line.shippedQty + 1e-9) {
+        toast.error(`${line.description || line.lineId}: good and damaged together cannot be more than ${line.shippedQty}.`);
+        return;
+      }
+      const reasonCode = state.reasonCode || undefined;
+      if (good > 0) lines.push({ lineId: line.lineId, returnedQty: good, condition: "GOOD", reasonCode });
+      if (damaged > 0) lines.push({ lineId: line.lineId, returnedQty: damaged, condition: "DAMAGED", reasonCode });
+    }
+    if (!lines.length) {
       toast.error("Enter a returned quantity on at least one line.");
       return;
     }
@@ -109,12 +131,17 @@ export default function DispatchReturnDetailPage() {
         note: note.trim() || undefined,
         lines,
       });
-      toast.success(
-        result.fullReturn
-          ? "Full load posted back to the warehouse."
-          : "Return posted. Goods the customer kept stay on the delivery note."
-      );
-      router.push("/warehouse/dispatch-returns");
+      const kept = result.fullReturn ? "Full load returned." : "Return posted. Goods the customer kept stay on the delivery note.";
+      if (result.creditNoteNumber) {
+        toast.success(`${kept} Credit note ${result.creditNoteNumber} is drafted for finance to post; posting it moves the goods into the returns store.`);
+      } else if (result.creditNoteError) {
+        toast.warning(`${kept} The invoice still needs a credit note: ${result.creditNoteError}`);
+      } else if (result.lossCaseIds?.length) {
+        toast.success(`${kept} Goods that cannot go straight back on sale are held with a case waiting for review.`);
+      } else {
+        toast.success(kept);
+      }
+      router.push(result.creditNoteId ? `/docs/credit-note/${encodeURIComponent(result.creditNoteId)}` : "/warehouse/dispatch-returns");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Post failed");
     } finally {
@@ -182,7 +209,7 @@ export default function DispatchReturnDetailPage() {
       <PageShell>
         <PageHeader
           title={`Return ${onRoad.number}`}
-          description="Count what the truck brought back. Good quantity is added to stock in the same unit that was dispatched."
+          description="Count what the truck brought back. Good quantity returns to the warehouse you pick. Damaged quantity goes to the returns store. What comes back is left off the customer invoice."
           breadcrumbs={[
             { label: "Warehouse", href: "/warehouse/overview" },
             { label: "Driver returns", href: "/warehouse/dispatch-returns" },
@@ -231,49 +258,36 @@ export default function DispatchReturnDetailPage() {
             </CardHeader>
             <CardContent className="space-y-5">
               {onRoad.lines.map((line) => {
-                const state = returns[line.lineId] ?? { returnedQty: "", condition: "GOOD" as const };
+                const state = returns[line.lineId] ?? EMPTY_LINE;
                 const unit = line.unit || "PCS";
+                const update = (patch: Partial<ReturnLineState>) =>
+                  setReturns((prev) => ({ ...prev, [line.lineId]: { ...(prev[line.lineId] ?? EMPTY_LINE), ...patch } }));
                 return (
                   <div key={line.lineId} className="space-y-2 border-b border-border pb-4 last:border-0">
                     <p className="text-sm font-medium">{line.description || line.lineId}</p>
                     <p className="text-xs text-muted-foreground">
-                      Dispatched {line.shippedQty} {unit}
+                      Still out {line.shippedQty} {unit}
                     </p>
-                    <div className="grid gap-3 sm:grid-cols-[1fr_180px]">
+                    <div className="grid gap-3 sm:grid-cols-3">
                       <div className="space-y-2">
-                        <Label htmlFor={`qty-${line.lineId}`}>Returned ({unit})</Label>
-                        <Input
-                          id={`qty-${line.lineId}`}
-                          type="number"
-                          min={0}
-                          step="any"
-                          value={state.returnedQty}
-                          onChange={(e) =>
-                            setReturns((prev) => ({
-                              ...prev,
-                              [line.lineId]: { ...state, returnedQty: e.target.value },
-                            }))
-                          }
-                          placeholder="0"
-                        />
+                        <Label htmlFor={`good-${line.lineId}`}>Returned good ({unit})</Label>
+                        <Input id={`good-${line.lineId}`} type="number" min={0} step="any" value={state.goodQty} onChange={(e) => update({ goodQty: e.target.value })} placeholder="0" />
                       </div>
                       <div className="space-y-2">
-                        <Label>Condition</Label>
-                        <Select
-                          value={state.condition}
-                          onValueChange={(value) =>
-                            setReturns((prev) => ({
-                              ...prev,
-                              [line.lineId]: { ...state, condition: value === "DAMAGED" ? "DAMAGED" : "GOOD" },
-                            }))
-                          }
-                        >
-                          <SelectTrigger aria-label={`Condition for ${line.description || "line"}`}>
+                        <Label htmlFor={`damaged-${line.lineId}`}>Returned damaged ({unit})</Label>
+                        <Input id={`damaged-${line.lineId}`} type="number" min={0} step="any" value={state.damagedQty} onChange={(e) => update({ damagedQty: e.target.value })} placeholder="0" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Reason</Label>
+                        <Select value={state.reasonCode || "NONE"} onValueChange={(value) => update({ reasonCode: value === "NONE" ? "" : value })}>
+                          <SelectTrigger aria-label={`Return reason for ${line.description || "line"}`}>
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="GOOD">Good — back to stock</SelectItem>
-                            <SelectItem value="DAMAGED">Damaged — not sellable</SelectItem>
+                            <SelectItem value="NONE">No reason given</SelectItem>
+                            {reasons.map((reason) => (
+                              <SelectItem key={reason.code} value={reason.code}>{reason.label}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -328,7 +342,7 @@ export default function DispatchReturnDetailPage() {
                   onChange={(e) => setWeights((prev) => ({ ...prev, [line.lineId]: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Driver dropped {line.droppedWeightKg}
+                  Driver brought back {line.droppedWeightKg} {line.unit || "units"}
                   {line.shippedQty != null ? ` · dispatched ${line.shippedQty}` : ""}
                 </p>
               </div>

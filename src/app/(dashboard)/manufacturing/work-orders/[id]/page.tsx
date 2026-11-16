@@ -22,6 +22,8 @@ import {
 } from "@/lib/api/manufacturing";
 import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
+import { productionTerms } from "@/lib/manufacturing/production-language";
+import { storeDisplayName } from "@/lib/warehouse/store-label";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
@@ -61,6 +63,8 @@ export default function WorkOrderDetailPage() {
   const canWrite = useCanWriteManufacturing();
   const canApprove = useHasPermission("manufacturing.production.approve");
   const [varianceReason, setVarianceReason] = React.useState("");
+  const [wasteQuantity, setWasteQuantity] = React.useState("");
+  const [wasteReason, setWasteReason] = React.useState("");
   const completionRetry = React.useRef<{ fingerprint: string; key: string }>();
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
@@ -68,11 +72,19 @@ export default function WorkOrderDetailPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const terms = productionTerms(templateId);
 
   const [order, setOrder] = React.useState<ManufacturingWorkOrder | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [acting, setActing] = React.useState(false);
   const [availLines, setAvailLines] = React.useState<MaterialAvailabilityLine[]>([]);
+  const storeNames = React.useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const line of availLines) {
+      if (line.warehouseId && line.warehouseName) names[line.warehouseId] = line.warehouseName;
+    }
+    return names;
+  }, [availLines]);
   const [availLoading, setAvailLoading] = React.useState(false);
   const [availError, setAvailError] = React.useState<string | null>(null);
   const [completionQuantity, setCompletionQuantity] = React.useState("");
@@ -89,6 +101,7 @@ export default function WorkOrderDetailPage() {
       setOrder(next);
       setCompletionQuantity(String(next.openQuantity));
       setActualInputs(completionInputDefaults(next, next.openQuantity));
+      setWasteQuantity(""); setWasteReason("");
       setMeasuredWeight(""); setDeviceReadingId("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to load work order.");
@@ -142,6 +155,8 @@ export default function WorkOrderDetailPage() {
             ? Number(completionQuantity)
             : undefined,
         idempotencyKey: action === "complete" ? completionRetry.current.key : undefined,
+        scrapQuantity: action === "complete" && Number(wasteQuantity) > 0 ? Number(wasteQuantity) : undefined,
+        wasteReason: action === "complete" && Number(wasteQuantity) > 0 ? wasteReason.trim() || undefined : undefined,
         varianceReason: action === "complete" ? varianceReason : undefined,
         measuredWeight: action === "complete" && measuredWeight ? Number(measuredWeight) : undefined,
         deviceReadingId: action === "complete" ? deviceReadingId || undefined : undefined,
@@ -163,6 +178,7 @@ export default function WorkOrderDetailPage() {
       setOrder(next);
       setCompletionQuantity(String(next.openQuantity));
       setActualInputs(completionInputDefaults(next, next.openQuantity));
+      if (action === "complete") { setWasteQuantity(""); setWasteReason(""); }
       toast.success(
         action === "release"
           ? "Released. Floor can start this batch."
@@ -236,7 +252,7 @@ export default function WorkOrderDetailPage() {
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives finished goods into the selected output store under QC hold. QC acceptance makes the lot available for allocation. Do not add the output again with a stock adjustment.</p></div>{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div>
             {canWrite && order.status === "DRAFT" && <WorkOrderPreparation order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
-            {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
+            {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             <Card data-tutorial-hint="work-order-lifecycle">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -296,6 +312,19 @@ export default function WorkOrderDetailPage() {
                             <Input id="measured-weight" readOnly={order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE"} type="number" min="0.001" step="0.001" value={measuredWeight} onChange={(event) => setMeasuredWeight(event.target.value)} />
                           </div>
                         )}
+                        <div className="space-y-1.5">
+                          <Label htmlFor="waste-quantity">Waste ({order.outputLines.find((line) => line.productId === order.productId)?.uom || "product units"})</Label>
+                          <Input id="waste-quantity" type="number" min="0" step="0.001" value={wasteQuantity} onChange={(event) => setWasteQuantity(event.target.value)} placeholder="0" />
+                        </div>
+                        {Number(wasteQuantity) > 0 && (
+                          <div className="space-y-1.5">
+                            <Label htmlFor="waste-reason">Why was it wasted?</Label>
+                            <select id="waste-reason" className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={wasteReason} onChange={(event) => setWasteReason(event.target.value)}>
+                              <option value="">Choose a reason</option>
+                              {["Burnt or over-baked", "Under-proofed or mis-shaped", "Spoilt mix or dough", "Packaging fault", "Floor spill or dropped", "Machine stoppage", "Trial or sample", "Other"].map((r) => <option key={r} value={r}>{r}</option>)}
+                            </select>
+                          </div>
+                        )}
                         {(order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && (
                           <DeviceReadingPicker workOrderId={order.id} value={deviceReadingId} onChange={(id, quantity) => { setDeviceReadingId(id); setMeasuredWeight(quantity == null ? "" : String(quantity)); }} />
                         )}
@@ -316,7 +345,7 @@ export default function WorkOrderDetailPage() {
                                           {line.barcode.trim()}
                                         </span>
                                       ) : null}
-                                      <span className="block text-muted-foreground">{line.warehouseId}</span>
+                                      <span className="block text-muted-foreground">{storeDisplayName(line.warehouseId, line.warehouseName, storeNames)}</span>
                                     </td>
                                     {(["issue", "consume", "returnQty"] as const).map((field) => (
                                       <td key={field} className="p-1">
@@ -402,7 +431,7 @@ export default function WorkOrderDetailPage() {
                           receive those items first. A partial completion is available when the requested issue quantities are covered.
                         </p>
                       ) : (
-                        <p className="mb-3 text-sm text-muted-foreground">On-hand covers this recipe.</p>
+                        <p className="mb-3 text-sm text-muted-foreground">{terms.covered}</p>
                       )}
                       <Table>
                         <TableHeader>

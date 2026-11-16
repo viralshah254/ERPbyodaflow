@@ -1,3 +1,4 @@
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import type { AssetRow, DepreciationMethod } from "@/lib/types/assets";
 
 export const ASSET_CATEGORIES = ["IT Equipment", "Machinery", "Furniture", "Vehicles", "Other"] as const;
@@ -49,7 +50,7 @@ export function emptyAssetForm(): AssetForm {
     assetTag: "",
     model: "",
     inServiceDate: "",
-    acquisitionDate: new Date().toISOString().slice(0, 10),
+    acquisitionDate: todayNairobiYmd(),
     cost: 0,
     salvage: 0,
     usefulLifeYears: 3,

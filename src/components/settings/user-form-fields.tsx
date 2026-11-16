@@ -14,6 +14,10 @@ export type UserFormState = {
   status: "ACTIVE" | "INACTIVE" | "SUSPENDED";
   copilotEnabled: boolean;
   roleIds: string[];
+  /** Branches the user can work in. A user with no branch cannot post anything branch-bound. */
+  branchIds: string[];
+  /** Every branch, including ones added later. */
+  allBranches: boolean;
   phoneNumber: string;
   nationalId: string;
   employeeCode: string;
@@ -28,6 +32,7 @@ export type UserFormFieldsProps = {
   canAssignOwnerRole: boolean;
   isEdit: boolean;
   rolesReadOnly?: boolean;
+  branches?: Array<{ id: string; name: string; code?: string }>;
 };
 
 export function UserFormFields({
@@ -38,6 +43,7 @@ export function UserFormFields({
   canAssignOwnerRole,
   isEdit,
   rolesReadOnly = false,
+  branches = [],
 }: UserFormFieldsProps) {
   const assignableRoles = sortedRoles.filter((r) => {
     if (r.name === "Owner") return canAssignOwnerRole;
@@ -155,6 +161,46 @@ export function UserFormFields({
           {!rolesReadOnly ? "highest-priority assigned role. New users are staged for checkout first — nothing is activated or billed until you confirm the pending checkout from Billing." : null}
         </p>
       </div>
+
+      {branches.length > 1 ? (
+        <div className="space-y-2">
+          <Label>Branches</Label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <Checkbox
+              checked={form.allBranches}
+              disabled={rolesReadOnly}
+              onCheckedChange={(checked) => onChange((p) => ({ ...p, allBranches: checked === true }))}
+            />
+            <span className="text-sm">All branches, including new ones (head office, regional managers)</span>
+          </label>
+          {!form.allBranches ? (
+          <div className="max-h-40 overflow-y-auto rounded-md border p-3 space-y-2">
+            {branches.map((b) => (
+              <label key={b.id} className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={form.branchIds.includes(b.id)}
+                  disabled={rolesReadOnly}
+                  onCheckedChange={() =>
+                    onChange((p) => ({
+                      ...p,
+                      branchIds: p.branchIds.includes(b.id) ? p.branchIds.filter((id) => id !== b.id) : [...p.branchIds, b.id],
+                    }))
+                  }
+                />
+                <span className="text-sm">{b.code ? `${b.code} · ${b.name}` : b.name}</span>
+              </label>
+            ))}
+          </div>
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            {form.allBranches
+              ? "The user can switch to any branch, now and in future."
+              : form.branchIds.length
+                ? "The user only sees and posts in the ticked branches."
+                : "Tick at least one branch."}
+          </p>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <Label>Phone number</Label>

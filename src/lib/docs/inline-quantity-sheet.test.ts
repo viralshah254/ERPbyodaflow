@@ -1,15 +1,14 @@
 import { expect, it } from "vitest";
 import { usesInlineQuantitySheet, sameEditableLines, storedEditableUnitPrice } from "./inline-quantity-sheet";
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
 import type { DocumentLine } from "@/components/docs/DocumentLineEditor";
 it.each(["sales-order", "invoice"])("uses the same inline sheet when creating and editing Joybakers %s", (type) => {
-  expect(usesInlineQuantitySheet({ type, orgId: JOY_SUPERBAKERS_ORG_ID })).toBe(true);
-  expect(usesInlineQuantitySheet({ type, orgId: JOY_SUPERBAKERS_ORG_ID, editing: true })).toBe(true);
-  expect(usesInlineQuantitySheet({ type, orgId: "other", editing: true })).toBe(false);
+  expect(usesInlineQuantitySheet({ type, fullCatalogueSheet: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type, fullCatalogueSheet: true, editing: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type, fullCatalogueSheet: false, editing: true })).toBe(false);
 });
 it("retains other companies' configured create flow without widening editing or other document types", () => {
-  expect(usesInlineQuantitySheet({ type: "sales-order", orgId: "other", prefillSalesOrders: true })).toBe(true);
-  expect(usesInlineQuantitySheet({ type: "bill", orgId: JOY_SUPERBAKERS_ORG_ID, editing: true })).toBe(false);
+  expect(usesInlineQuantitySheet({ type: "sales-order", fullCatalogueSheet: false, prefillSalesOrders: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type: "bill", fullCatalogueSheet: true, editing: true })).toBe(false);
 });
 it("ignores untouched zero catalogue rows but detects quantity, price, tax-code and discount edits", () => {
   const old = [{ id: "id", productId: "queen", description: "Queen", qty: 2, unit: "PCS", unitPrice: 43.1, taxCodeId: "vat" }];

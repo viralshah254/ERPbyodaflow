@@ -1,3 +1,4 @@
+import type { JoyRouteOrderInput, JoyRouteSnapshot } from "./joy-route-orders";
 import type { DocTypeKey } from "@/config/documents/types";
 import type {
   DocListRow,
@@ -231,6 +232,7 @@ type BackendDocumentDetail = {
   odaflowCustomerName?: string;
   deliveryAddress?: string;
   shipToSiteId?: string;
+  joyRoute?: JoyRouteSnapshot;
   createdAt?: string;
 };
 
@@ -245,6 +247,9 @@ type ChainNode = {
 };
 
 type BackendDocumentListItem = {
+  balance?: number;
+  dueDate?: string;
+  overdue?: boolean;
   id: string;
   number: string;
   date: string;
@@ -309,6 +314,7 @@ export type DocumentDraftPayload = {
   branchId?: string;
   partyId?: string;
   warehouseId?: string;
+  joyRouteOrder?: JoyRouteOrderInput;
   /** Customer price tag / price list used for sales lines. */
   priceListId?: string;
   /** Tax tag (VAT configuration) applied to the document lines. */
@@ -665,6 +671,7 @@ function mapDocumentDetail(
     ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
     ...(payload.deliveryAddress ? { deliveryAddress: payload.deliveryAddress } : {}),
     ...(payload.shipToSiteId ? { shipToSiteId: payload.shipToSiteId } : {}),
+    ...(payload.joyRoute ? { joyRoute: payload.joyRoute } : {}),
     ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
 }
@@ -679,6 +686,9 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     partyId: item.partyId,
     total: item.total,
     currency: item.currency,
+    balance: item.balance,
+    dueDate: item.dueDate,
+    overdue: item.overdue,
     exchangeRate: item.exchangeRate,
     landedAllocated: item.landedAllocated,
     landedBreakdown: item.landedBreakdown,
@@ -756,6 +766,8 @@ export type FetchDocumentListOpts = {
   warehouseId?: string;
   dateFrom?: string;
   dateTo?: string;
+  /** Invoices and bills: "open", "overdue" or "settled". */
+  balance?: string;
   /** Limit the list to these document ids (this vehicle's invoices). */
   ids?: string[];
 };
@@ -794,6 +806,7 @@ export async function fetchDocumentListPageApi(
   if (opts?.dateFrom?.trim()) params.set("dateFrom", opts.dateFrom.trim());
   if (opts?.dateTo?.trim()) params.set("dateTo", opts.dateTo.trim());
   if (opts?.ids?.length) params.set("ids", opts.ids.join(","));
+  if (opts?.balance?.trim()) params.set("balance", opts.balance.trim());
 
   const payload = await apiRequest<BackendDocumentListResponse>(`/api/documents/${encodeURIComponent(type)}`, {
     params,

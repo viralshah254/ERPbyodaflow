@@ -114,7 +114,7 @@ export default function DispatchReturnsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Driver returns"
-        description="Goods the truck brings back from dispatched delivery notes. Good stock goes on hand. Damaged stock is recorded and stays unsellable."
+        description="Goods the truck brings back from dispatched delivery notes. Good stock goes back on hand. Damaged stock goes to the returns store and stays unsellable. Returned quantity is left off the customer invoice."
         breadcrumbs={[
           { label: "Warehouse", href: "/warehouse/overview" },
           { label: "Driver returns" },

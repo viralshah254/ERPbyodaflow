@@ -20,7 +20,8 @@ import {
 } from "@/lib/api/manufacturing";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { manufacturingAreaLabel } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { displayMrpReason, productionTerms, productionVoice } from "@/lib/manufacturing/production-language";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -43,6 +44,9 @@ const emptySummary: ManufacturingMrpSummary = {
 
 export default function MrpPage() {
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((state) => state.templateId);
+  const terms = productionTerms(templateId);
+  const plant = productionVoice(templateId) === "plant";
   const areaLabel = manufacturingAreaLabel(terminology);
   const canWrite = useCanWriteManufacturing();
   const [applying, setApplying] = React.useState<"all" | string | null>(null);
@@ -229,7 +233,7 @@ export default function MrpPage() {
         header: "Reason",
         accessor: (r: ManufacturingMrpSuggestion) => (
           <span className="block max-w-[min(420px,50vw)] truncate text-sm text-muted-foreground" title={r.reason}>
-            {r.reason}
+            {displayMrpReason(r.reason, templateId)}
           </span>
         ),
       },
@@ -258,7 +262,7 @@ export default function MrpPage() {
           ),
       },
     ],
-    [applying, canWrite, raiseWorkOrders]
+    [applying, canWrite, raiseWorkOrders, templateId]
   );
 
   return (
@@ -277,7 +281,7 @@ export default function MrpPage() {
             <Button variant="outline" size="sm" asChild><Link href="/inventory/replenishment-policy">Store policies</Link></Button>
             {canWrite && (summary.workOrderSuggestions > 0 || summary.purchaseSuggestions > 0) ? (
               <Button size="sm" disabled={applying != null} onClick={() => void raiseWorkOrders()}>
-                {applying === "all" ? "Raising…" : "Raise drafts"}
+                {applying === "all" ? "Raising…" : summary.workOrderSuggestions === 0 ? "Raise purchase drafts" : summary.purchaseSuggestions === 0 ? "Raise work order drafts" : "Raise drafts"}
               </Button>
             ) : null}
             <Button variant="outline" size="sm" asChild>
@@ -324,13 +328,19 @@ export default function MrpPage() {
           </div>
         )}
 
-        <div className="space-y-1">
+        <div className="space-y-3">
           <p className="text-sm text-muted-foreground max-w-3xl">
             Open approved and partly shipped orders are netted against usable stock. Formula scrap is included in
-            the required quantity. Items with a formula become work orders. Items without one are purchases.
+            the required quantity. Items with a {terms.formula} become work orders. Items without one are purchases.
             Raising drafts uses {planRun ? `plan ${planRun.number}` : "the saved plan version"}, so a later stock
             movement does not change the batch you already saved.
           </p>
+          {plant && summary.purchaseSuggestions > 0 ? (
+            <p className="max-w-3xl rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+              {summary.purchaseSuggestions} shortages have no blend formula, so this plan would buy them. If the plant makes an item, add its blend formula before raising a purchase draft.{" "}
+              <Link href="/manufacturing/boms/new" className="font-medium text-primary underline-offset-2 hover:underline">Add a blend formula</Link>
+            </p>
+          ) : null}
         </div>
 
         <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"

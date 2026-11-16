@@ -28,8 +28,11 @@ export type SystemTransaction = {
   reference: string;
   description: string;
   amount: number;
+  currency?: string;
   type?: "AR_RECEIPT" | "AP_PAYMENT";
   matchedId?: string | null;
+  outstandingReason?: string | null;
+  allocations?: Array<{ documentType?: string; documentId: string; documentNumber?: string; amount: number }>;
 };
 
 export type BankReconciliationSessionRecord = {

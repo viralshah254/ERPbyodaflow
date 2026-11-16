@@ -14,7 +14,7 @@ import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { Badge } from "@/components/ui/badge";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { fetchDocumentListPageApi } from "@/lib/api/documents";
-import { fetchSalesDocumentFlowApi, startPickPackFromSalesOrderApi } from "@/lib/api/sales-document-flow";
+import { fetchSalesDocumentFlowApi, startPickPackFromSalesOrderApi, isRouteDispatchMode } from "@/lib/api/sales-document-flow";
 import { fetchPickPackPage, fetchPickPackTasks, warehouseStatusLabel, type WarehousePickPackRow } from "@/lib/api/warehouse-execution";
 import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { queueConfirmedSalesOrders } from "@/lib/warehouse/pick-pack-queue";
@@ -56,7 +56,7 @@ export default function PickPackPage() {
     void fetchSalesDocumentFlowApi()
       .then((flow) => {
         if (cancelled) return;
-        if (flow.mode === "joy_dispatch") {
+        if (isRouteDispatchMode(flow.mode)) {
           router.replace("/warehouse/route-pick-lists?step=load");
           return;
         }
@@ -79,7 +79,7 @@ export default function PickPackPage() {
   }, [search]);
 
   React.useEffect(() => {
-    if (flowMode === null || flowMode === "joy_dispatch") return;
+    if (flowMode === null || isRouteDispatchMode(flowMode)) return;
     let cancelled = false;
     if (!hasLoaded.current) setInitialLoading(true);
     else setFetching(true);
@@ -166,7 +166,7 @@ export default function PickPackPage() {
     return () => {
       cancelled = true;
     };
-  }, [statusFilter, debouncedSearch, pageSize, pageOffset]);
+  }, [flowMode, statusFilter, debouncedSearch, pageSize, pageOffset]);
 
   const waiting = statusFilter === TO_PICK && !debouncedSearch;
   const orderWord = pickPackFirst ? "sales order" : "delivery note";

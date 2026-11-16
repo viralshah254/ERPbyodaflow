@@ -1,5 +1,6 @@
 "use client";
 
+import { fetchDistributionRoutes } from "@/lib/api/distribution";
 import * as React from "react";
 import {
   Sheet,
@@ -119,6 +120,37 @@ type FormState = {
   defaultTaxConfigId: string;
   creditControlMode: "AMOUNT" | "DAYS" | "HYBRID";
 };
+
+/** Route names from Distribution → Routes, offered as suggestions on the customer's sales route. */
+function useRouteMasterNames(enabled: boolean): string[] {
+  const [names, setNames] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    fetchDistributionRoutes()
+      .then((rows) => { if (current) setNames([...new Set(rows.map((row) => row.name).filter(Boolean))].sort()); })
+      .catch(() => { if (current) setNames([]); });
+    return () => { current = false; };
+  }, [enabled]);
+  return names;
+}
+
+function RouteField({ id, value, onChange }: { id: string; value: string; onChange: (value: string) => void }) {
+  const names = useRouteMasterNames(true);
+  const listId = `${id}-routes`;
+  const unknown = Boolean(value.trim()) && names.length > 0 && !names.some((n) => n.toUpperCase() === value.trim().toUpperCase());
+  return (
+    <>
+      <Input id={id} list={listId} value={value} onChange={(e) => onChange(e.target.value)} placeholder={names[0] ? `e.g. ${names[0]}` : "e.g. ATHIRIVER"} />
+      <datalist id={listId}>
+        {names.map((name) => <option key={name} value={name} />)}
+      </datalist>
+      {unknown ? (
+        <p className="text-xs text-amber-700">Not in Distribution → Routes. Pick a listed route so loading and route reports include this customer.</p>
+      ) : null}
+    </>
+  );
+}
 
 function newContactKey() {
   return `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -1354,12 +1386,7 @@ export function CustomerFormSheet({
                       <FieldLabel htmlFor="cust-route" optional>
                         Sales route
                       </FieldLabel>
-                      <Input
-                        id="cust-route"
-                        value={form.route}
-                        onChange={(e) => setField("route", e.target.value)}
-                        placeholder="e.g. ATHIRIVER"
-                      />
+                      <RouteField id="cust-route" value={form.route} onChange={(value) => setField("route", value)} />
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground rounded-md border bg-muted/20 px-3 py-2">
@@ -1957,12 +1984,7 @@ function EditAllFields({
           <FieldLabel htmlFor="edit-route" optional>
             Sales route
           </FieldLabel>
-          <Input
-            id="edit-route"
-            value={form.route}
-            onChange={(e) => setField("route", e.target.value)}
-            placeholder="e.g. ATHIRIVER"
-          />
+          <RouteField id="edit-route" value={form.route} onChange={(value) => setField("route", value)} />
         </div>
       ) : null}
 

@@ -27,6 +27,8 @@ export type UserRow = {
   copilotEnabled?: boolean;
   roleIds: string[];
   roleNames: string[];
+  branchIds?: string[];
+  allBranches?: boolean;
   /** True when a Firebase account exists (admin can set password). */
   hasSignIn?: boolean;
   phoneNumber?: string | null;

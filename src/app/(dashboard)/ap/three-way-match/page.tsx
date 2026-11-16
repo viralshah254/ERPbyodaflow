@@ -61,7 +61,7 @@ export default function ThreeWayMatchPage() {
       fetchMatchablePurchaseOrdersApi(),
       fetchMatchableGoodsReceiptsApi(),
       fetchMatchableBillsApi(),
-      fetchExistingMatchesApi().catch(() => [] as ThreeWayMatchDecision[]),
+      fetchExistingMatchesApi(),
     ]);
     setPoRows(po);
     setGrnRows(grn);
@@ -69,10 +69,15 @@ export default function ThreeWayMatchPage() {
     setDecisions(existing);
   }, []);
 
+  const [loadFailed, setLoadFailed] = React.useState(false);
   React.useEffect(() => {
-    void reload().catch((error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to load 3-way match data.");
-    });
+    void reload()
+      .then(() => setLoadFailed(false))
+      .catch((error) => {
+        // Without existing matches every document looks unmatched; block matching until it loads.
+        setLoadFailed(true);
+        toast.error(error instanceof Error ? error.message : "Failed to load 3-way match data.");
+      });
   }, [reload]);
 
   const handleMatchSelected = async () => {
@@ -367,7 +372,7 @@ export default function ThreeWayMatchPage() {
             <Button
               variant="default"
               size="sm"
-              disabled={matching || !selectedPO || !selectedGRN || !selectedBill}
+              disabled={loadFailed || matching || !selectedPO || !selectedGRN || !selectedBill}
               onClick={handleMatchSelected}
             >
               {matching ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}

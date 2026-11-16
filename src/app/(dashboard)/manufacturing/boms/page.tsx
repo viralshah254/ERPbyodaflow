@@ -16,8 +16,10 @@ import {
   fetchManufacturingBomsPage,
   type ManufacturingBom,
 } from "@/lib/api/manufacturing";
+import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { productionTerms } from "@/lib/manufacturing/production-language";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
@@ -73,6 +75,8 @@ export default function BomsPage() {
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
   const terminology = useTerminology();
+  const templateId = useOrgContextStore((state) => state.templateId);
+  const terms = productionTerms(templateId);
   const bomLabel = t("bom", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
 
@@ -248,14 +252,14 @@ export default function BomsPage() {
           { id: "records", target: "[data-bom-records]", title: rows.length ? "Compare output and version" : "No matching recipes", description: rows.length ? "Batch output is the quantity and unit this recipe defines. Check the finished product, version and active status before opening a code or row. Counts here reflect this page, not the entire library." : "Try clearing the search or changing the filters. An empty result does not mean the library has no recipes." },
           { id: "next", target: "[data-bom-next]", title: canWrite ? "Open a record or create a BOM" : "Review an existing BOM", description: canWrite ? "New BOM defines the product and batch output first. Add components on the record after creating it. Recipe governance manages revisions; MRP is for material planning." : "Open a recipe code to inspect components and routing. Your current access does not allow creating or editing BOMs. Recipe governance and MRP are related workspaces." },
         ]} />}
-        description="Recipes define what goes into a batch and how much it makes. Link a routing to describe the production steps."
-        breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: "BOMs" }]}
+        description={`A ${terms.formula} says what goes into a finished product and how much one batch makes. Link a routing to describe the production steps.`}
+        breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: terms.formulasTitle }]}
         sticky
         showCommandHint
         actions={
           <div className="flex flex-wrap gap-2" data-bom-next>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/manufacturing/recipe-governance">Recipe governance</Link>
+              <Link href="/manufacturing/recipe-governance">{terms.governance}</Link>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/mrp">MRP</Link>
@@ -263,16 +267,17 @@ export default function BomsPage() {
             {canWrite && (
               <Button size="sm" onClick={() => router.push("/manufacturing/boms/new")} data-tour-step="create-button">
                 <Icons.Plus className="mr-2 h-4 w-4" />
-                New BOM
+                {terms.newFormula}
               </Button>
             )}
           </div>
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <OperationalFlowNav flow="manufacturing" current={terms.formulasTitle} />
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 text-sm">
-          <p className="text-muted-foreground">Recipe library <span className="mx-2 text-border">/</span> Define the output, then build its components.</p>
-          <span className="rounded-full border bg-card px-3 py-1 text-xs tabular-nums">{initialLoading ? "Loading recipes…" : loadError ? "Library unavailable" : `${rows.length} on this page${hasMore ? " · more available" : ""}`}</span>
+          <p className="text-muted-foreground">{terms.library} <span className="mx-2 text-border">/</span> Define the output, then build its components.</p>
+          <span className="rounded-full border bg-card px-3 py-1 text-xs tabular-nums">{initialLoading ? `Loading ${terms.formulas}…` : loadError ? "Library unavailable" : `${rows.length} on this page${hasMore ? " · more available" : ""}`}</span>
         </div>
         <div data-bom-filters className="shrink-0 rounded-xl">
         <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
@@ -281,7 +286,7 @@ export default function BomsPage() {
           onSearchChange={setSearch}
           searchInputDataHint="bom-search"
           searchInputProps={{
-            "aria-label": "Search BOM recipes",
+            "aria-label": `Search ${terms.formulas}`,
             ...{ "data-bom-search": true },
             spellCheck: false,
             autoComplete: "off",

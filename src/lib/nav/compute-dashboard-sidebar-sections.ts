@@ -1,4 +1,3 @@
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
 import { buildVisibleNav, NAV_SECTIONS_CONFIG } from "@/config/navigation";
 import type { ResolvedNavSection } from "@/config/navigation";
 import type {
@@ -51,6 +50,8 @@ function toTemplateOrgType(orgType: string | undefined): TemplateOrgType | null 
 
 export type ComputeDashboardSidebarSectionsParams = {
   orgId?: string;
+  /** From the operating profile: output-first orgs see "Record production" instead of the plan. */
+  productionRecording?: "planned" | "record_output";
   ctxOrgType: TemplateOrgType | null;
   orgOrgType: string | undefined;
   enabledModules: ModuleKey[];
@@ -102,7 +103,7 @@ export function computeDashboardSidebarSections(params: ComputeDashboardSidebarS
     templateId: templateId ?? template?.id ?? null,
   });
 
-  if (params.orgId === JOY_SUPERBAKERS_ORG_ID) {
+  if (params.productionRecording === "record_output") {
     for (const section of sections) {
       section.items = section.items.map((item) => item.key === "manufacturing-production-plan" ? { ...item, label: "Record production" } : item);
     }

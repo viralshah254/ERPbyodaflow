@@ -312,6 +312,9 @@ export function OdaflowQueueOrderSheet({
           data.order.lines.map(async (line) => {
             qty[line.index] = line.qty;
             packing[line.index] = packingValue(line.packing, line.unit);
+            if (line.needsProductMatch) {
+              return;
+            }
             const resolved = await resolveCatalogProduct(line, line.erpProductId);
             if (resolved) {
               products[line.index] = resolved;
@@ -791,7 +794,11 @@ export function OdaflowQueueOrderSheet({
                           <p className="mt-0.5 text-xs text-muted-foreground">Odaflow ID {line.odaflowProductId}</p>
                         )}
                         {line.barcode && <p className="text-xs text-muted-foreground">Barcode {line.barcode}</p>}
-                        {line.hasIssue && line.blockReason ? (
+                        {line.needsProductMatch ? (
+                          <p className="mt-1 text-xs font-medium text-red-700 dark:text-red-300">
+                            {line.blockReason ?? "Pick the matching product in your ERP catalog"}
+                          </p>
+                        ) : line.hasIssue && line.blockReason ? (
                           <p className="mt-1 text-xs text-red-700 dark:text-red-300">{line.blockReason}</p>
                         ) : line.isAutoMatched ? (
                           <p className="mt-1 text-xs text-green-700 dark:text-green-300">Matched automatically</p>

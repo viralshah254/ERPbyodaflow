@@ -4,7 +4,7 @@ import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { JoyRouteLoads } from "@/components/warehouse/JoyRouteLoads";
-import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
+import { fetchSalesDocumentFlowApi, isRouteDispatchMode } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
 
 export default function RoutePickListsPage() {
@@ -12,7 +12,7 @@ export default function RoutePickListsPage() {
 
   React.useEffect(() => {
     void fetchSalesDocumentFlowApi()
-      .then((flow) => setFlowOn(flow.mode === "joy_dispatch"))
+      .then((flow) => setFlowOn(isRouteDispatchMode(flow.mode)))
       .catch((error: Error) => toast.error(error.message));
   }, []);
 

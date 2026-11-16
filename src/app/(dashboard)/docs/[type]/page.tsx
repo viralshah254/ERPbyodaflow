@@ -142,7 +142,26 @@ function buildColumns(
 }[] {
   const config = getDocTypeConfig(type);
   if (!config) return [];
-  return config.listColumns
+  const balanceColumn =
+    type === "invoice" || type === "bill"
+      ? [
+          {
+            id: "balance",
+            header: "Balance",
+            sticky: false,
+            accessor: (r: DocListRow): React.ReactNode =>
+              r.balance == null ? (
+                "—"
+              ) : (
+                <span className={r.overdue ? "font-medium text-destructive" : r.balance > 0.005 ? "" : "text-muted-foreground"}>
+                  {r.balance > 0.005 ? formatMoney(r.balance, r.currency ?? "KES", { decimals: r.balance % 1 === 0 ? 0 : 2 }) : "Settled"}
+                  {r.overdue ? " · overdue" : ""}
+                </span>
+              ),
+          },
+        ]
+      : [];
+  const configured = config.listColumns
     .filter((col) => showKraColumn || col.id !== "kraSigning")
     .map((col) => {
     const accessor = col.accessor as keyof DocListRow;
@@ -221,6 +240,7 @@ function buildColumns(
       sticky: col.sticky ?? false,
     };
   });
+  return [...configured, ...balanceColumn];
 }
 
 export default function DocTypeListPage() {
@@ -266,6 +286,8 @@ export default function DocTypeListPage() {
 
   const [search, setSearch] = React.useState("");
   const [statusFilter, setStatusFilter] = React.useState(statusFromUrl);
+  const [balanceFilter, setBalanceFilter] = React.useState("");
+  const showBalanceFilter = type === "invoice" || type === "bill";
   const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [currentViewId, setCurrentViewId] = React.useState<string | null>(null);
   const [savedViews, setSavedViews] = React.useState<SavedView[]>(() =>
@@ -314,6 +336,7 @@ export default function DocTypeListPage() {
           status: statusFilter || undefined,
           search: debouncedSearch.trim() || undefined,
           ids: loadDocumentIds.length ? loadDocumentIds : undefined,
+          balance: showBalanceFilter && balanceFilter ? balanceFilter : undefined,
         });
         setRows(page.items);
         setPageOffset(page.offset);
@@ -327,7 +350,7 @@ export default function DocTypeListPage() {
         setFetching(false);
       }
     },
-    [type, statusFilter, debouncedSearch, loadDocumentIds],
+    [type, statusFilter, debouncedSearch, loadDocumentIds, balanceFilter, showBalanceFilter],
   );
 
   React.useEffect(() => {
@@ -389,6 +412,7 @@ export default function DocTypeListPage() {
 
   const handleClearFilters = () => {
     setStatusFilter("");
+    setBalanceFilter("");
     setSearch("");
   };
 
@@ -683,6 +707,22 @@ export default function DocTypeListPage() {
               value: statusFilter,
               onChange: (v) => setStatusFilter(v),
             },
+            ...(showBalanceFilter
+              ? [
+                  {
+                    id: "balance",
+                    label: "Balance",
+                    options: [
+                      { label: "All", value: "" },
+                      { label: "Still owed", value: "open" },
+                      { label: "Overdue", value: "overdue" },
+                      { label: "Settled", value: "settled" },
+                    ],
+                    value: balanceFilter,
+                    onChange: (v: string) => setBalanceFilter(v),
+                  },
+                ]
+              : []),
           ]}
           activeFiltersCount={filterChips.length}
           onClearFilters={handleClearFilters}

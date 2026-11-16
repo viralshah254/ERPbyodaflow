@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import {
   LIST_PAGE_BODY_CLASS,
@@ -81,7 +82,7 @@ export default function DisposalsPage() {
   const openWizard = () => {
     setWizardForm({
       assetId: assets[0]?.id ?? "",
-      disposalDate: new Date().toISOString().slice(0, 10),
+      disposalDate: todayNairobiYmd(),
       salePrice: 0,
       reason: "",
     });

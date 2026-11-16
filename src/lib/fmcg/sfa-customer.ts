@@ -114,8 +114,6 @@ export function channelLabel(channel?: PartyChannel | null): string {
   }
 }
 
-/** Joy Superbakers has no van-sales book. Other FMCG orgs keep the tab. */
-export const JOY_SUPERBAKERS_ORG_ID = "org-sfa-6a890b7765042fb41c9d89a6";
 
 export const CUSTOMER_DIRECTORY_TABS = [
   { id: "all", label: "All customers", directory: "all" as const },
@@ -125,8 +123,9 @@ export const CUSTOMER_DIRECTORY_TABS = [
   { id: "van-sales", label: "Van sales", directory: "van-sales" as const },
 ] as const;
 
-export function customerDirectoryTabsForOrg(orgId?: string | null) {
-  if (orgId === JOY_SUPERBAKERS_ORG_ID) {
+/** Organisations without a van-sales customer book (Settings → Sales document flow) hide that tab. */
+export function customerDirectoryTabsForOrg(vanSalesBook = true) {
+  if (!vanSalesBook) {
     return CUSTOMER_DIRECTORY_TABS.filter((tab) => tab.id !== "van-sales");
   }
   return CUSTOMER_DIRECTORY_TABS;

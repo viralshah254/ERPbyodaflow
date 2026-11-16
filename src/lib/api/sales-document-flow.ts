@@ -1,6 +1,11 @@
 import { apiRequest, requireLiveApi } from "./client";
 
-export type SalesDocumentFlowMode = "classic" | "pick_pack_first" | "joy_dispatch";
+/** "joy_dispatch" is the legacy saved name of "route_dispatch". */
+export type SalesDocumentFlowMode = "classic" | "pick_pack_first" | "route_dispatch" | "joy_dispatch";
+
+export function isRouteDispatchMode(mode: string | null | undefined): boolean {
+  return mode === "route_dispatch" || mode === "joy_dispatch";
+}
 
 export type SalesDocumentFlowSettings = {
   mode: SalesDocumentFlowMode;
@@ -18,6 +23,13 @@ export type SalesDocumentFlowSettings = {
   allowPartialReceipt: boolean;
   sendPodNotification: boolean;
   prefillSalesOrderFinishedGoods: boolean;
+  routeCollectionsEnabled?: boolean;
+  /** Route dispatch: the store trucks are loaded from. */
+  dispatchWarehouseId?: string;
+  productionRecording?: "planned" | "record_output";
+  finishedGoodsSalesUnit?: "product_pack" | "pack_size_in_name";
+  approveNewFieldCustomers?: boolean;
+  vanSalesBook?: boolean;
 };
 
 export async function fetchSalesDocumentFlowApi(): Promise<SalesDocumentFlowSettings> {

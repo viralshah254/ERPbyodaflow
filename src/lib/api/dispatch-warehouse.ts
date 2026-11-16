@@ -99,9 +99,17 @@ export async function postDriverReturn(
     dispatcherName: string;
     warehouseId: string;
     note?: string;
-    lines: Array<{ lineId: string; returnedQty: number; condition: "GOOD" | "DAMAGED" }>;
+    lines: Array<{ lineId: string; returnedQty: number; condition: "GOOD" | "DAMAGED"; reasonCode?: string }>;
   }
-): Promise<{ id: string; status: string; fullReturn: boolean }> {
+): Promise<{
+  id: string;
+  status: string;
+  fullReturn: boolean;
+  creditNoteId?: string;
+  creditNoteNumber?: string;
+  creditNoteError?: string;
+  lossCaseIds?: string[];
+}> {
   return apiRequest(`/api/dispatch/driver-returns/${encodeURIComponent(deliveryNoteId)}`, {
     method: "POST",
     body,
@@ -123,4 +131,40 @@ export async function postWarehouseDropReceive(
     method: "POST",
     body: { lines },
   });
+}
+
+export type UncreditedReturnRow = {
+  deliveryNoteId: string;
+  deliveryNoteNumber?: string;
+  returnedAt?: string;
+  partyId?: string;
+  invoiceId: string;
+  invoiceNumber?: string;
+  invoiceStatus?: string;
+  creditNoteDraftNumbers: string[];
+  lines: Array<{
+    lineId: string;
+    productId?: string;
+    description?: string;
+    returnedQty: number;
+    condition: "GOOD" | "DAMAGED";
+    creditedQty: number;
+    uncreditedQty: number;
+    uncreditedValue: number;
+  }>;
+  uncreditedValue: number;
+  creditNoteError?: string;
+};
+
+/** Driver returns on invoiced route loads that still need a posted credit note. */
+export async function fetchUncreditedRouteReturnsApi(): Promise<{
+  since?: string;
+  rows: UncreditedReturnRow[];
+  totalUncreditedValue: number;
+}> {
+  return apiRequest("/api/dispatch/uncredited-returns");
+}
+
+export async function draftCreditForUncreditedReturnApi(deliveryNoteId: string): Promise<{ id: string; number?: string }> {
+  return apiRequest(`/api/dispatch/uncredited-returns/${encodeURIComponent(deliveryNoteId)}/credit-note`, { method: "POST" });
 }

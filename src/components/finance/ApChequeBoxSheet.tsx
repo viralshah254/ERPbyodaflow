@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,7 +49,7 @@ type ChequeRow = {
   error?: string;
 };
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => todayNairobiYmd();
 
 function blankRow(): ChequeRow {
   return {

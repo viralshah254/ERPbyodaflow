@@ -1,5 +1,6 @@
 "use client";
 
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import * as React from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useRouter, usePathname } from "next/navigation";
@@ -149,8 +150,11 @@ export function CommandPalette() {
   }, [sidebarPreferencesRevision, isAuthenticated, isLoading]);
 
   // Build resolved nav sections (same as AppSidebar)
+  const operatingProfile = useOperatingProfile(org?.orgId);
   const navParams = React.useMemo(() => ({
     ctxOrgType,
+    orgId: org?.orgId,
+    productionRecording: operatingProfile.productionRecording,
     orgOrgType: org?.orgType,
     enabledModules,
     featureFlags: featureFlags ?? {},
@@ -160,7 +164,7 @@ export function CommandPalette() {
     orgRole,
     franchisePersona,
     templateId,
-  }), [ctxOrgType, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona, templateId]);
+  }), [ctxOrgType, org?.orgId, operatingProfile.productionRecording, org?.orgType, enabledModules, featureFlags, template, user, permissions, orgRole, franchisePersona, templateId]);
 
   const visibleSections = React.useMemo(() => {
     const base = computeDashboardSidebarSections(navParams);

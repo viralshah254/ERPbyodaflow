@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -123,7 +124,7 @@ export default function IntercompanyTransactionsPage() {
       toEntityId: "",
       amount: "",
       currency: "USD",
-      date: new Date().toISOString().slice(0, 10),
+      date: todayNairobiYmd(),
       reference: "",
     });
     setDrawerOpen(true);
@@ -142,7 +143,7 @@ export default function IntercompanyTransactionsPage() {
         toEntityId: form.toEntityId,
         amount: Number(form.amount),
         currency: form.currency,
-        date: form.date || new Date().toISOString().slice(0, 10),
+        date: form.date || todayNairobiYmd(),
         reference: form.reference || undefined,
       });
       setDrawerOpen(false);

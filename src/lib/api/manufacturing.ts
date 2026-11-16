@@ -491,6 +491,8 @@ export async function runManufacturingWorkOrderAction(
     action: "release" | "start" | "complete" | "cancel";
     producedQuantity?: number;
     scrapQuantity?: number;
+    /** Why there was waste on this completion (spoilt dough, burnt, mis-shapes, floor spill…). */
+    wasteReason?: string;
     idempotencyKey?: string;
     varianceReason?: string;
     measuredWeight?: number;

@@ -1,5 +1,6 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -103,7 +104,7 @@ export function OutletEquipmentTab({
     try {
       await assignAssetCustodyApi(asset.id, {
         custodyType: "ORG_STOCK",
-        effectiveFrom: new Date().toISOString().slice(0, 10),
+        effectiveFrom: todayNairobiYmd(),
         currency: "KES",
       });
       toast.success("Equipment returned to HQ stock.");

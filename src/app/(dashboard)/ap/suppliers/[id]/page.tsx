@@ -58,11 +58,13 @@ export default function Supplier360Page() {
     try {
       const [detail, bills] = await Promise.all([
         fetchPartyByIdApi(id),
-        canReadAp ? fetchOpenBillsApi(id).catch(() => []) : Promise.resolve([]),
+        canReadAp ? fetchOpenBillsApi(id).then((rows) => rows, () => null) : Promise.resolve([]),
       ]);
       setParty(detail);
-      setOutstanding(bills.reduce((sum, bill) => sum + (bill.outstanding ?? 0), 0));
-      setOpenBills(bills.length);
+      // null = could not load: show "—" rather than a false zero balance.
+      setOutstanding(bills ? bills.reduce((sum, bill) => sum + (bill.outstanding ?? 0), 0) : null);
+      setOpenBills(bills ? bills.length : null);
+      if (!bills) toast.error("Supplier balance could not be loaded. Refresh to try again.");
       if (!detail) toast.error("Supplier not found.");
     } catch (error) {
       toast.error((error as Error).message || "Failed to load supplier");

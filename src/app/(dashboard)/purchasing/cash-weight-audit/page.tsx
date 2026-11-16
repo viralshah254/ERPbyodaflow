@@ -1,4 +1,5 @@
 "use client";
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { Table as InteractiveTable } from "@/components/ui/table";
 
 
@@ -502,7 +503,7 @@ export default function CashWeightAuditPage() {
 
   React.useEffect(() => {
     if (disbursementOpen) {
-      setDisbPaidAt(new Date().toISOString().slice(0, 10));
+      setDisbPaidAt(todayNairobiYmd());
     }
   }, [disbursementOpen]);
 

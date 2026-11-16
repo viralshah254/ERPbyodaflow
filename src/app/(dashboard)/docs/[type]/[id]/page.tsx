@@ -118,7 +118,8 @@ import { OdaflowApprovalConfirmDialog } from "@/components/integrations/OdaflowA
 import { isOdaflowSalesOrder, odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
+import { isRouteDispatchMode } from "@/lib/api/sales-document-flow";
 import { fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
 import {
   FmcgPackagingConversionBlocker,
@@ -297,6 +298,8 @@ export default function DocViewPage() {
   const canWriteFinance = useCanWriteFinance();
   const authUser = useAuthStore((s) => s.user);
   const org = useAuthStore((s) => s.org);
+  const operatingProfile = useOperatingProfile(org?.orgId);
+  const routeDispatch = operatingProfile.routeDispatch;
   const [salesFlowFallback, setSalesFlowFallback] = React.useState<
     NonNullable<DocumentDetailRecord["salesFlow"]> | null
   >(null);
@@ -709,7 +712,7 @@ export default function DocViewPage() {
   const odaflowSalesOrder = type === "sales-order" && isOdaflowSalesOrder(document);
   const needsRouteWarehouse =
     odaflowSalesOrder &&
-    org?.orgId === JOY_SUPERBAKERS_ORG_ID &&
+    routeDispatch &&
     !document?.warehouseId?.trim();
   const odaflowSource = odaflowSourceFromDetail(document);
 
@@ -1131,7 +1134,7 @@ export default function DocViewPage() {
     const showStoredWarehouse =
       Boolean(document?.warehouseId?.trim()) &&
       (type === "delivery-note" || type === "grn" ||
-        (type === "sales-order" && org?.orgId === JOY_SUPERBAKERS_ORG_ID));
+        (type === "sales-order" && routeDispatch));
     if (!showStoredWarehouse) {
       setDeliveryNoteWarehouseLabel(null);
       return;
@@ -1149,7 +1152,7 @@ export default function DocViewPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, document?.warehouseId, org?.orgId]);
+  }, [type, document?.warehouseId, routeDispatch]);
 
   React.useEffect(() => {
     if (!odaflowApprovalOpen || !needsRouteWarehouse) return;
@@ -1177,7 +1180,7 @@ export default function DocViewPage() {
     const status = String(document?.status ?? "").toUpperCase();
     if (
       type !== "sales-order" ||
-      org?.orgId !== JOY_SUPERBAKERS_ORG_ID ||
+      !routeDispatch ||
       !document?.id ||
       !["APPROVED", "PARTIALLY_FULFILLED"].includes(status)
     ) {
@@ -1195,7 +1198,7 @@ export default function DocViewPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, document?.id, document?.status, org?.orgId]);
+  }, [type, document?.id, document?.status, routeDispatch]);
 
   const isUuidLike = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
@@ -2281,7 +2284,13 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(type === "sales-order" && org?.orgId === JOY_SUPERBAKERS_ORG_ID
+              ...(document.joyRoute ? [
+                { label: "Delivery route", value: document.joyRoute.routeName },
+                { label: "Delivery date", value: document.joyRoute.deliveryDate },
+                { label: "Sales rep", value: document.joyRoute.salesRep },
+                { label: "M-Pesa till", value: document.joyRoute.tillNumber },
+              ] : []),
+              ...(type === "sales-order" && routeDispatch && !document.joyRoute
                 ? [
                     {
                       label: "Route warehouse",
@@ -3782,7 +3791,7 @@ function DynamicNextStepsPanel({
     } else if (status === "PENDING" || status === "PENDING_APPROVAL") {
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
       } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
-      if (document?.salesFlow?.mode === "joy_dispatch" && joyLoadNote) {
+      if (isRouteDispatchMode(document?.salesFlow?.mode) && joyLoadNote) {
         steps.push({
           icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
           text:
@@ -3793,11 +3802,11 @@ function DynamicNextStepsPanel({
           actionLabel: `Open ${joyLoadNote.number}`,
           variant: "default",
         });
-      } else if (document?.salesFlow?.mode === "joy_dispatch") {
+      } else if (isRouteDispatchMode(document?.salesFlow?.mode)) {
         steps.push({
           icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
           text: "Approved. Load this route with the other orders for the same delivery warehouse.",
-          href: `/warehouse/route-pick-lists?warehouse=${encodeURIComponent(document.warehouseId ?? "")}`,
+          href: `/warehouse/route-pick-lists?warehouse=${encodeURIComponent(document?.warehouseId ?? "")}`,
           actionLabel: "Load this route",
           variant: "default",
         });

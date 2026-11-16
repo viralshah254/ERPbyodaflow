@@ -45,7 +45,7 @@ export function pickerListQuery(args: {
 }
 
 /**
- * Plant catalogues (Top Food and bakery) classify with item role.
+ * Plant catalogues classify with item role.
  * A finished good may still be stored as BOTH, or with no product type.
  * Packaging and semi-finished are roles, not the old RAW/FINISHED flag.
  */

@@ -1,3 +1,4 @@
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { apiRequest, downloadFile, requireLiveApi } from "@/lib/api/client";
 import { sortPartyLookupOptions, toPartyLookupOption, type PartyLookupOption } from "@/lib/api/parties";
 import type { APBillRow, APPaymentRow } from "@/lib/types/ap";
@@ -515,7 +516,7 @@ export async function createArPaymentApi(body: {
       clientRequestId: body.clientRequestId,
       partyId: body.customerId,
       amount: body.amount,
-      date: body.date ?? new Date().toISOString().slice(0, 10),
+      date: body.date ?? todayNairobiYmd(),
       bankAccountId: body.bankAccountId,
       paymentMethod: body.paymentMethod,
       mpesaTransactionNo: body.mpesaTransactionNo,
@@ -838,7 +839,7 @@ export async function createApPaymentApi(body: {
     body: {
       partyId: body.supplierId,
       amount: body.amount,
-      date: body.date ?? new Date().toISOString().slice(0, 10),
+      date: body.date ?? todayNairobiYmd(),
       bankAccountId: body.bankAccountId,
       paymentMethod: body.paymentMethod,
       mpesaTransactionNo: body.mpesaTransactionNo,

@@ -46,6 +46,7 @@ import type {
 } from "@/lib/types/users-roles";
 import { MOBILE_PERSONA_LABELS } from "@/lib/types/users-roles";
 import { Badge } from "@/components/ui/badge";
+import { fetchBranchesApi } from "@/lib/api/branches";
 import {
   createRoleApi,
   createUserApi,
@@ -183,11 +184,21 @@ export default function UsersRolesPage() {
     status: "ACTIVE",
     copilotEnabled: false,
     roleIds: [],
+    branchIds: [],
+    allBranches: false,
     phoneNumber: "",
     nationalId: "",
     employeeCode: "",
   });
   const [userForm, setUserForm] = React.useState<UserFormState>(emptyUserForm);
+  const [branchOptions, setBranchOptions] = React.useState<Array<{ id: string; name: string; code?: string }>>([]);
+  React.useEffect(() => {
+    let current = true;
+    fetchBranchesApi()
+      .then((rows) => { if (current) setBranchOptions(rows.map((b) => ({ id: b.id, name: b.name, code: b.code }))); })
+      .catch(() => { if (current) setBranchOptions([]); });
+    return () => { current = false; };
+  }, []);
   const [roleForm, setRoleForm] = React.useState({
     name: "",
     description: "",
@@ -288,6 +299,8 @@ export default function UsersRolesPage() {
       status: u.status ?? "ACTIVE",
       copilotEnabled: u.copilotEnabled === true,
       roleIds: [...u.roleIds],
+      branchIds: [...(u.branchIds ?? [])],
+      allBranches: u.allBranches === true,
       phoneNumber: u.phoneNumber ?? "",
       nationalId: u.nationalId ?? "",
       employeeCode: u.employeeCode ?? "",
@@ -1012,6 +1025,7 @@ export default function UsersRolesPage() {
               canAssignOwnerRole={canAssignOwnerRole}
               isEdit={Boolean(editingUser)}
               rolesReadOnly={editingUser?.id === currentUserId}
+              branches={branchOptions}
             />
 
             {editingUser ? (
@@ -1197,6 +1211,10 @@ export default function UsersRolesPage() {
                 className="flex-1"
                 disabled={savingUser}
                 onClick={async () => {
+                  if (branchOptions.length > 1 && !userForm.allBranches && userForm.branchIds.length === 0) {
+                    toast.error("Tick at least one branch for this user.");
+                    return;
+                  }
                   try {
                     setSavingUser(true);
                     if (editingUser) {
@@ -1210,7 +1228,7 @@ export default function UsersRolesPage() {
                           : false,
                         ...(editingUser.id === currentUserId
                           ? {}
-                          : { roleIds: userForm.roleIds }),
+                          : { roleIds: userForm.roleIds, branchIds: userForm.branchIds, allBranches: userForm.allBranches }),
                         phoneNumber: userForm.phoneNumber || undefined,
                         nationalId: userForm.nationalId || undefined,
                         employeeCode: userForm.employeeCode || undefined,
@@ -1251,6 +1269,8 @@ export default function UsersRolesPage() {
                           ? userForm.copilotEnabled
                           : false,
                         roleIds: userForm.roleIds,
+                        branchIds: userForm.branchIds.length || branchOptions.length !== 1 ? userForm.branchIds : [branchOptions[0]!.id],
+                        allBranches: userForm.allBranches,
                         phoneNumber: userForm.phoneNumber || undefined,
                         nationalId: userForm.nationalId || undefined,
                         employeeCode: userForm.employeeCode || undefined,

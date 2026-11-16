@@ -16,7 +16,8 @@ import { toast } from "sonner";
 
 /** Mock simulation: sliders + instant recalculation. */
 
-export default function AnalyticsSimulationsPage() {
+/** Kept for reference until the model runs on each organisation's own history; not shown to users. */
+function LegacySimulationLab() {
   const [priceTier, setPriceTier] = React.useState(0);
   const [reorder, setReorder] = React.useState(0);
   const [payroll, setPayroll] = React.useState(0);
@@ -260,3 +261,28 @@ export default function AnalyticsSimulationsPage() {
     </PageShell>
   );
 }
+
+
+/**
+ * The earlier lab used fixed coefficients that were not drawn from any client's data, so its
+ * figures could be mistaken for forecasts. It stays off until scenarios run on real history.
+ */
+export default function AnalyticsSimulationsPage() {
+  return (
+    <PageShell>
+      <PageHeader title="Scenario planning" description="What-if planning on your own sales, cost and payroll history." breadcrumbs={[{ label: "Analytics", href: "/analytics" }, { label: "Scenario planning" }]} />
+      <Card>
+        <CardHeader>
+          <CardTitle>Not available yet</CardTitle>
+          <CardDescription>
+            Scenarios will be calculated from this organisation&apos;s own history. Until then, use the Explore and Insights pages for actual figures.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button asChild variant="outline"><Link href="/analytics/explore">Open Explore</Link></Button>
+        </CardContent>
+      </Card>
+    </PageShell>
+  );
+}
+void LegacySimulationLab;

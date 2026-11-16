@@ -28,7 +28,7 @@ const FMCG_TEMPLATE_IDS = new Set<string>([
 
 /**
  * `bakex` was the first bakery customer's name used as a template id.
- * Joy Superbakers and any later bakery use `fmcg-bakery`.
+ * Bakeries use `fmcg-bakery`.
  */
 export function canonicalIndustryTemplateId(templateId?: string | null): string {
   const raw = (templateId ?? "").trim();

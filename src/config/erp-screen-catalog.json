@@ -5759,5 +5759,45 @@
       "Event Webhook public key"
     ],
     "hints": []
+  },
+  {
+    "route": "/analytics/fmcg",
+    "title": "FMCG performance",
+    "description": "Review sales after returns, collections, route closes and production waste across a selected period.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/payment-matching",
+    "title": "Payment matching",
+    "description": "Review statement suggestions before matching payments to invoices or recorded receipts.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/finance/uncredited-returns",
+    "title": "Uncredited route returns",
+    "description": "Find returned route stock that is still included on a customer invoice.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/sales/returns-policy",
+    "title": "Returns policy",
+    "description": "Configure how customer and route returns are handled for the current organisation.",
+    "sections": [],
+    "fields": [],
+    "hints": []
+  },
+  {
+    "route": "/settings/teams",
+    "title": "Teams",
+    "description": "Group staff by branch or function and assign a team lead and members.",
+    "sections": [],
+    "fields": [],
+    "hints": []
   }
 ]

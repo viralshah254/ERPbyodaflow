@@ -1,5 +1,8 @@
 "use client";
 
+import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
+import { fetchJoyOrderRoute, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
+import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -84,7 +87,7 @@ import {
 } from "@/lib/api/pricing";
 import { isPlantCatalogueTemplate } from "@/config/industry";
 import { usesInlineQuantitySheet, sameEditableLines, storedEditableUnitPrice } from "@/lib/docs/inline-quantity-sheet";
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import type { FmcgCatalogItem } from "@/lib/fmcg/pricing";
 import { fetchSavedExchangeRateApi } from "@/lib/api/financial-settings";
@@ -167,7 +170,7 @@ function storedRateFromDocPerBase(docPerBase: number): number {
 }
 
 function getDefaultValues(baseCurrency: string): FormValues {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayNairobiYmd();
   return {
     date: today,
     party: "",
@@ -563,7 +566,10 @@ export function DocumentCreateWizard({
   const { settings: financialSettings } = useFinancialSettings();
   const baseCurrency = financialSettings.baseCurrency;
   const currentOrgId = useAuthStore((s) => s.org?.orgId);
-  const joyDeliveryWarehouse = currentOrgId === JOY_SUPERBAKERS_ORG_ID && type === "sales-order";
+  const operatingProfile = useOperatingProfile(currentOrgId);
+  /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
+  const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
+  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && operatingProfile.routeCollectionsEnabled;
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -595,7 +601,7 @@ export function DocumentCreateWizard({
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
-  const sheetFinishedGoods = usesInlineQuantitySheet({ type, orgId: currentOrgId, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods });
+  const sheetFinishedGoods = usesInlineQuantitySheet({ type, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
   const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
@@ -749,6 +755,37 @@ export function DocumentCreateWizard({
   }, [showShipTo, selectedPartyId]);
 
   const watchedWarehouse = form.watch("warehouse");
+  const orderDate = form.watch("date");
+  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string>();
+  const routeDeliveryDate = deliveryDateOverride ?? orderDate;
+  const routeLookupKey = JSON.stringify([selectedPartyId, selectedDeliverySite, routeDeliveryDate]);
+  const [routeLookup, setRouteLookup] = React.useState<{
+    key: string; routes: CollectionRoute[]; defaultRouteId?: string; saved?: boolean; error?: string;
+  }>();
+  const activeRouteLookup = routeLookup?.key === routeLookupKey ? routeLookup : undefined;
+  const [routeSelection, setRouteSelection] = React.useState<{
+    key: string; routeId: string; collector?: RouteCollector;
+  }>();
+  const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
+  const activeCollectionRoute = activeRouteLookup?.routes.find((route) =>
+    route.id === (manualRoute?.routeId ?? activeRouteLookup.defaultRouteId));
+  const routeCollector = manualRoute ? manualRoute.collector : activeCollectionRoute?.collectors[0];
+
+  React.useEffect(() => {
+    if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
+    let active = true;
+    fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite)
+      .then((result) => { if (active) setRouteLookup({ key: routeLookupKey, ...result }); })
+      .catch((error) => {
+        if (active) setRouteLookup({ key: routeLookupKey, routes: [], error: error.message || "Could not load delivery routes." });
+      });
+    return () => { active = false; };
+  }, [joyRouteOrderEnabled, routeLookupKey, selectedPartyId, routeDeliveryDate, selectedDeliverySite]);
+
+  React.useEffect(() => {
+    if (joyRouteOrderEnabled) form.setValue("warehouse", activeCollectionRoute?.id ?? "");
+  }, [joyRouteOrderEnabled, form, activeCollectionRoute?.id]);
+
 
   React.useEffect(() => {
     if (isEditMode) return;
@@ -822,7 +859,7 @@ export function DocumentCreateWizard({
     allowLeaveRef.current = false;
     const storedRate = doc.exchangeRate ?? 1;
     form.reset({
-      date: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      date: doc.date ? doc.date.slice(0, 10) : todayNairobiYmd(),
       party: doc.partyId ?? "",
       reference: "",
       supplierInvoiceNumber: doc.supplierInvoiceNumber ?? "",
@@ -835,7 +872,7 @@ export function DocumentCreateWizard({
       linesAreTaxInclusive: doc.linesAreTaxInclusive ?? false,
       currency: doc.currency ?? baseCurrency,
       exchangeRate: storedRate,
-      fxDate: doc.date ? doc.date.slice(0, 10) : new Date().toISOString().slice(0, 10),
+      fxDate: doc.date ? doc.date.slice(0, 10) : todayNairobiYmd(),
       totalAmount: doc.total ?? 0,
     });
     const prefilled: DocumentLine[] = (doc.lines ?? []).map((l, i) => {
@@ -1467,7 +1504,10 @@ export function DocumentCreateWizard({
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
-        warehouseId: form.getValues("warehouse") || undefined,
+        warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
+        ...(joyRouteOrderEnabled && routeCollector ? {
+          joyRouteOrder: { deliveryDate: routeDeliveryDate, salesRepId: routeCollector.salesRepId, tillNumber: routeCollector.tillNumber },
+        } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1551,6 +1591,10 @@ export function DocumentCreateWizard({
       showShipTo,
       hasDeliverySiteChange,
       selectedDeliverySite,
+      joyRouteOrderEnabled,
+      activeCollectionRoute,
+      routeCollector,
+      routeDeliveryDate,
       baseCurrency,
       form,
       billableLines,
@@ -1631,7 +1675,11 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (!joyDeliveryWarehouse) return false;
+    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeCollector || !routeDeliveryDate)) {
+      toast.error("Choose a delivery date, route, sales rep and till.");
+      return true;
+    }
+    if (!routeDeliveryStore || joyRouteOrderEnabled) return false;
     if (String(form.getValues("warehouse") ?? "").trim()) return false;
     form.setError("warehouse", {
       type: "required",
@@ -1639,7 +1687,7 @@ export function DocumentCreateWizard({
     });
     toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
-  }, [form, joyDeliveryWarehouse]);
+  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeCollector, routeDeliveryDate]);
 
   const goToStep = React.useCallback(
     async (targetStep: number) => {
@@ -2085,7 +2133,7 @@ export function DocumentCreateWizard({
     required: true,
   };
   const headerFields =
-    joyDeliveryWarehouse && !baseHeaderFields.some((field) => field.id === "warehouse")
+    routeDeliveryStore && !baseHeaderFields.some((field) => field.id === "warehouse")
       ? (() => {
           const branchIndex = baseHeaderFields.findIndex((field) => field.id === "branch");
           if (branchIndex < 0) return [deliveryWarehouseField, ...baseHeaderFields];
@@ -2125,7 +2173,7 @@ export function DocumentCreateWizard({
   ]);
 
   const selectedCurrency = form.watch("currency") || baseCurrency;
-  const selectedFxDate = form.watch("fxDate") || form.watch("date") || new Date().toISOString().slice(0, 10);
+  const selectedFxDate = form.watch("fxDate") || form.watch("date") || todayNairobiYmd();
   /** Stored: base per 1 doc unit. Shown in UI: doc per 1 base (inverse). */
   const storedExchangeRate = form.watch("exchangeRate") ?? 1;
   const displayDocPerBaseRate =
@@ -2712,7 +2760,7 @@ export function DocumentCreateWizard({
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 {headerFields.filter((f) => {
-                  if (f.type === "po-search") return false;
+                  if (f.type === "po-search" || (joyRouteOrderEnabled && f.id === "warehouse")) return false;
                   // For franchise outlets, the HQ supplier is auto-set — hide the party picker.
                   if (isHqDoc && f.id === "party") return false;
                   return true;
@@ -2722,16 +2770,16 @@ export function DocumentCreateWizard({
                       field={f}
                       form={form}
                       options={
-                        joyDeliveryWarehouse && f.id === "warehouse"
+                        routeDeliveryStore && f.id === "warehouse"
                           ? (fieldOptions[f.id] ?? []).filter((option) => !/dispatch/i.test(option.label))
                           : fieldOptions[f.id]
                       }
                       selectedPartyOption={selectedPartyOption}
                       selectedWarehouseOption={selectedWarehouseOption}
                       warehouseOptionsLoading={!branchWarehouseReady}
-                      branchId={joyDeliveryWarehouse && f.id === "warehouse" ? undefined : watchedBranch}
+                      branchId={routeDeliveryStore && f.id === "warehouse" ? undefined : watchedBranch}
                       hint={
-                        joyDeliveryWarehouse && f.id === "warehouse"
+                        routeDeliveryStore && f.id === "warehouse"
                           ? "This store is the route the order is delivered on."
                           : undefined
                       }
@@ -2767,6 +2815,27 @@ export function DocumentCreateWizard({
                   {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}
                   {deliverySiteError && <p className="text-xs text-destructive">{deliverySiteError}</p>}
                 </div>
+              )}
+              {joyRouteOrderEnabled && (
+                <JoyOrderRouteFields
+                  date={routeDeliveryDate}
+                  onDateChange={setDeliveryDateOverride}
+                  routes={activeRouteLookup?.routes ?? []}
+                  route={activeCollectionRoute}
+                  savedRoute={activeRouteLookup?.saved}
+                  onRouteChange={(routeId) => setRouteSelection({
+                    key: routeLookupKey,
+                    routeId,
+                    collector: activeRouteLookup?.routes.find((row) => row.id === routeId)?.collectors[0],
+                  })}
+                  collector={routeCollector}
+                  onCollectorChange={(collector) => setRouteSelection({
+                    key: routeLookupKey, routeId: activeCollectionRoute?.id ?? "", collector,
+                  })}
+                  hasCustomer={!!selectedPartyId}
+                  loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
+                  error={activeRouteLookup?.error}
+                />
               )}
               {type === "delivery-note" ? (
                 <p className="text-xs text-muted-foreground mt-2">
@@ -2999,7 +3068,7 @@ export function DocumentCreateWizard({
             <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
             <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
-              joyFinishedGoods={currentOrgId === JOY_SUPERBAKERS_ORG_ID && lineEditorMode === "sales"}
+              packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}
               useCostPricing={useCostPricing}
@@ -3017,7 +3086,7 @@ export function DocumentCreateWizard({
                 lineEditorMode === "sales" && !fmcgOrg ? catalogPricesByProductId : undefined
               }
               fmcgCatalogByProductId={
-                lineEditorMode === "sales" && fmcgOrg && (currentOrgId !== JOY_SUPERBAKERS_ORG_ID || salesPricingReady)
+                lineEditorMode === "sales" && fmcgOrg && (!operatingProfile.packSizeFromName || salesPricingReady)
                   ? fmcgCatalogByProductId : undefined
               }
               fmcgOrg={fmcgOrg}
@@ -3117,16 +3186,22 @@ export function DocumentCreateWizard({
                         : "Tax-exclusive (VAT added on top)"}
                   </p>
                 </div>
-                {joyDeliveryWarehouse ? (
+                {routeDeliveryStore ? (
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Route warehouse</span>
                     <p className="font-medium">
-                      {(fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
+                      {activeCollectionRoute?.name || (fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
                         form.watch("warehouse") ||
                         "—"}
                     </p>
                   </div>
                 ) : null}
+                {joyRouteOrderEnabled && routeCollector && (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Delivery and collection</span>
+                    <p className="font-medium">{routeDeliveryDate} · {routeCollector.salesRep} · Till {routeCollector.tillNumber}</p>
+                  </div>
+                )}
                 {type === "delivery-note" ? (
                   <>
                     <div className="space-y-1">

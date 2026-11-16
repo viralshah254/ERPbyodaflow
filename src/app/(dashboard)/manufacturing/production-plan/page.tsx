@@ -5,7 +5,7 @@ import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav"
 
 import * as React from "react";
 import { useAuthStore } from "@/stores/auth-store";
-import { JOY_SUPERBAKERS_ORG_ID } from "@/lib/fmcg/sfa-customer";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { ProductionOutputEntry } from "@/components/manufacturing/ProductionOutputEntry";
 import Link from "next/link";
 import { LIST_TABLE_WORKLIST_CLASS, PageShell } from "@/components/layout/page-shell";
@@ -18,6 +18,7 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { manufacturingAreaLabel } from "@/lib/terminology";
+import { productionTerms, productionVoice } from "@/lib/manufacturing/production-language";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -132,9 +133,12 @@ function plannedNameList(rowsById: Record<string, ProductionPlanRow>, qtyById: R
   return `${names.slice(0, 3).join(", ")} + ${names.length - 3} more`;
 }
 
+/** Settings → Sales document flow → Production recording decides which screen the floor uses. */
 export default function ProductionPlanPage() {
   const orgId = useAuthStore((s) => s.org?.orgId);
-  return orgId === JOY_SUPERBAKERS_ORG_ID ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
+  const profile = useOperatingProfile(orgId);
+  if (!profile.ready) return null;
+  return profile.productionRecording === "record_output" ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
 }
 
 function PlannedProductionPage() {
@@ -144,6 +148,8 @@ function PlannedProductionPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
+  const plant = productionVoice(templateId) === "plant";
+  const terms = productionTerms(templateId);
   const resultsRef = React.useRef<HTMLDivElement>(null);
 
   const [defaults, setDefaults] = React.useState<ProductionPlanRow[]>([]);
@@ -570,7 +576,7 @@ function PlannedProductionPage() {
         description={
           seafoodOrg
             ? "Enter pack quantities on the fish SKUs you will process today. Work backwards ignores empty pack qty."
-            : "Plan finished output, calculate ingredients, then prepare and release batches to production."
+            : terms.planDescription
         }
         breadcrumbs={[
           { label: areaLabel, href: "/manufacturing/boms" },
@@ -641,8 +647,8 @@ function PlannedProductionPage() {
             </Button>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"><label htmlFor="plan-measurement" className="text-sm font-medium">Verification for new batches</label><select id="plan-measurement" disabled={applying || createdOrders != null} className="h-9 rounded-md border bg-background px-3 text-sm" value={measurementMode} onChange={(event) => setMeasurementMode(event.target.value as typeof measurementMode)}><option value="COUNT_ONLY">Count output only</option><option value="MANUAL_SCALE">Require manually recorded weight</option><option value="DEVICE_SCALE">Require trusted scale reading</option><option value="WEIGHBRIDGE">Require trusted weighbridge reading</option></select><p className="text-xs text-muted-foreground">Applies to each new draft. A weight records mass; finished pack quantities remain in their own unit.</p></div>
-        <p className="text-xs text-muted-foreground">Search keeps quantities entered on other pages. Only active products with a recipe are listed. Calculate before creating drafts; drafts do not send instructions or add stock.</p>
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-card px-4 py-3"><label htmlFor="plan-measurement" className="text-sm font-medium">{plant ? "Verification for new production runs" : "Verification for new batches"}</label><select id="plan-measurement" disabled={applying || createdOrders != null} className="h-9 rounded-md border bg-background px-3 text-sm" value={measurementMode} onChange={(event) => setMeasurementMode(event.target.value as typeof measurementMode)}><option value="COUNT_ONLY">Count output only</option><option value="MANUAL_SCALE">Require manually recorded weight</option><option value="DEVICE_SCALE">Require trusted scale reading</option><option value="WEIGHBRIDGE">Require trusted weighbridge reading</option></select><p className="text-xs text-muted-foreground">Applies to each new draft. A weight records mass; finished pack quantities remain in their own unit.</p></div>
+        <p className="text-xs text-muted-foreground">Search keeps quantities entered on other pages. {terms.listed}</p>
 
         {loading ? (
           <SkeletonDataTable rows={8} columnWidths={["w-20", "w-48", "w-16", "w-16", "w-16", "w-24"]} />
@@ -659,7 +665,7 @@ function PlannedProductionPage() {
                     ? "No pack SKUs match that search."
                     : seafoodOrg
                       ? "No packed fish SKUs with a processing recipe were found."
-                      : "No finished products with a recipe were found."
+                      : terms.emptyPlan
                   : "No pack quantities yet. Search a SKU, type a quantity, then work backwards."
               }
               scrollMode="fill"
@@ -777,8 +783,7 @@ function PlannedProductionPage() {
                   <Badge variant="default">{componentRows.length}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  These have a recipe. Get more by completing work orders, not by buying the SKU. Click a name for
-                  stock levels.
+                  {terms.makeNote}
                 </p>
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                   <DataTable dataScope="page"
@@ -833,11 +838,10 @@ function PlannedProductionPage() {
                 </div>
               </div>
               <div className="space-y-3 lg:col-span-2">
-                <h2 className="text-base font-semibold">Recipe tree</h2>
+                <h2 className="text-base font-semibold">{terms.treeTitle}</h2>
                 <p className="text-sm text-muted-foreground">
                   Full formula. <span className="font-medium text-foreground">make</span> is produced here.{" "}
-                  <span className="font-medium text-foreground">buy</span> is a purchased ingredient in the recipe —
-                  it only shows on Buy from suppliers if the shelf is short. Names open stock levels.
+                  <span className="font-medium text-foreground">buy</span> is a purchased ingredient in the {terms.formula}. It only shows on Buy from suppliers when the shelf is short. Names open stock levels.
                 </p>
                 <div className="rounded-xl border bg-card p-4 shadow-sm">
                   {plan.tree.length ? (

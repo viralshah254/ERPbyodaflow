@@ -80,10 +80,15 @@ export default function CutoffDraftPage() {
   }, [assets]);
 
   const reloadLists = React.useCallback(async () => {
-    const [draftRows, openingRows] = await Promise.all([
-      fetchCutoffDraftsApi().catch(() => [] as CutoffDraftSummary[]),
-      fetchAssetOpeningsApi().catch(() => [] as AssetOpeningSummary[]),
-    ]);
+    let draftRows: CutoffDraftSummary[];
+    let openingRows: AssetOpeningSummary[];
+    try {
+      [draftRows, openingRows] = await Promise.all([fetchCutoffDraftsApi(), fetchAssetOpeningsApi()]);
+    } catch (error) {
+      // Keep what is on screen; an empty list would hide drafts that still need posting.
+      toast.error(error instanceof Error ? error.message : "Cut-off drafts could not be loaded. Refresh to try again.");
+      return;
+    }
     setDrafts((current) => mergeById(draftRows, current));
     setOpenings((current) => mergeById(openingRows, current));
   }, []);
