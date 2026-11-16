@@ -17,6 +17,7 @@ import { KraSigningBadge } from "@/components/kra/KraSigningBadge";
 import {
   fetchIncotexMonitorApi,
   retryIncotexQueueApi,
+  type CustomerPinFilter,
   type IncotexMonitorRow,
   type IncotexMonitorStatusFilter,
 } from "@/lib/api/incotex";
@@ -62,6 +63,8 @@ export default function KraSigningMonitorPage() {
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [providerFilter, setProviderFilter] = React.useState("all");
+  const [customerPinEnabled, setCustomerPinEnabled] = React.useState(false);
+  const [pinFilter, setPinFilter] = React.useState<CustomerPinFilter>("all");
   const [rows, setRows] = React.useState<IncotexMonitorRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [pageOffset, setPageOffset] = React.useState(0);
@@ -76,9 +79,11 @@ export default function KraSigningMonitorPage() {
         status: statusFilter as IncotexMonitorStatusFilter,
         typeKey: typeFilter as IncotexSignableDocType | "all",
         provider: providerFilter as "all" | "incotex" | "etims_oscu",
+        customerPin: pinFilter,
         limit: PAGE_SIZE,
         offset,
       });
+      setCustomerPinEnabled(result.customerPinEnabled === true);
       setRows(result.items);
       setTotal(result.total);
       setPageOffset(offset);
@@ -87,7 +92,7 @@ export default function KraSigningMonitorPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, typeFilter, providerFilter]);
+  }, [statusFilter, typeFilter, providerFilter, pinFilter]);
 
   React.useEffect(() => {
     void loadPage(0);
@@ -153,6 +158,18 @@ export default function KraSigningMonitorPage() {
       },
       { id: "date", header: "Date", accessor: "date" as keyof IncotexMonitorRow },
       { id: "party", header: "Customer", accessor: "party" as keyof IncotexMonitorRow },
+      ...(customerPinEnabled ? [{
+        id: "customerPin",
+        header: "Customer KRA PIN",
+        accessor: (r: IncotexMonitorRow) => (
+          <div className="space-y-0.5">
+            <div className={r.customerPinOnFile ? "text-muted-foreground" : "font-medium"}>{r.customerPinOnFile ? "On file" : "Missing"}</div>
+            {r.customerPinMissingAt && (
+              <div className="text-xs text-muted-foreground">Missing PIN recorded {r.customerPinMissingAt.slice(0, 10)}</div>
+            )}
+          </div>
+        ),
+      }] : []),
       {
         id: "total",
         header: "Total",
@@ -178,7 +195,7 @@ export default function KraSigningMonitorPage() {
         id: "actions",
         header: "",
         accessor: (r: IncotexMonitorRow) =>
-          canRetryKraSigning(r.kraSigning) ? (
+          r.documentStatus === "POSTED" && (r.typeKey !== "invoice" || r.customerPinOnFile !== false) && canRetryKraSigning(r.kraSigning) ? (
             <Button
               size="sm"
               variant="outline"
@@ -193,7 +210,7 @@ export default function KraSigningMonitorPage() {
           ) : null,
       },
     ],
-    [retryingId]
+    [retryingId, customerPinEnabled]
   );
 
   const hasMore = pageOffset + rows.length < total;
@@ -202,7 +219,9 @@ export default function KraSigningMonitorPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="KRA signing monitor"
-        description="Track invoices, credit notes, and debit notes sent to KRA — Incotex for existing clients, eTIMS OSCU for tenants who connected directly."
+        description={customerPinEnabled
+          ? "Review fiscal submissions and invoices held back. Choose All PIN statuses to include every PIN status."
+          : "Track invoices, credit notes, and debit notes sent to KRA."}
         breadcrumbs={[{ label: "Finance", href: "/finance" }, { label: "KRA signing" }]}
         sticky
         actions={
@@ -237,6 +256,18 @@ export default function KraSigningMonitorPage() {
               value: providerFilter,
               onChange: setProviderFilter,
             },
+            ...(customerPinEnabled ? [{
+              id: "customer-pin",
+              label: "Customer KRA PIN",
+              options: [
+                { label: "All PIN statuses", value: "all" },
+                { label: "PIN on file", value: "present" },
+                { label: "Missing PIN now", value: "missing" },
+                { label: "Missing PIN recorded", value: "recorded" },
+              ],
+              value: pinFilter,
+              onChange: (value: string) => setPinFilter(value as CustomerPinFilter),
+            }] : []),
           ]}
           actions={
             <Button
