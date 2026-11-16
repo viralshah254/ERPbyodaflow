@@ -20,6 +20,16 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
+function postingAccountTypes(row: { key: string; fallback: { type: string }; allowedTypes?: string[] }): string[] {
+  if (row.allowedTypes?.length) return row.allowedTypes;
+  if (row.key === "inputVatAccountId") return ["ASSET", "LIABILITY"];
+  return [row.fallback.type];
+}
+
+function postingAccountTypeLabel(types: string[]): string {
+  return types.map((type) => type.toLowerCase()).join(" or ");
+}
+
 export default function PostingMappingsPage() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo");
@@ -77,7 +87,7 @@ export default function PostingMappingsPage() {
   const resolution = (row: typeof rows[number]) => {
     const id = draft[row.key];
     const selected = id ? accounts.find((account) => account.id === id) : accounts.find((account) => account.code === row.fallback.code);
-    const valid = Boolean(selected && selected.type === row.fallback.type && selected.posts !== false);
+    const valid = Boolean(selected && postingAccountTypes(row).includes(selected.type) && selected.posts !== false);
     return { selected, valid, explicit: Boolean(id) };
   };
   const unresolved = rows.filter((row) => !resolution(row).valid).length;
@@ -104,7 +114,7 @@ export default function PostingMappingsPage() {
       <div className="rounded-xl border bg-muted/30 p-4 text-sm text-muted-foreground">Select accounts by their purpose and classification. Matching a numeric code alone is insufficient. Saving changes affects future postings; it does not repair historical journals. {dirty && <span className="font-medium text-foreground">You have unsaved changes.</span>}</div>
       <div className="flex flex-wrap items-center justify-between gap-3"><Input aria-label="Search posting roles" placeholder="Search posting roles or account codes…" value={search} onChange={(event) => setSearch(event.target.value)} className="max-w-md" /><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={attentionOnly} onChange={(event) => setAttentionOnly(event.target.checked)} />Needs attention only</label></div>
       {loading && <p role="status" className="p-8 text-center text-muted-foreground">Loading account mappings…</p>}
-      <div className="grid gap-4 xl:grid-cols-2">{visible.map((row) => { const state = resolution(row); return <Card key={row.key} className="rounded-xl"><CardHeader className="pb-3"><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="text-base">{row.label}</CardTitle><Badge variant={state.valid ? "secondary" : "outline"}>{state.valid ? state.explicit ? "Mapped" : "Valid fallback" : "Needs account"}</Badge></div><CardDescription>Requires a posting {row.fallback.type.toLowerCase()} account.</CardDescription></CardHeader><CardContent className="space-y-3"><AsyncSearchableSelect value={draft[row.key] ?? ""} disabled={!canEdit || saving} onValueChange={(value) => setDraft((current) => ({ ...current, [row.key]: value || null }))} loadOptions={async (query) => { const q = query.trim().toLowerCase(); return accounts.filter((account) => account.type === row.fallback.type && account.posts !== false && (!q || `${account.code} ${account.name}`.toLowerCase().includes(q))).slice(0,40).map((account) => accountOption(account.id)!); }} selectedOption={accountOption(draft[row.key])} allowClear searchDebounceMs={0} showSelectedDescription placeholder="Choose an account or review fallback" searchPlaceholder="Code or account name" emptyMessage="No posting account of the required type. Review the chart of accounts." />
+      <div className="grid gap-4 xl:grid-cols-2">{visible.map((row) => { const state = resolution(row); return <Card key={row.key} className="rounded-xl"><CardHeader className="pb-3"><div className="flex flex-wrap items-center justify-between gap-2"><CardTitle className="text-base">{row.label}</CardTitle><Badge variant={state.valid ? "secondary" : "outline"}>{state.valid ? state.explicit ? "Mapped" : "Valid fallback" : "Needs account"}</Badge></div><CardDescription>Requires a posting {postingAccountTypeLabel(postingAccountTypes(row))} account.</CardDescription></CardHeader><CardContent className="space-y-3"><AsyncSearchableSelect value={draft[row.key] ?? ""} disabled={!canEdit || saving} onValueChange={(value) => setDraft((current) => ({ ...current, [row.key]: value || null }))} loadOptions={async (query) => { const q = query.trim().toLowerCase(); const types = postingAccountTypes(row); return accounts.filter((account) => types.includes(account.type) && account.posts !== false && (!q || `${account.code} ${account.name}`.toLowerCase().includes(q))).slice(0,40).map((account) => accountOption(account.id)!); }} selectedOption={accountOption(draft[row.key])} allowClear searchDebounceMs={0} showSelectedDescription placeholder="Choose an account or review fallback" searchPlaceholder="Code or account name" emptyMessage="No posting account of the required type. Review the chart of accounts." />
         <p className={`rounded-lg px-3 py-2 text-xs leading-relaxed ${state.valid ? "bg-muted text-muted-foreground" : "bg-amber-500/10 text-amber-800 dark:text-amber-300"}`}>{state.valid ? `Effective: ${state.selected?.code} · ${state.selected?.name}` : state.selected ? `${state.selected.code} · ${state.selected.name} is ${state.selected.type.toLowerCase()}${state.selected.posts === false ? " and does not allow postings" : ""}. Choose the required account.` : `Fallback ${row.fallback.code} · ${row.fallback.name} is absent. Select an approved account before using this posting role.`}</p></CardContent></Card>; })}</div>
       {!loading && visible.length === 0 && <div className="rounded-xl border border-dashed p-10 text-center text-sm text-muted-foreground">No posting roles match this view.</div>}
       <ExplainThis prompt="Explain operational account mappings, classification, and why fallback codes may differ from an imported chart." label="Explain posting accounts" />
