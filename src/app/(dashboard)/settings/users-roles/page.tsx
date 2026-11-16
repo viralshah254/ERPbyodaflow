@@ -1120,12 +1120,38 @@ export default function UsersRolesPage() {
             ) : null}
           </div>
           <SheetFooter className="mt-6 flex flex-col gap-2">
+            {canManageUsers && editingUser && editingUser.id !== currentUserId &&
+              !editingUserIsOwner && (editingUser.status ?? "ACTIVE") === "ACTIVE" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={savingUser || deletingUser}
+                onClick={async () => {
+                  const name = [editingUser.firstName, editingUser.lastName].filter(Boolean).join(" ") || editingUser.email;
+                  if (!confirm(`Revoke ERP access for ${name}? You can restore it by setting their status to Active.`)) return;
+                  try {
+                    setSavingUser(true);
+                    await updateUserApi(editingUser.id, { status: "SUSPENDED" });
+                    toast.success(`ERP access revoked for ${name}.`);
+                    setUserSheetOpen(false);
+                    await refreshUsers();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Failed to revoke ERP access.");
+                  } finally {
+                    setSavingUser(false);
+                  }
+                }}
+              >
+                Revoke ERP access
+              </Button>
+            )}
             {editingUser && !editingUserIsOwner && (
               <Button
                 variant="destructive"
                 size="sm"
                 className="w-full"
-                disabled={deletingUser}
+                disabled={deletingUser || savingUser}
                 onClick={async () => {
                   if (
                     !confirm(
