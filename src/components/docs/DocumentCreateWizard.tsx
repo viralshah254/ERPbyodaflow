@@ -767,8 +767,18 @@ export function DocumentCreateWizard({
     key: string; routeId: string; collector?: RouteCollector;
   }>();
   const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
-  const activeCollectionRoute = activeRouteLookup?.routes.find((route) =>
-    route.id === (manualRoute?.routeId ?? activeRouteLookup.defaultRouteId));
+  const availableDeliveryRoutes = React.useMemo(() => {
+    if (!joyRouteOrderEnabled || !activeRouteLookup || activeRouteLookup.error) return [];
+    const configured = new Map(activeRouteLookup.routes.map((route) => [route.id, route]));
+    for (const warehouse of fieldOptions.warehouse ?? []) {
+      if (!configured.has(warehouse.id) && !/dispatch/i.test(warehouse.label)) {
+        configured.set(warehouse.id, { id: warehouse.id, name: warehouse.label, collectors: [] });
+      }
+    }
+    return [...configured.values()];
+  }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse]);
+  const activeCollectionRoute = availableDeliveryRoutes.find((route) =>
+    route.id === (manualRoute?.routeId ?? activeRouteLookup?.defaultRouteId));
   const routeCollector = manualRoute ? manualRoute.collector : activeCollectionRoute?.collectors[0];
 
   React.useEffect(() => {
@@ -1675,8 +1685,8 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeCollector || !routeDeliveryDate)) {
-      toast.error("Choose a delivery date, route, sales rep and till.");
+    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeDeliveryDate || (activeCollectionRoute.collectors.length > 0 && !routeCollector))) {
+      toast.error(activeCollectionRoute?.collectors.length ? "Choose a sales rep and till." : "Choose a delivery date and route.");
       return true;
     }
     if (!routeDeliveryStore || joyRouteOrderEnabled) return false;
@@ -2820,7 +2830,7 @@ export function DocumentCreateWizard({
                 <JoyOrderRouteFields
                   date={routeDeliveryDate}
                   onDateChange={setDeliveryDateOverride}
-                  routes={activeRouteLookup?.routes ?? []}
+                  routes={availableDeliveryRoutes}
                   route={activeCollectionRoute}
                   savedRoute={activeRouteLookup?.saved}
                   onRouteChange={(routeId) => setRouteSelection({

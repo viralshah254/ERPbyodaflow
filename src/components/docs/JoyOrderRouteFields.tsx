@@ -40,14 +40,15 @@ export function JoyOrderRouteFields(props: {
         </select>
         <p className="text-xs text-muted-foreground">
           {loading ? "Loading delivery routes…" : error ? error : !hasCustomer ? "Choose a customer first." : !date ? "Choose a delivery date."
-            : !routes.length ? "Set up rep and till assignments under Distribution → Routes."
-              : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
+            : !routes.length ? "Create a route store to continue."
+              : route && !route.collectors.length ? "This route has no rep or till configured. You can still save the order."
+                : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
                 : "The first route you save for this outlet and weekday becomes its default."}
         </p>
       </div>
       <div className="space-y-1">
         <Label htmlFor="joy-sales-rep">Sales rep</Label>
-        <select id="joy-sales-rep" className={selectClass} value={collector?.salesRepId ?? ""} disabled={!route}
+        <select id="joy-sales-rep" className={selectClass} value={collector?.salesRepId ?? ""} disabled={!reps.length}
           onChange={(e) => onCollectorChange(route?.collectors.find((row) => row.salesRepId === e.target.value))}>
           <option value="">Select sales rep</option>
           {reps.map(([id, name]) => <option key={id} value={id}>{name}</option>)}

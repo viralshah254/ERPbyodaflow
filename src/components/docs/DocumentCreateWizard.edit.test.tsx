@@ -1,3 +1,4 @@
+import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import React from "react";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -172,4 +173,17 @@ it("suggests the delivery-day route on a new Joy order and lets the operator swi
   fireEvent.change(route, { target: { value: "other" } });
   expect(route).toHaveValue("other");
   expect(till).toHaveDisplayValue("501002");
+});
+
+it("keeps routes without collection settings usable during rollout", async () => {
+  vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([{ id: "legacy", label: "Existing route" }]);
+  vi.mocked(fetchJoyOrderRoute).mockResolvedValueOnce({ routes: [], saved: false });
+  render(<DocumentCreateWizard type="sales-order" />);
+  fireEvent.change(screen.getByLabelText("Select customer"), { target: { value: "customer" } });
+  await screen.findByRole("option", { name: "Existing route" });
+  fireEvent.change(screen.getByLabelText("Route warehouse"), { target: { value: "legacy" } });
+  expect(screen.getByLabelText("Sales rep")).toBeDisabled();
+  expect(screen.getByLabelText("M-Pesa till")).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Next" }));
+  expect(await screen.findByText(/Step 2 of 3/)).toBeInTheDocument();
 });
