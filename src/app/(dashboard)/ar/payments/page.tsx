@@ -59,7 +59,10 @@ function appliedSummary(row: PaymentRow): string {
   return numbers.length ? numbers.join(", ") : "—";
 }
 
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
+
 export default function ARPaymentsPage() {
+  const canRecord = useHasPermission("finance.write", "finance.receipts.write");
   const searchParams = useSearchParams();
   const templateId = useOrgContextStore((s) => s.templateId);
   const issueReceipt = isFmcgTemplateId(templateId);
@@ -224,7 +227,7 @@ export default function ARPaymentsPage() {
         header: "",
         accessor: (r: PaymentRow) => (
           <div className="flex gap-1">
-            {r.status === "DRAFT" && (
+            {canRecord && r.status === "DRAFT" && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -322,7 +325,7 @@ export default function ARPaymentsPage() {
         showCommandHint
         actions={
           <div className="flex gap-2">
-            <DocumentHubUploadButton label="Scan cheque" />
+            {canRecord && <DocumentHubUploadButton label="Scan cheque" />}
             {copilotEnabled ? (
               <Button variant="outline" size="sm" onClick={handleDraftReminder}>
                 <Icons.Sparkles className="mr-2 h-4 w-4" />
@@ -332,10 +335,10 @@ export default function ARPaymentsPage() {
             <Button variant="outline" asChild>
               <Link href="/ar/receipts">Collect receipts</Link>
             </Button>
-            <Button onClick={() => openReceive(null)}>
+            {canRecord && <Button onClick={() => openReceive(null)}>
               <Icons.Plus className="mr-2 h-4 w-4" />
               Receive Payment
-            </Button>
+            </Button>}
           </div>
         }
       />
@@ -395,7 +398,7 @@ export default function ARPaymentsPage() {
       </div>
 
       <ArSettlementSheet
-        open={receiveOpen}
+        open={canRecord && receiveOpen}
         sessionKey={receiveSession}
         prefill={receivePrefill}
         bankAccounts={bankAccountOptions}

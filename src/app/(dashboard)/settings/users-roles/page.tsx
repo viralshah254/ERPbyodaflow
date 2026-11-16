@@ -73,6 +73,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { AccountsAccessPanel } from "@/components/settings/accounts-access-panel";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 
 /** Roles that belong to seafood / franchise verticals — hide for FMCG orgs. */
@@ -92,6 +93,7 @@ export default function UsersRolesPage() {
   const searchParams = useSearchParams();
   const deepLinkUserId = searchParams.get("userId")?.trim() ?? "";
   const canManageUsers = useHasPermission("admin.users");
+  const canManageSettings = useHasPermission("admin.settings");
   const currentUserId = useAuthStore((s) => s.user?.userId);
   const setSession = useAuthStore((s) => s.setSession);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -479,6 +481,7 @@ export default function UsersRolesPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
+            {canManageUsers && canManageSettings && <TabsTrigger value="access">Access</TabsTrigger>}
             {showFranchisees ? (
               <TabsTrigger value="franchisees" onClick={loadFranchiseOutlets}>
                 Franchisees
@@ -731,6 +734,9 @@ export default function UsersRolesPage() {
             </Card>
           </TabsContent>
 
+          {canManageUsers && canManageSettings && (
+            <TabsContent value="access"><AccountsAccessPanel users={users} /></TabsContent>
+          )}
           <TabsContent value="roles" className="space-y-4">
             <Card data-tutorial-hint="roles-permissions">
               <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">

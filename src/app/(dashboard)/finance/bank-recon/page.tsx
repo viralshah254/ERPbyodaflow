@@ -116,7 +116,9 @@ export default function BankReconPage() {
   const { routeCollectionsEnabled } = useOperatingProfile(orgId);
   const permissions = useAuthStore((state) => state.permissions);
   const userId = useAuthStore((state) => state.user?.userId);
-  const canWrite = permissions.includes("finance.write");
+  const canPostFinancialEntries = permissions.includes("finance.write");
+  const canWrite = canPostFinancialEntries || permissions.includes("finance.reconciliation.write");
+  const canMatchDocument = canWrite && (canPostFinancialEntries || permissions.includes("finance.receipts.write"));
   const canReadControls = permissions.includes("finance.read");
   const mutationLock = React.useRef(false);
   const snapshotRequest = React.useRef(0);
@@ -813,7 +815,7 @@ export default function BankReconPage() {
                               >
                                 Match
                               </Button>
-                              <Button size="sm" variant="ghost" disabled={!canWrite || mutating} onClick={() => handleCreatePayment(line)}>
+                              <Button size="sm" variant="ghost" disabled={!canPostFinancialEntries || mutating} onClick={() => handleCreatePayment(line)}>
                                 Group allocation
                               </Button>
                             </div>
@@ -859,7 +861,7 @@ export default function BankReconPage() {
                         </span>
                         <Button
                           size="sm"
-                          disabled={!canWrite || mutating || matchingDocId !== null || item.outstanding + 0.005 < Math.abs(selectedLine.amount) || (item.currency != null && item.currency !== currency)}
+                          disabled={!canMatchDocument || mutating || matchingDocId !== null || item.outstanding + 0.005 < Math.abs(selectedLine.amount) || (item.currency != null && item.currency !== currency)}
                           onClick={() => setConfirmMatch({ lineId: selectedLine.id, amount: Math.abs(selectedLine.amount), currency, document: item })}
                         >
                           {matchingDocId === item.id ? "Posting…" : "Create and match"}
@@ -1083,7 +1085,7 @@ export default function BankReconPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={!canWrite || mutating || !selectedStmt || creatingAdjusting}
+              disabled={!canPostFinancialEntries || mutating || !selectedStmt || creatingAdjusting}
               onClick={() => void handleCreateAdjustingEntry()}
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -1228,7 +1230,7 @@ export default function BankReconPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             {pendingLine && !settlementEnabled && <div className="mr-auto text-sm" role="status">Allocated {formatMoney(allocationBalance(pendingLine.amount, openItemAllocations).allocated, currency)} · Remaining {formatMoney(allocationBalance(pendingLine.amount, openItemAllocations).remaining, currency)}</div>}
-            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={!canWrite || mutating || creating || !counterpartyId || !pendingLine || !allocationReady}>
+            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={!canPostFinancialEntries || mutating || creating || !counterpartyId || !pendingLine || !allocationReady}>
               {creating ? "Saving…" : "Suggest grouped allocation"}
             </Button>
           </SheetFooter>

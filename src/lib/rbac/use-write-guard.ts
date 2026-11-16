@@ -51,14 +51,24 @@ const DOC_TYPE_WRITE_PERMISSIONS: Record<string, string[]> = {
   "purchase-order": ["purchase.write"],
   "purchase-request": ["purchase.write"],
   grn: ["purchase.write"],
-  bill: ["purchase.write"],
+  bill: ["purchasing.bills.write", "purchase.write", "finance.write"],
   "purchase-credit-note": ["purchase.write"],
   "purchase-debit-note": ["purchase.write"],
-  invoice: ["finance.ar.write", "finance.write"],
-  journal: ["finance.gl.write", "finance.write"],
+  invoice: ["sales.invoices.write", "finance.ar.write", "finance.write"],
+  journal: ["finance.journals.write", "finance.gl.write", "finance.write", "finance.post_journal"],
+};
+
+const ACCOUNTS_DOCUMENT_WRITE: Record<string, string> = {
+  invoice: "sales.invoices.write", bill: "purchasing.bills.write", journal: "finance.journals.write",
+  "credit-note": "sales.invoices.write", "debit-note": "sales.invoices.write",
+  "purchase-credit-note": "purchasing.bills.write", "purchase-debit-note": "purchasing.bills.write",
 };
 
 export function canWriteDocType(permissions: string[], type: string): boolean {
+  const assignedPermission = ACCOUNTS_DOCUMENT_WRITE[type];
+  if (assignedPermission && permissions.includes("access.accounts.managed")) {
+    return permissions.includes(assignedPermission);
+  }
   const perms = DOC_TYPE_WRITE_PERMISSIONS[type];
   if (!perms) return true;
   return hasAnyPermission(permissions, ...perms, "admin.settings");
