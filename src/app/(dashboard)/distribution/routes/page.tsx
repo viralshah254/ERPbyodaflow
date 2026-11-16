@@ -14,11 +14,15 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { createDistributionRoute, fetchDistributionRoutes, type DistributionRouteRow } from "@/lib/api/distribution";
 import { t } from "@/lib/terminology";
 import { useTerminology } from "@/stores/orgContextStore";
+import { JoyRouteCollectors } from "@/components/distribution/JoyRouteCollectors";
+import { JOY_BAKERS_ORG_ID } from "@/lib/api/joy-route-orders";
+import { useAuthStore } from "@/stores/auth-store";
 import { toast } from "sonner";
 import { useCanWriteDistribution } from "@/lib/rbac/use-write-guard";
 import * as Icons from "lucide-react";
 
 export default function DistributionRoutesPage() {
+  const orgId = useAuthStore((state) => state.org?.orgId);
   const terminology = useTerminology();
   const canWrite = useCanWriteDistribution();
   const routeLabel = t("route", terminology);
@@ -83,6 +87,7 @@ export default function DistributionRoutesPage() {
         }
       />
       <div className="min-h-0 flex-1 space-y-4 overflow-auto p-4 sm:p-6">
+        {orgId === JOY_BAKERS_ORG_ID && <JoyRouteCollectors canWrite={canWrite} />}
         {loading && !rows.length ? (
           <p className="text-sm text-muted-foreground">Loading routes...</p>
         ) : !rows.length ? (

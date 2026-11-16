@@ -1,6 +1,8 @@
 "use client";
 
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
+import { fetchJoyOrderRoute, JOY_BAKERS_ORG_ID, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
+import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -567,6 +569,7 @@ export function DocumentCreateWizard({
   const operatingProfile = useOperatingProfile(currentOrgId);
   /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
   const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
+  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && currentOrgId === JOY_BAKERS_ORG_ID;
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -752,6 +755,37 @@ export function DocumentCreateWizard({
   }, [showShipTo, selectedPartyId]);
 
   const watchedWarehouse = form.watch("warehouse");
+  const orderDate = form.watch("date");
+  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string>();
+  const routeDeliveryDate = deliveryDateOverride ?? orderDate;
+  const routeLookupKey = JSON.stringify([selectedPartyId, selectedDeliverySite, routeDeliveryDate]);
+  const [routeLookup, setRouteLookup] = React.useState<{
+    key: string; routes: CollectionRoute[]; defaultRouteId?: string; saved?: boolean; error?: string;
+  }>();
+  const activeRouteLookup = routeLookup?.key === routeLookupKey ? routeLookup : undefined;
+  const [routeSelection, setRouteSelection] = React.useState<{
+    key: string; routeId: string; collector?: RouteCollector;
+  }>();
+  const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
+  const activeCollectionRoute = activeRouteLookup?.routes.find((route) =>
+    route.id === (manualRoute?.routeId ?? activeRouteLookup.defaultRouteId));
+  const routeCollector = manualRoute ? manualRoute.collector : activeCollectionRoute?.collectors[0];
+
+  React.useEffect(() => {
+    if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
+    let active = true;
+    fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite)
+      .then((result) => { if (active) setRouteLookup({ key: routeLookupKey, ...result }); })
+      .catch((error) => {
+        if (active) setRouteLookup({ key: routeLookupKey, routes: [], error: error.message || "Could not load delivery routes." });
+      });
+    return () => { active = false; };
+  }, [joyRouteOrderEnabled, routeLookupKey, selectedPartyId, routeDeliveryDate, selectedDeliverySite]);
+
+  React.useEffect(() => {
+    if (joyRouteOrderEnabled) form.setValue("warehouse", activeCollectionRoute?.id ?? "");
+  }, [joyRouteOrderEnabled, form, activeCollectionRoute?.id]);
+
 
   React.useEffect(() => {
     if (isEditMode) return;
@@ -1470,7 +1504,10 @@ export function DocumentCreateWizard({
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
-        warehouseId: form.getValues("warehouse") || undefined,
+        warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
+        ...(joyRouteOrderEnabled && routeCollector ? {
+          joyRouteOrder: { deliveryDate: routeDeliveryDate, salesRepId: routeCollector.salesRepId, tillNumber: routeCollector.tillNumber },
+        } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1554,6 +1591,10 @@ export function DocumentCreateWizard({
       showShipTo,
       hasDeliverySiteChange,
       selectedDeliverySite,
+      joyRouteOrderEnabled,
+      activeCollectionRoute,
+      routeCollector,
+      routeDeliveryDate,
       baseCurrency,
       form,
       billableLines,
@@ -1634,7 +1675,11 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (!routeDeliveryStore) return false;
+    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeCollector || !routeDeliveryDate)) {
+      toast.error("Choose a delivery date, route, sales rep and till.");
+      return true;
+    }
+    if (!routeDeliveryStore || joyRouteOrderEnabled) return false;
     if (String(form.getValues("warehouse") ?? "").trim()) return false;
     form.setError("warehouse", {
       type: "required",
@@ -1642,7 +1687,7 @@ export function DocumentCreateWizard({
     });
     toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
-  }, [form, routeDeliveryStore]);
+  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeCollector, routeDeliveryDate]);
 
   const goToStep = React.useCallback(
     async (targetStep: number) => {
@@ -2715,7 +2760,7 @@ export function DocumentCreateWizard({
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 {headerFields.filter((f) => {
-                  if (f.type === "po-search") return false;
+                  if (f.type === "po-search" || (joyRouteOrderEnabled && f.id === "warehouse")) return false;
                   // For franchise outlets, the HQ supplier is auto-set — hide the party picker.
                   if (isHqDoc && f.id === "party") return false;
                   return true;
@@ -2770,6 +2815,27 @@ export function DocumentCreateWizard({
                   {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}
                   {deliverySiteError && <p className="text-xs text-destructive">{deliverySiteError}</p>}
                 </div>
+              )}
+              {joyRouteOrderEnabled && (
+                <JoyOrderRouteFields
+                  date={routeDeliveryDate}
+                  onDateChange={setDeliveryDateOverride}
+                  routes={activeRouteLookup?.routes ?? []}
+                  route={activeCollectionRoute}
+                  savedRoute={activeRouteLookup?.saved}
+                  onRouteChange={(routeId) => setRouteSelection({
+                    key: routeLookupKey,
+                    routeId,
+                    collector: activeRouteLookup?.routes.find((row) => row.id === routeId)?.collectors[0],
+                  })}
+                  collector={routeCollector}
+                  onCollectorChange={(collector) => setRouteSelection({
+                    key: routeLookupKey, routeId: activeCollectionRoute?.id ?? "", collector,
+                  })}
+                  hasCustomer={!!selectedPartyId}
+                  loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
+                  error={activeRouteLookup?.error}
+                />
               )}
               {type === "delivery-note" ? (
                 <p className="text-xs text-muted-foreground mt-2">
@@ -3124,12 +3190,18 @@ export function DocumentCreateWizard({
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Route warehouse</span>
                     <p className="font-medium">
-                      {(fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
+                      {activeCollectionRoute?.name || (fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
                         form.watch("warehouse") ||
                         "—"}
                     </p>
                   </div>
                 ) : null}
+                {joyRouteOrderEnabled && routeCollector && (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Delivery and collection</span>
+                    <p className="font-medium">{routeDeliveryDate} · {routeCollector.salesRep} · Till {routeCollector.tillNumber}</p>
+                  </div>
+                )}
                 {type === "delivery-note" ? (
                   <>
                     <div className="space-y-1">

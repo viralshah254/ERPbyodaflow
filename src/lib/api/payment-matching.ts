@@ -27,6 +27,7 @@ export type MatchSuggestionRow = {
   runnerUpScore: number;
   signals: MatchSignal[];
   wouldAutoPost: boolean;
+  review?: { reason: string; statementReference?: string; statementTill?: string; expectedTill?: string };
   createdAt: string;
 };
 
@@ -76,7 +77,7 @@ export async function runPaymentMatchingApi(bankAccountId: string): Promise<Matc
   return apiRequest("/api/finance/payment-matching/run", { method: "POST", body: { bankAccountId } });
 }
 
-export async function confirmPaymentMatchApi(body: { lineId: string; candidateType: "invoice" | "payment"; candidateId: string }): Promise<{ paymentId: string }> {
+export async function confirmPaymentMatchApi(body: { lineId: string; candidateType: "invoice" | "payment"; candidateId: string; reviewNote?: string }): Promise<{ paymentId: string }> {
   requireLiveApi("Payment matching");
   return apiRequest("/api/finance/payment-matching/confirm", { method: "POST", body });
 }
