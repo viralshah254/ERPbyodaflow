@@ -1,7 +1,7 @@
 "use client";
 
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
-import { fetchJoyOrderRoute, JOY_BAKERS_ORG_ID, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
+import { fetchJoyOrderRoute, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
 import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
@@ -569,7 +569,7 @@ export function DocumentCreateWizard({
   const operatingProfile = useOperatingProfile(currentOrgId);
   /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
   const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
-  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && currentOrgId === JOY_BAKERS_ORG_ID;
+  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && operatingProfile.routeCollectionsEnabled;
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;

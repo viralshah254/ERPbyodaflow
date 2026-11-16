@@ -66,7 +66,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { BankSettlementReview, BankSettlementEvidence, type ReviewedBankSettlement } from "@/components/finance/BankSettlementReview";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { JOY_BAKERS_ORG_ID } from "@/lib/api/joy-route-orders";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { useAuthStore } from "@/stores/auth-store";
 import { bankAllocationAction, allocationBalance } from "@/lib/finance/bank-allocation-workflow";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
@@ -112,7 +112,8 @@ type BookItemDetail = {
 
 export default function BankReconPage() {
   const baseCurrency = useBaseCurrency();
-  const isJoyBakers = useAuthStore((state) => state.org?.orgId === JOY_BAKERS_ORG_ID);
+  const orgId = useAuthStore((state) => state.org?.orgId);
+  const { routeCollectionsEnabled } = useOperatingProfile(orgId);
   const permissions = useAuthStore((state) => state.permissions);
   const userId = useAuthStore((state) => state.user?.userId);
   const canWrite = permissions.includes("finance.write");
@@ -595,7 +596,7 @@ export default function BankReconPage() {
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               {autoMatching ? "Matching…" : "Auto-match"}
             </Button>
-            {isJoyBakers && (
+            {routeCollectionsEnabled && (
               <Button variant="outline" size="sm" asChild><Link href="/finance/payment-matching">Payment matching</Link></Button>
             )}
             <Button variant="ghost" size="sm" asChild>

@@ -51,7 +51,7 @@ vi.mock("@/lib/api/uom", () => ({ fetchProductUomsApi: vi.fn().mockResolvedValue
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]), fetchProductPricingApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/fmcg/operating-profile", () => ({
   useOperatingProfile: () => ({
-    ready: true, routeDispatch: state.orgId !== "org-other", fullCatalogueOrderSheet: true,
+    ready: true, routeDispatch: state.orgId !== "org-other", routeCollectionsEnabled: state.orgId !== "org-other", fullCatalogueOrderSheet: true,
     productionRecording: "record_output", packSizeFromName: true, vanSalesBook: true,
   }),
 }));
