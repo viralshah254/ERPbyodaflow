@@ -1,3 +1,4 @@
+import type { JoyRouteOrderInput, JoyRouteSnapshot } from "./joy-route-orders";
 import type { DocTypeKey } from "@/config/documents/types";
 import type {
   DocListRow,
@@ -231,6 +232,7 @@ type BackendDocumentDetail = {
   odaflowCustomerName?: string;
   deliveryAddress?: string;
   shipToSiteId?: string;
+  joyRoute?: JoyRouteSnapshot;
   createdAt?: string;
 };
 
@@ -312,6 +314,7 @@ export type DocumentDraftPayload = {
   branchId?: string;
   partyId?: string;
   warehouseId?: string;
+  joyRouteOrder?: JoyRouteOrderInput;
   /** Customer price tag / price list used for sales lines. */
   priceListId?: string;
   /** Tax tag (VAT configuration) applied to the document lines. */
@@ -668,6 +671,7 @@ function mapDocumentDetail(
     ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
     ...(payload.deliveryAddress ? { deliveryAddress: payload.deliveryAddress } : {}),
     ...(payload.shipToSiteId ? { shipToSiteId: payload.shipToSiteId } : {}),
+    ...(payload.joyRoute ? { joyRoute: payload.joyRoute } : {}),
     ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
 }

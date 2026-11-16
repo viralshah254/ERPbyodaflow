@@ -6,6 +6,7 @@ vi.mock("@/components/layout/page-shell", () => ({ PageShell: ({ children }: { c
 vi.mock("@/components/layout/page-header", () => ({ PageHeader: () => <h1>Production plan</h1> }));
 vi.mock("@/components/operational/OperationalFlowNav", () => ({ OperationalFlowNav: () => null }));
 vi.mock("@/stores/orgContextStore", () => ({ useTerminology: () => ({}), useOrgContextStore: (select: (s: object) => unknown) => select({ templateId: "bakex", industryCategory: "FMCG" }) }));
+vi.mock("@/lib/fmcg/operating-profile", () => ({ useOperatingProfile: () => ({ ready: true, productionRecording: "planned" }) }));
 vi.mock("@/lib/rbac/use-write-guard", () => ({ useCanWriteManufacturing: () => true }));
 vi.mock("@/lib/api/manufacturing", () => ({ fetchProductionPlanDefaults: mocks.defaults, explodeProductionPlan: mocks.explode, applyProductionPlan: mocks.apply, fetchManufacturingWorkOrder: vi.fn() }));
 vi.mock("@/lib/manufacturing/production-sheet", () => ({ printProductionPlan: mocks.print, printDailyProductionPacket: vi.fn() }));

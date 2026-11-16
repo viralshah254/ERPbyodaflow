@@ -23,6 +23,7 @@ export type SalesDocumentFlowSettings = {
   allowPartialReceipt: boolean;
   sendPodNotification: boolean;
   prefillSalesOrderFinishedGoods: boolean;
+  routeCollectionsEnabled?: boolean;
   /** Route dispatch: the store trucks are loaded from. */
   dispatchWarehouseId?: string;
   productionRecording?: "planned" | "record_output";

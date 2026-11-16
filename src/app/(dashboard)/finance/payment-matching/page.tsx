@@ -24,6 +24,9 @@ import {
   type MatchSuggestionRow,
   type PaymentMatchingSettings,
 } from "@/lib/api/payment-matching";
+import { Input } from "@/components/ui/input";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
+import { useAuthStore } from "@/stores/auth-store";
 import { formatMoney } from "@/lib/money";
 
 const MODES: Array<{ mode: MatchingMode; label: string; hint: string }> = [
@@ -35,6 +38,9 @@ const MODES: Array<{ mode: MatchingMode; label: string; hint: string }> = [
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 export default function PaymentMatchingPage() {
+  const orgId = useAuthStore((state) => state.org?.orgId);
+  const { routeCollectionsEnabled } = useOperatingProfile(orgId);
+  const [review, setReview] = React.useState<{ id: string; note: string }>();
   const [settings, setSettings] = React.useState<PaymentMatchingSettings | null>(null);
   const [accuracy, setAccuracy] = React.useState<MatchingAccuracy | null>(null);
   const [accounts, setAccounts] = React.useState<BankAccountRow[]>([]);
@@ -99,7 +105,8 @@ export default function PaymentMatchingPage() {
   async function confirm(row: MatchSuggestionRow) {
     setBusy(row._id);
     try {
-      await confirmPaymentMatchApi({ lineId: row.statementLineId, candidateType: row.candidateType, candidateId: row.candidateId });
+      await confirmPaymentMatchApi({ lineId: row.statementLineId, candidateType: row.candidateType, candidateId: row.candidateId, reviewNote: review?.id === row._id ? review.note.trim() : undefined });
+      setReview(undefined);
       toast.success(`Posted against ${row.candidateNumber ?? row.candidateId}.`);
       setRows((prev) => prev.filter((r) => r._id !== row._id));
       fetchMatchingAccuracyApi().then(setAccuracy).catch(() => undefined);
@@ -146,6 +153,7 @@ export default function PaymentMatchingPage() {
                   </div>
                   <div className="max-w-xs space-y-1">
                     <Label htmlFor="threshold">Post on its own at confidence of</Label>
+                    {routeCollectionsEnabled && <p className="text-xs text-muted-foreground">M-Pesa matches below 99% always require review.</p>}
                     <select
                       id="threshold"
                       className="h-9 w-full rounded-md border bg-background px-2 text-sm"
@@ -233,15 +241,42 @@ export default function PaymentMatchingPage() {
                       <TableCell>
                         {row.candidateType === "invoice" ? "Invoice" : "Receipt"} {row.candidateNumber ?? row.candidateId}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{row.signals.map((s) => s.label).join(" · ")}</TableCell>
+                      <TableCell className="space-y-1 text-xs text-muted-foreground">
+                        <p>{row.signals.map((s) => s.label).join(" · ")}</p>
+                        {row.review && (
+                          <>
+                            <p className="font-medium text-foreground">{row.review.reason}</p>
+                            <p>{[
+                              row.review.statementReference && `Receipt ${row.review.statementReference}`,
+                              row.review.statementTill && `Statement till ${row.review.statementTill}`,
+                              row.review.expectedTill && `Invoice till ${row.review.expectedTill}`,
+                            ].filter(Boolean).join(" · ")}</p>
+                          </>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {pct(row.score)}
+                        {row.review ? `${(row.score * 100).toFixed(2)}%` : pct(row.score)}
                         {row.runnerUpScore ? <span className="block text-xs text-muted-foreground">next {pct(row.runnerUpScore)}</span> : null}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="outline" disabled={busy === row._id} onClick={() => void confirm(row)}>
-                          Post
-                        </Button>
+                        {row.review && review?.id === row._id ? (
+                          <div className="ml-auto grid max-w-xs gap-2 text-left">
+                            <Label htmlFor={`review-${row._id}`}>What did you verify?</Label>
+                            <Input id={`review-${row._id}`} maxLength={500} value={review.note} disabled={busy === row._id}
+                              onChange={(event) => setReview({ id: row._id, note: event.target.value })} />
+                            <div className="flex justify-end gap-2">
+                              <Button size="sm" variant="ghost" disabled={busy === row._id} onClick={() => setReview(undefined)}>Cancel</Button>
+                              <Button size="sm" disabled={!review.note.trim() || busy === row._id} onClick={() => void confirm(row)}>
+                                Confirm and post
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="outline" disabled={busy === row._id}
+                            onClick={() => row.review ? setReview({ id: row._id, note: "" }) : void confirm(row)}>
+                            {row.review ? "Review" : "Post"}
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}

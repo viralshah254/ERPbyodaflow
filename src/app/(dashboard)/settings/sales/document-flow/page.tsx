@@ -129,6 +129,7 @@ const DEFAULTS: SalesDocumentFlowSettings = {
   allowPartialReceipt: true,
   sendPodNotification: true,
   prefillSalesOrderFinishedGoods: false,
+  routeCollectionsEnabled: false,
   productionRecording: "planned",
   finishedGoodsSalesUnit: "product_pack",
   approveNewFieldCustomers: false,
@@ -283,6 +284,20 @@ export default function SalesDocumentFlowPage() {
               }
             />
           </div>
+          {fmcg && (
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <Label htmlFor="routeCollectionsEnabled">Route sales reps and M-Pesa tills</Label>
+                <p className="text-sm text-muted-foreground">
+                  Assign reps and tills in Distribution → Routes. Route dispatch orders remember a route for each delivery weekday.
+                </p>
+              </div>
+              <Switch id="routeCollectionsEnabled" checked={settings.routeCollectionsEnabled ?? false}
+                disabled={loading} onCheckedChange={(checked) =>
+                  setSettings((prev) => ({ ...prev, routeCollectionsEnabled: checked }))
+                } />
+            </div>
+          )}
           {!fmcg ? (
             <Button onClick={() => void save()} disabled={loading || saving}>
               {saving ? "Saving…" : "Save"}

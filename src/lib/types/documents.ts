@@ -1,6 +1,8 @@
 import type { DocTypeKey } from "@/config/documents/types";
 import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 
+import type { JoyRouteSnapshot } from "@/lib/api/joy-route-orders";
+
 export type DocListRow = {
   id: string;
   number: string;
@@ -382,6 +384,7 @@ export type DocumentDetailRecord = {
   /** SFA branch deliver-to. The invoice customer is the supermarket party. */
   deliveryAddress?: string;
   shipToSiteId?: string;
+  joyRoute?: JoyRouteSnapshot;
   createdAt?: string;
 };
 
