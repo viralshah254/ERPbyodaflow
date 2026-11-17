@@ -131,6 +131,7 @@ import {
 import {
   FiscalPostingPreflightBanner,
   FiscalPostingPreflightDialog,
+  preflightFromPostingError,
 } from "@/components/docs/FiscalPostingPreflightDialog";
 
 const POD_QTY_TOLERANCE = 0.02;
@@ -242,7 +243,35 @@ function salesOrderFulfilmentInProgress(linkedDeliveryNote: LinkedDocSummary | n
   return DN_NEEDS_FULFILMENT_STATUSES.has(String(linkedDeliveryNote.status ?? "").trim().toUpperCase());
 }
 
-function toastDocumentActionError(error: unknown, options?: { returnTo?: string }) {
+const OPEN_FISCAL_STATES = ["PREPARED", "DISPATCHING", "UNCERTAIN", "SIGNED"];
+
+function fiscalRecoveryHref(documentId: string) {
+  return `/finance/fiscal-recovery?documentId=${encodeURIComponent(documentId)}`;
+}
+
+function openFiscalAttempt(document: { fiscalState?: string; status?: string; kraSigning?: { status?: string } | null } | null | undefined) {
+  if (!document || document.status === "POSTED" || document.status === "CANCELLED") return false;
+  if (document.kraSigning?.status === "signed") return false;
+  return OPEN_FISCAL_STATES.includes(document.fiscalState ?? "");
+}
+
+function fiscalRecoveryToast(message: string): { title: string; description: string } | null {
+  if (/already has a fiscal attempt/i.test(message)) {
+    return {
+      title: "This document was not sent to KRA again",
+      description: "A previous signing attempt is still open. Open fiscal recovery and confirm what KRA received before you try again.",
+    };
+  }
+  if (/unresolved signing attempt/i.test(message)) {
+    return {
+      title: "KRA is still finishing another document",
+      description: "Open fiscal recovery and resolve that attempt before sending this one.",
+    };
+  }
+  return null;
+}
+
+function toastDocumentActionError(error: unknown, documentId?: string) {
   const body = (error as { body?: { code?: string; grns?: Array<{ id: string; number: string }> } }).body;
   const grn = body?.code === "LINKED_GRN_NOT_POSTED" ? body.grns?.[0] : undefined;
   if (grn?.id) {
@@ -255,23 +284,26 @@ function toastDocumentActionError(error: unknown, options?: { returnTo?: string 
       },
       duration: 12000,
     });
-    return;
+    return false;
   }
   const message = error instanceof Error ? error.message : "Request failed";
-  if (message.includes("Posting accounts") && options?.returnTo) {
-    const settingsHref = `/settings/financial/posting-mappings?returnTo=${encodeURIComponent(options.returnTo)}`;
-    toast.error(message, {
+  const fiscal = fiscalRecoveryToast(message);
+  if (fiscal) {
+    const href = documentId ? fiscalRecoveryHref(documentId) : "/finance/fiscal-recovery";
+    toast.error(fiscal.title, {
+      description: fiscal.description,
       action: {
-        label: "Open posting accounts",
+        label: "Open fiscal recovery",
         onClick: () => {
-          window.location.href = settingsHref;
+          window.location.href = href;
         },
       },
-      duration: 15000,
+      duration: 20000,
     });
-    return;
+    return true;
   }
   toast.error(message);
+  return false;
 }
 
 function isCreditNoteDoc(type: string | null | undefined): boolean {
@@ -381,6 +413,7 @@ export default function DocViewPage() {
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
   const [fiscalPostingPreflight, setFiscalPostingPreflight] = React.useState<FiscalPostingPreflight | null>(null);
+  const [fiscalRecoveryPrompt, setFiscalRecoveryPrompt] = React.useState(false);
   const [fiscalPostingPreflightOpen, setFiscalPostingPreflightOpen] = React.useState(false);
   const [fiscalPostingPreflightChecking, setFiscalPostingPreflightChecking] = React.useState(false);
   const [startPickPackLoading, setStartPickPackLoading] = React.useState(false);
@@ -879,6 +912,10 @@ export default function DocViewPage() {
     };
   }, [canPost, document?.id, document?.tax, document?.lines, id, signAndPost, type]);
 
+  const reportActionError = React.useCallback((error: unknown) => {
+    if (toastDocumentActionError(error, id)) setFiscalRecoveryPrompt(true);
+  }, [id]);
+
   const ensureFiscalPostingReady = React.useCallback(async () => {
     if (!signAndPost) return true;
     try {
@@ -904,15 +941,21 @@ export default function DocViewPage() {
     try {
       await runPost();
     } catch (error) {
-      toastDocumentActionError(error, { returnTo: fiscalReturnTo });
+      const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+      if (blocked) {
+        setFiscalPostingPreflight(blocked);
+        setFiscalPostingPreflightOpen(true);
+      } else {
+        reportActionError(error);
+      }
     } finally {
       setActionLoading(false);
     }
   }, [
     document?.retailPaymentMethod,
     ensureFiscalPostingReady,
-    fiscalReturnTo,
     invoiceNeedsSettlement,
+    reportActionError,
     runPost,
   ]);
 
@@ -921,9 +964,8 @@ export default function DocViewPage() {
     try {
       const check = await loadFiscalPostingPreflight();
       if (check?.applies && !check.ready) {
-        toast.message("Posting accounts still need attention.", {
-          description: "Save each required role on the posting accounts screen, then try again.",
-        });
+        setFiscalPostingPreflight(check);
+        setFiscalPostingPreflightOpen(true);
         return;
       }
       setFiscalPostingPreflightOpen(false);
@@ -931,14 +973,20 @@ export default function DocViewPage() {
       try {
         await runPost();
       } catch (error) {
-        toastDocumentActionError(error, { returnTo: fiscalReturnTo });
+        const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+        if (blocked) {
+          setFiscalPostingPreflight(blocked);
+          setFiscalPostingPreflightOpen(true);
+        } else {
+          reportActionError(error);
+        }
       } finally {
         setActionLoading(false);
       }
     } finally {
       setFiscalPostingPreflightChecking(false);
     }
-  }, [fiscalReturnTo, loadFiscalPostingPreflight, runPost]);
+  }, [loadFiscalPostingPreflight, reportActionError, runPost]);
 
   /** Load attachments, comments, and audit after core document renders. */
   React.useEffect(() => {
@@ -1118,11 +1166,11 @@ export default function DocViewPage() {
       toast.success("Credit draft saved.");
       await refreshDocument(true);
     } catch (e) {
-      toastDocumentActionError(e);
+      reportActionError(e);
     } finally {
       setCreditQtySaving(false);
     }
-  }, [creditQtyDraft, creditPreview, creditEditable, creditEffect, creditEffectDirty, creditQtyDirty, creditWarehouse, document, id, refreshDocument, type]);
+  }, [creditQtyDraft, creditPreview, creditEditable, creditEffect, creditEffectDirty, creditQtyDirty, creditWarehouse, document, id, refreshDocument, reportActionError, type]);
 
   const creditDraftNeedsSave = draftCredit && (
     creditQtyDirty || creditEffectDirty || creditQtySaving ||
@@ -1477,7 +1525,7 @@ export default function DocViewPage() {
           await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
           await refreshDocument(true);
           toast.success(`Document ${action}d.`);
-        } catch (e) { toastDocumentActionError(e); }
+        } catch (e) { reportActionError(e); }
         finally { setActionLoading(false); }
       }}
       onConvert={openConvertSheet}
@@ -2006,8 +2054,13 @@ export default function DocViewPage() {
               Posted
             </Button>
           )}
-          {canWrite && (canApprove || canPost) && (
+          {canWrite && (canApprove || canPost || openFiscalAttempt(document)) && (
             <>
+              {openFiscalAttempt(document) ? (
+                <Button size="sm" asChild>
+                  <Link href={fiscalRecoveryHref(id)}>Open fiscal recovery</Link>
+                </Button>
+              ) : null}
               {canApprove && (
               <Button
                 variant="outline"
@@ -2036,7 +2089,7 @@ export default function DocViewPage() {
                 {type === "bill" ? "Approve bill" : "Approve"}
               </Button>
               )}
-              {canPost && (
+              {canPost && !openFiscalAttempt(document) && (
               <Button
                 size="sm"
                 disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned)}
@@ -2409,6 +2462,17 @@ export default function DocViewPage() {
             ]}
           />
         ))}
+        {(openFiscalAttempt(document) || fiscalRecoveryPrompt) ? (
+          <div role="status" className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+            <p className="font-medium leading-snug">This document was not sent to KRA again</p>
+            <p className="mt-1 leading-relaxed">
+              A previous signing attempt is still open. Check what KRA received before you use Sign and post again.
+            </p>
+            <Button size="sm" className="mt-3" asChild>
+              <Link href={fiscalRecoveryHref(id)}>Open fiscal recovery</Link>
+            </Button>
+          </div>
+        ) : null}
         {odaflowSource ? (
           <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} pdfInAttachments />
         ) : null}
@@ -2968,7 +3032,7 @@ export default function DocViewPage() {
                   if (/packing counts missing|pieces per/i.test(msg)) {
                     void refreshDocument(true);
                   }
-                  toastDocumentActionError(e);
+                  reportActionError(e);
                 } finally {
                   setActionLoading(false);
                 }
@@ -3668,7 +3732,13 @@ export default function DocViewPage() {
                     try {
                       await runPost();
                     } catch (error) {
-                      toastDocumentActionError(error, { returnTo: fiscalReturnTo });
+                      const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+                      if (blocked) {
+                        setFiscalPostingPreflight(blocked);
+                        setFiscalPostingPreflightOpen(true);
+                      } else {
+                        reportActionError(error);
+                      }
                     } finally {
                       setActionLoading(false);
                     }
@@ -4088,7 +4158,15 @@ function DynamicNextStepsPanel({
     }
     steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this delivery note", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
   } else if (type === "invoice") {
-    if (status === "DRAFT") {
+    if (openFiscalAttempt(document)) {
+      steps.push({
+        icon: <Icons.ShieldAlert className="h-4 w-4 text-amber-600" />,
+        text: "A KRA signing attempt is already open. Check what KRA received before sending this invoice again.",
+        href: document?.id ? fiscalRecoveryHref(document.id) : "/finance/fiscal-recovery",
+        actionLabel: "Open fiscal recovery",
+        variant: "default",
+      });
+    } else if (status === "DRAFT") {
       const undelivered = (document?.linkedDeliveries ?? []).filter(
         (d) => !deliveryNoteSatisfiedForInvoicePost(d.status)
       );

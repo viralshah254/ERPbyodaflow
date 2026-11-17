@@ -4,7 +4,37 @@ import Link from "next/link";
 import * as Icons from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
-import type { FiscalPostingPreflight } from "@/lib/api/documents";
+import type { FiscalPostingIssue, FiscalPostingPreflight } from "@/lib/api/documents";
+
+const POSTING_KEY_LABELS: Record<string, string> = {
+  accountsReceivableAccountId: "Accounts receivable",
+  salesRevenueAccountId: "Sales revenue",
+  outputVatAccountId: "Output VAT",
+  inventoryAccountId: "Inventory",
+  cogsAccountId: "Cost of goods sold",
+  accountsPayableAccountId: "Accounts payable",
+  purchaseExpenseAccountId: "Purchase expense",
+  inputVatAccountId: "Input VAT",
+};
+
+/** Turn the fiscal-signing error into a short list of account roles. */
+export function preflightFromPostingError(message: string): FiscalPostingPreflight | null {
+  if (!/posting accounts/i.test(message) || !/fiscal signing/i.test(message)) return null;
+  const listed = message.match(/before fiscal signing:\s*([^.]+)/i)?.[1] ?? "";
+  const keys = listed.split(",").map((key) => key.trim()).filter(Boolean);
+  const issues: FiscalPostingIssue[] = (keys.length ? keys : ["accountsReceivableAccountId"]).map((key) => ({
+    key,
+    label: POSTING_KEY_LABELS[key] ?? key.replace(/AccountId$/, "").replace(/([A-Z])/g, " $1").trim(),
+    reason: "missing_mapping",
+    message: "Choose an account for this role, then save.",
+  }));
+  return {
+    applies: true,
+    ready: false,
+    issues,
+    settingsPath: "/settings/financial/posting-mappings",
+  };
+}
 
 export function FiscalPostingPreflightDialog({
   open,
@@ -29,60 +59,42 @@ export function FiscalPostingPreflightDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 grid w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-lg border bg-background p-6 shadow-xl">
-          <div className="space-y-2">
-            <Dialog.Title className="text-lg font-semibold flex items-center gap-2">
-              <Icons.Landmark className="h-5 w-5 text-amber-600" />
-              Posting accounts needed before {signAndPost ? "sign and post" : "posting"}
-            </Dialog.Title>
-            <Dialog.Description className="text-sm text-muted-foreground leading-relaxed">
-              KRA signing runs only after your chart is wired for this invoice. Map each role below in{" "}
-              <span className="font-medium text-foreground">Settings → Financial → Posting accounts</span>, save, then
-              return here to continue. No signing request is sent until this is complete.
-            </Dialog.Description>
-          </div>
+        <Dialog.Overlay className="fixed inset-0 z-[80] bg-black/60" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-[80] flex max-h-[min(36rem,calc(100vh-2rem))] w-[min(32rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border bg-card p-0 text-card-foreground shadow-xl [&>[data-contextual-dialog-help]]:w-full [&>[data-contextual-dialog-help]]:shrink-0 [&>[data-contextual-dialog-help]]:border-b [&>[data-contextual-dialog-help]]:bg-card [&>[data-contextual-dialog-help]]:px-4 [&>[data-contextual-dialog-help]]:py-2">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+            <div className="space-y-2">
+              <Dialog.Title className="text-lg font-semibold leading-snug">
+                Set posting accounts before {signAndPost ? "sign and post" : "posting"}
+              </Dialog.Title>
+              <Dialog.Description className="text-sm leading-relaxed text-muted-foreground">
+                This invoice was not sent to KRA. Open{" "}
+                <span className="font-medium text-foreground">Settings → Financial → Posting accounts</span>, choose an
+                account for each item below, save, then come back and sign and post again.
+              </Dialog.Description>
+            </div>
 
-          {issues.length ? (
-            <ul className="space-y-2 rounded-lg border bg-muted/30 p-3 text-sm">
-              {issues.map((issue) => (
-                <li
-                  key={issue.key}
-                  className="flex gap-2 rounded-md border border-amber-300/50 bg-amber-50/80 px-3 py-2 dark:border-amber-800/50 dark:bg-amber-950/30"
-                >
-                  <Icons.AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400" />
-                  <div>
-                    <p className="font-medium text-foreground">{issue.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{issue.message}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : null}
+            {issues.length ? (
+              <ul className="space-y-1.5 text-sm">
+                {issues.map((issue) => (
+                  <li key={issue.key} className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2">
+                    <Icons.Circle className="h-2 w-2 shrink-0 fill-amber-500 text-amber-500" />
+                    <span className="font-medium">{issue.label}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
 
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Not now
-            </Button>
-            <Button type="button" variant="secondary" asChild>
-              <Link href={settingsHref}>
-                <Icons.Settings className="mr-2 h-4 w-4" />
-                Open posting accounts
-              </Link>
-            </Button>
-            <Button type="button" disabled={retrying} onClick={() => void onRetry()}>
-              {retrying ? (
-                <>
-                  <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Checking…
-                </>
-              ) : (
-                <>
-                  <Icons.RefreshCw className="mr-2 h-4 w-4" />
-                  I&apos;ve fixed this — try again
-                </>
-              )}
-            </Button>
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Close
+              </Button>
+              <Button type="button" variant="outline" disabled={retrying} onClick={() => void onRetry()}>
+                {retrying ? "Checking…" : "Try sign and post again"}
+              </Button>
+              <Button type="button" asChild>
+                <Link href={settingsHref}>Go to posting accounts</Link>
+              </Button>
+            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
