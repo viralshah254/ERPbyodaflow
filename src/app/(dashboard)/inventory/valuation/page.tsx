@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const SEARCH_DEBOUNCE_MS = 300;
 
 type ValuationRow = {
   sku: string;
@@ -60,10 +61,17 @@ export default function InventoryValuationPage() {
 
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [frPageOffset, setFrPageOffset] = React.useState(0);
   const [frPageSize, setFrPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const valuationLoadedOnce = React.useRef(false);
   const franchiseLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
 
   const loadValuationPage = React.useCallback(
     async (offset: number) => {
@@ -74,6 +82,7 @@ export default function InventoryValuationPage() {
         const payload = await fetchInventoryValuationPage({
           limit: pageSize,
           cursor: String(offset),
+          search: searchQuery || undefined,
         });
         setRanAt(payload.ranAt);
         setMethod(payload.method);
@@ -100,7 +109,7 @@ export default function InventoryValuationPage() {
         setLoading(false);
       }
     },
-    [pageSize]
+    [pageSize, searchQuery]
   );
 
   React.useEffect(() => {
@@ -205,6 +214,8 @@ export default function InventoryValuationPage() {
     ? "Loading valuation\u2026"
     : loadError
       ? "Could not load valuation."
+      : searchQuery
+        ? `No snapshot rows match \u201c${searchQuery}\u201d.`
       : ranAt === null && valuationRows.length === 0
         ? "No valuation snapshot yet. Run costing to persist inventory values."
         : "No rows match the current data.";
@@ -255,8 +266,8 @@ export default function InventoryValuationPage() {
                         or other-cost allocations. Not an independent \u201clive\u201d feed.
                       </span>
                       <span className="block text-muted-foreground text-xs">
-                        Snapshot: {method ?? "\u2014"} \u00b7 {new Date(ranAt).toLocaleString()}. Extra SKUs appear when that
-                        product has on-hand quantity in Stock levels under a warehouse when costing runs.
+                        Snapshot: {method ?? "\u2014"} \u00b7 {new Date(ranAt).toLocaleString()}. Search covers every SKU in this snapshot.
+                        This screen does not record company opening costs.
                       </span>
                     </>
                   ) : (
@@ -295,7 +306,19 @@ export default function InventoryValuationPage() {
             </CardContent>
           ) : null}
           <CardContent className="p-0">
-            <DataTable dataScope="page" data={valuationRows} columns={columns} emptyMessage={emptyMessage}
+            <DataTable
+              dataScope="page"
+              serverSearch
+              search={searchInput}
+              onSearchChange={(value) => {
+                setSearchInput(value);
+                setPageOffset(0);
+              }}
+              searchPlaceholder="SKU, product, code, or warehouse"
+              totalCount={totalCount}
+              data={valuationRows}
+              columns={columns}
+              emptyMessage={emptyMessage}
               scrollMode="natural"
               size="comfortable"
             />
