@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAccountingOnly } from "@/lib/api/invoice-posting";
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { creditQuantityPreview } from "@/lib/docs/credit-quantity-preview";
 import { DocumentPageShell } from "@/components/docs/DocumentPageShell";
@@ -67,6 +67,8 @@ import {
   downloadDocumentExcelApi,
   downloadDocumentAttachmentApi,
   fetchDocumentDetailApi,
+  fetchFiscalPostingPreflightApi,
+  type FiscalPostingPreflight,
   patchDocumentApi,
   requestDocumentApprovalApi,
   sendDocumentEmailApi,
@@ -126,6 +128,10 @@ import {
   packagingMissingLineLabel,
   productPackagingHref,
 } from "@/components/docs/FmcgPackagingConversionBlocker";
+import {
+  FiscalPostingPreflightBanner,
+  FiscalPostingPreflightDialog,
+} from "@/components/docs/FiscalPostingPreflightDialog";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -236,7 +242,7 @@ function salesOrderFulfilmentInProgress(linkedDeliveryNote: LinkedDocSummary | n
   return DN_NEEDS_FULFILMENT_STATUSES.has(String(linkedDeliveryNote.status ?? "").trim().toUpperCase());
 }
 
-function toastDocumentActionError(error: unknown) {
+function toastDocumentActionError(error: unknown, options?: { returnTo?: string }) {
   const body = (error as { body?: { code?: string; grns?: Array<{ id: string; number: string }> } }).body;
   const grn = body?.code === "LINKED_GRN_NOT_POSTED" ? body.grns?.[0] : undefined;
   if (grn?.id) {
@@ -251,7 +257,21 @@ function toastDocumentActionError(error: unknown) {
     });
     return;
   }
-  toast.error(error instanceof Error ? error.message : "Request failed");
+  const message = error instanceof Error ? error.message : "Request failed";
+  if (message.includes("Posting accounts") && options?.returnTo) {
+    const settingsHref = `/settings/financial/posting-mappings?returnTo=${encodeURIComponent(options.returnTo)}`;
+    toast.error(message, {
+      action: {
+        label: "Open posting accounts",
+        onClick: () => {
+          window.location.href = settingsHref;
+        },
+      },
+      duration: 15000,
+    });
+    return;
+  }
+  toast.error(message);
 }
 
 function isCreditNoteDoc(type: string | null | undefined): boolean {
@@ -285,6 +305,8 @@ function CreditLineCapacity({ capacity, unit }: {
 export default function DocViewPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const fiscalReturnTo = pathname;
   const type = params.type as string;
   const id = params.id as string;
   const terminology = useTerminology();
@@ -358,6 +380,9 @@ export default function DocViewPage() {
   const [applyAmount, setApplyAmount] = React.useState("");
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
+  const [fiscalPostingPreflight, setFiscalPostingPreflight] = React.useState<FiscalPostingPreflight | null>(null);
+  const [fiscalPostingPreflightOpen, setFiscalPostingPreflightOpen] = React.useState(false);
+  const [fiscalPostingPreflightChecking, setFiscalPostingPreflightChecking] = React.useState(false);
   const [startPickPackLoading, setStartPickPackLoading] = React.useState(false);
   const [odaflowApprovalOpen, setOdaflowApprovalOpen] = React.useState(false);
   const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | "submit" | null>(null);
@@ -829,21 +854,91 @@ export default function DocViewPage() {
     void refreshDocument(true);
   }, [id, refreshDocument, signAndPost, type]);
 
+  const loadFiscalPostingPreflight = React.useCallback(async () => {
+    if (!signAndPost || !canPost) return null;
+    const result = await fetchFiscalPostingPreflightApi(type as DocTypeKey, id);
+    setFiscalPostingPreflight(result);
+    return result;
+  }, [canPost, id, signAndPost, type]);
+
+  React.useEffect(() => {
+    if (!signAndPost || !canPost || !document?.id) {
+      setFiscalPostingPreflight(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchFiscalPostingPreflightApi(type as DocTypeKey, id)
+      .then((result) => {
+        if (!cancelled) setFiscalPostingPreflight(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFiscalPostingPreflight(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canPost, document?.id, document?.tax, document?.lines, id, signAndPost, type]);
+
+  const ensureFiscalPostingReady = React.useCallback(async () => {
+    if (!signAndPost) return true;
+    try {
+      const check = (await loadFiscalPostingPreflight()) ?? fiscalPostingPreflight;
+      if (check?.applies && !check.ready) {
+        setFiscalPostingPreflightOpen(true);
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  }, [fiscalPostingPreflight, loadFiscalPostingPreflight, signAndPost]);
+
   const requestPost = React.useCallback(async () => {
     if (invoiceNeedsSettlement) {
       setSettleStep(document?.retailPaymentMethod ? "terms" : "payment");
       setSettleOpen(true);
       return;
     }
+    if (!(await ensureFiscalPostingReady())) return;
     setActionLoading(true);
     try {
       await runPost();
     } catch (error) {
-      toastDocumentActionError(error);
+      toastDocumentActionError(error, { returnTo: fiscalReturnTo });
     } finally {
       setActionLoading(false);
     }
-  }, [document?.retailPaymentMethod, invoiceNeedsSettlement, runPost]);
+  }, [
+    document?.retailPaymentMethod,
+    ensureFiscalPostingReady,
+    fiscalReturnTo,
+    invoiceNeedsSettlement,
+    runPost,
+  ]);
+
+  const retryPostAfterFiscalSetup = React.useCallback(async () => {
+    setFiscalPostingPreflightChecking(true);
+    try {
+      const check = await loadFiscalPostingPreflight();
+      if (check?.applies && !check.ready) {
+        toast.message("Posting accounts still need attention.", {
+          description: "Save each required role on the posting accounts screen, then try again.",
+        });
+        return;
+      }
+      setFiscalPostingPreflightOpen(false);
+      setActionLoading(true);
+      try {
+        await runPost();
+      } catch (error) {
+        toastDocumentActionError(error, { returnTo: fiscalReturnTo });
+      } finally {
+        setActionLoading(false);
+      }
+    } finally {
+      setFiscalPostingPreflightChecking(false);
+    }
+  }, [fiscalReturnTo, loadFiscalPostingPreflight, runPost]);
 
   /** Load attachments, comments, and audit after core document renders. */
   React.useEffect(() => {
@@ -1734,6 +1829,13 @@ export default function DocViewPage() {
             }}
             currency={document.currency ?? "KES"}
             exchangeRate={document.exchangeRate}
+          />
+        ) : null}
+        {signAndPost && canPost && fiscalPostingPreflight && !loading && document ? (
+          <FiscalPostingPreflightBanner
+            preflight={fiscalPostingPreflight}
+            returnTo={fiscalReturnTo}
+            onOpenDetails={() => setFiscalPostingPreflightOpen(true)}
           />
         ) : null}
         {fmcgOrg && isIncotexSignableDocType(type) && !loading && document ? (
@@ -3561,11 +3663,12 @@ export default function DocViewPage() {
                       setPartyNeedsTerms(false);
                     }
                     setSettleOpen(false);
+                    if (!(await ensureFiscalPostingReady())) return;
                     setActionLoading(true);
                     try {
                       await runPost();
                     } catch (error) {
-                      toastDocumentActionError(error);
+                      toastDocumentActionError(error, { returnTo: fiscalReturnTo });
                     } finally {
                       setActionLoading(false);
                     }
@@ -3639,6 +3742,15 @@ export default function DocViewPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      <FiscalPostingPreflightDialog
+        open={fiscalPostingPreflightOpen}
+        onOpenChange={setFiscalPostingPreflightOpen}
+        preflight={fiscalPostingPreflight}
+        returnTo={fiscalReturnTo}
+        signAndPost={signAndPost}
+        retrying={fiscalPostingPreflightChecking || actionLoading}
+        onRetry={retryPostAfterFiscalSetup}
+      />
       <OdaflowApprovalConfirmDialog
         open={odaflowApprovalOpen}
         onOpenChange={setOdaflowApprovalOpen}

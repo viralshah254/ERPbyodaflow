@@ -54,7 +54,7 @@ describe("FMCG selling nav", () => {
     expect(legacyBakex).toContain("/sales/odaflow-product-matching");
     expect(manufacturer).toContain("/warehouse/dispatch-returns");
     expect(bakery).toContain("/warehouse/dispatch-returns");
-    expect(manufacturer).not.toContain("/warehouse/route-pick-lists");
+    expect(manufacturer).toContain("/warehouse/route-pick-lists");
     expect(bakery).toContain("/warehouse/route-pick-lists");
     expect(legacyBakex).toContain("/warehouse/route-pick-lists");
   });

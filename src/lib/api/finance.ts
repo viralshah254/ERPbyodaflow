@@ -187,6 +187,7 @@ export type PostingMappingRow = {
     name: string;
     type: string;
   };
+  allowedTypes?: string[];
 };
 
 export async function fetchFinanceOverviewApi(): Promise<FinanceOverview> {

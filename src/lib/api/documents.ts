@@ -904,6 +904,29 @@ export async function previewDocumentPostingApi(
   return result.items ?? [];
 }
 
+export type FiscalPostingIssue = {
+  key: string;
+  label: string;
+  reason: "missing_mapping" | "invalid_account";
+  message: string;
+};
+
+export type FiscalPostingPreflight = {
+  applies: boolean;
+  ready: boolean;
+  issues: FiscalPostingIssue[];
+  settingsPath: string;
+  requiredKeys?: string[];
+};
+
+export async function fetchFiscalPostingPreflightApi(
+  type: DocTypeKey,
+  id: string
+): Promise<FiscalPostingPreflight> {
+  requireLiveApi("Fiscal posting preflight");
+  return apiRequest<FiscalPostingPreflight>(`/api/documents/${type}/${id}/fiscal-posting-preflight`);
+}
+
 export async function convertDocumentApi(
   type: DocTypeKey,
   id: string,

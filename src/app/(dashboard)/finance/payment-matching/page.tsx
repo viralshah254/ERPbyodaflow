@@ -25,7 +25,7 @@ import {
   type PaymentMatchingSettings,
 } from "@/lib/api/payment-matching";
 import { Input } from "@/components/ui/input";
-import { JOY_BAKERS_ORG_ID } from "@/lib/api/joy-route-orders";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { useAuthStore } from "@/stores/auth-store";
 import { formatMoney } from "@/lib/money";
 
@@ -38,7 +38,8 @@ const MODES: Array<{ mode: MatchingMode; label: string; hint: string }> = [
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 
 export default function PaymentMatchingPage() {
-  const isJoyBakers = useAuthStore((state) => state.org?.orgId === JOY_BAKERS_ORG_ID);
+  const orgId = useAuthStore((state) => state.org?.orgId);
+  const { routeCollectionsEnabled } = useOperatingProfile(orgId);
   const [review, setReview] = React.useState<{ id: string; note: string }>();
   const [settings, setSettings] = React.useState<PaymentMatchingSettings | null>(null);
   const [accuracy, setAccuracy] = React.useState<MatchingAccuracy | null>(null);
@@ -152,7 +153,7 @@ export default function PaymentMatchingPage() {
                   </div>
                   <div className="max-w-xs space-y-1">
                     <Label htmlFor="threshold">Post on its own at confidence of</Label>
-                    {isJoyBakers && <p className="text-xs text-muted-foreground">M-Pesa matches below 99% always require review.</p>}
+                    {routeCollectionsEnabled && <p className="text-xs text-muted-foreground">M-Pesa matches below 99% always require review.</p>}
                     <select
                       id="threshold"
                       className="h-9 w-full rounded-md border bg-background px-2 text-sm"

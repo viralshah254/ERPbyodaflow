@@ -51,11 +51,13 @@ vi.mock("@/lib/api/uom", () => ({ fetchProductUomsApi: vi.fn().mockResolvedValue
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]), fetchProductPricingApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/fmcg/operating-profile", () => ({
   useOperatingProfile: () => ({
-    ready: true, routeDispatch: state.orgId !== "org-other", fullCatalogueOrderSheet: !state.lineByLine,
+    ready: true, routeDispatch: state.orgId !== "org-other", routeCollectionsEnabled: state.orgId !== "org-other",
+    fullCatalogueOrderSheet: !state.lineByLine,
     lineItemLayout: state.lineByLine ? "line_by_line" : "catalogue",
     productionRecording: "record_output", packSizeFromName: true, vanSalesBook: true,
   }),
 }));
+vi.mock("@/lib/api/sales-document-flow", () => ({ fetchSalesDocumentFlowApi: vi.fn().mockResolvedValue({ prefillSalesOrderFinishedGoods: true }) }));
 vi.mock("@/lib/data/products.repo", () => ({ hydrateProductsFromApi: vi.fn().mockResolvedValue([]), listProducts: () => [] }));
 vi.mock("@/lib/api/parties", () => ({ fetchPartyByIdApi: vi.fn().mockResolvedValue({ id: "customer", name: "Synthetic QA customer" }), fetchPartyCreditSummaryApi: vi.fn().mockResolvedValue(null), toPartyLookupOption: (row: any) => ({ id: row.id, label: row.name }) }));
 vi.mock("@/components/customers/CustomerLink", () => ({ CustomerLink: ({ label }: any) => <span>{label}</span> }));

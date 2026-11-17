@@ -65,11 +65,22 @@ function mappingReason(mapping: NonNullable<OdaflowQueueItem["unresolvedMappings
 function issueSummary(item: OdaflowQueueItem): string {
   const mappings = item.unresolvedMappings ?? [];
   const rawLines = (item.rawPayload as { lines?: Array<{ erpProductId?: string }> } | undefined)?.lines ?? [];
-  const matched = rawLines.filter((line) => line.erpProductId).length;
-  const total = rawLines.length;
+  const productUnresolvedIndexes = new Set(
+    mappings
+      .filter((m) => m.type === "product" && typeof m.lineIndex === "number")
+      .map((m) => m.lineIndex as number)
+  );
+  const maxUnresolvedIndex = productUnresolvedIndexes.size
+    ? Math.max(...productUnresolvedIndexes)
+    : -1;
+  const total = Math.max(rawLines.length, maxUnresolvedIndex + 1);
+  const matched = rawLines.reduce((count, line, index) => {
+    if (productUnresolvedIndexes.has(index)) return count;
+    return line.erpProductId ? count + 1 : count;
+  }, 0);
 
   const parts: string[] = [];
-  if (total > 0 && matched > 0 && matched < total) {
+  if (total > 0 && matched < total) {
     parts.push(`${matched}/${total} products matched`);
   }
 

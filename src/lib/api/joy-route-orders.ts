@@ -1,7 +1,5 @@
 import { apiRequest } from "./client";
 
-export const JOY_BAKERS_ORG_ID = "org-sfa-6a890b7765042fb41c9d89a6";
-
 export type RouteCollector = { salesRepId: string; salesRep: string; tillNumber: string };
 export type CollectionRoute = { id: string; name: string; collectors: RouteCollector[] };
 export type JoyRouteSnapshot = RouteCollector & { deliveryDate: string; routeName: string; routeWarehouseId: string };

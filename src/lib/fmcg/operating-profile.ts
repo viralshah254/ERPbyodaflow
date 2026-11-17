@@ -10,6 +10,7 @@ import { fetchSalesDocumentFlowApi, isRouteDispatchMode, resolveSalesLineItemLay
 export type OperatingProfile = {
   ready: boolean;
   routeDispatch: boolean;
+  routeCollectionsEnabled: boolean;
   fullCatalogueOrderSheet: boolean;
   lineItemLayout: SalesLineItemLayout;
   productionRecording: "planned" | "record_output";
@@ -20,6 +21,7 @@ export type OperatingProfile = {
 const DEFAULT_PROFILE: OperatingProfile = {
   ready: false,
   routeDispatch: false,
+  routeCollectionsEnabled: false,
   fullCatalogueOrderSheet: false,
   lineItemLayout: "picker",
   productionRecording: "planned",
@@ -33,6 +35,7 @@ export function operatingProfileFromFlow(flow: Partial<SalesDocumentFlowSettings
   return {
     ready: true,
     routeDispatch: isRouteDispatchMode(flow.mode),
+    routeCollectionsEnabled: flow.routeCollectionsEnabled === true,
     fullCatalogueOrderSheet: lineItemLayout === "catalogue",
     lineItemLayout,
     productionRecording: flow.productionRecording === "record_output" ? "record_output" : "planned",
@@ -41,36 +44,46 @@ export function operatingProfileFromFlow(flow: Partial<SalesDocumentFlowSettings
   };
 }
 
-const profiles = new Map<string, { value: Promise<OperatingProfile>; expiresAt: number }>();
+const cached = new Map<string, { at: number; value: OperatingProfile }>();
+const inflight = new Map<string, Promise<OperatingProfile>>();
 const TTL_MS = 30_000;
 
 export function forgetCachedOperatingProfile(): void {
-  profiles.clear();
+  cached.clear();
+  inflight.clear();
 }
 
-async function loadProfile(orgKey: string): Promise<OperatingProfile> {
-  const cached = profiles.get(orgKey);
-  if (cached && Date.now() < cached.expiresAt) return cached.value;
-  const value = fetchSalesDocumentFlowApi()
+function loadProfile(orgKey: string): Promise<OperatingProfile> {
+  const hit = cached.get(orgKey);
+  if (hit && Date.now() - hit.at < TTL_MS) return Promise.resolve(hit.value);
+  const pending = inflight.get(orgKey);
+  if (pending) return pending;
+
+  const request = fetchSalesDocumentFlowApi()
     .then(operatingProfileFromFlow)
-    .catch(() => ({ ...DEFAULT_PROFILE, ready: true }));
-  profiles.set(orgKey, { value, expiresAt: Date.now() + TTL_MS });
-  return value;
+    .catch(() => ({ ...DEFAULT_PROFILE, ready: true }))
+    .then((value) => {
+      if (inflight.get(orgKey) === request) {
+        cached.set(orgKey, { at: Date.now(), value });
+        inflight.delete(orgKey);
+      }
+      return value;
+    });
+  inflight.set(orgKey, request);
+  return request;
 }
 
 /** Pass the current org id so switching organisation refetches. */
 export function useOperatingProfile(orgId: string | null | undefined): OperatingProfile {
   const orgKey = orgId ?? "";
-  const [loaded, setLoaded] = React.useState<{ orgKey: string; profile: OperatingProfile }>();
+  const [profile, setProfile] = React.useState(() => ({ orgKey, value: cached.get(orgKey)?.value ?? DEFAULT_PROFILE }));
   React.useEffect(() => {
     if (!orgKey) return;
     let current = true;
     void loadProfile(orgKey).then((value) => {
-      if (current) setLoaded({ orgKey, profile: value });
+      if (current) setProfile({ orgKey, value });
     });
-    return () => {
-      current = false;
-    };
+    return () => { current = false; };
   }, [orgKey]);
-  return loaded?.orgKey === orgKey ? loaded.profile : DEFAULT_PROFILE;
+  return profile.orgKey === orgKey ? profile.value : cached.get(orgKey)?.value ?? DEFAULT_PROFILE;
 }
