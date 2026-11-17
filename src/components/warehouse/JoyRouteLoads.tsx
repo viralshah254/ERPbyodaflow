@@ -74,6 +74,77 @@ function placeLabel(label: string): string {
 
 const QTY_INPUT = "h-8 w-24 border-muted-foreground/40 text-right tabular-nums";
 
+function formatWhen(value?: string): string {
+  if (!value) return "";
+  const when = new Date(value);
+  if (!Number.isFinite(when.getTime())) return "";
+  return when.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}
+
+type LoadOrder = {
+  id: string;
+  number: string;
+  customer: string;
+  branch?: string;
+  when?: string;
+};
+
+function ordersOnNote(note: JoyLoadNote): LoadOrder[] {
+  const seen = new Map<string, LoadOrder>();
+  for (const line of note.lines) {
+    for (const row of line.allocations) {
+      if (seen.has(row.salesOrderId)) continue;
+      seen.set(row.salesOrderId, {
+        id: row.salesOrderId,
+        number: row.salesOrderNumber,
+        customer: row.customerName,
+        branch: row.branchName,
+      });
+    }
+  }
+  return [...seen.values()].sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
+}
+
+function ordersOnRoute(route: JoyWaitingRoute): LoadOrder[] {
+  return route.orders.map((order) => ({
+    id: order.id,
+    number: order.number,
+    customer: order.customerName,
+    branch: order.branchName,
+    when: order.orderedAt,
+  }));
+}
+
+function noteClock(note: JoyLoadNote): string {
+  const created = formatWhen(note.createdAt || note.date);
+  return [
+    created ? `Created ${created}` : "",
+    note.loadedAt ? `Loaded ${formatWhen(note.loadedAt)}` : "",
+    note.departedAt ? `Left ${formatWhen(note.departedAt)}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
+function OrderRoster({ orders }: { orders: LoadOrder[] }) {
+  if (!orders.length) return null;
+  return (
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-muted-foreground">Orders</p>
+      <ul className="divide-y overflow-hidden rounded-md border text-sm">
+        {orders.map((order) => (
+          <li key={order.id} className="flex flex-wrap items-baseline gap-x-2 px-3 py-2">
+            <span className="font-medium">{order.customer}</span>
+            {order.branch ? <span className="text-muted-foreground">{order.branch}</span> : null}
+            <Link className="text-primary hover:underline" href={`/docs/sales-order/${encodeURIComponent(order.id)}`}>
+              {order.number}
+            </Link>
+            {order.when ? <span className="text-muted-foreground">{formatWhen(order.when)}</span> : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 
 function WaitingRouteCard({
   route,
@@ -103,9 +174,9 @@ function WaitingRouteCard({
         <p className="text-sm text-muted-foreground">
           {route.orderCount} order{route.orderCount === 1 ? "" : "s"} · picked from {placeLabel(dispatchName)}
         </p>
-        <p className="text-xs text-muted-foreground">{route.orders.map((order) => order.number).join(", ")}</p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <OrderRoster orders={ordersOnRoute(route)} />
         <div className="overflow-x-auto">
           <table className="w-full table-fixed text-sm">
             <thead className="text-left text-xs text-muted-foreground">
@@ -202,9 +273,11 @@ function LoadingNoteCard({
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           {placeLabel(note.routeWarehouseName)} · picked from {placeLabel(dispatchName || note.fulfilmentWarehouseName)}
+          {noteClock(note) ? ` · ${noteClock(note)}` : ""}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <OrderRoster orders={ordersOnNote(note)} />
         <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loading note
         </Button>
@@ -339,9 +412,13 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
               routeNeedsReview ? "Check route" : shortLines.length ? "Finance review" : "Ready to retry"}
           </span>
         </div>
-        <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)}</p>
+        <p className="text-sm text-muted-foreground">
+          {placeLabel(note.routeWarehouseName)}
+          {noteClock(note) ? ` · ${noteClock(note)}` : ""}
+        </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <OrderRoster orders={ordersOnNote(note)} />
         {routeNeedsReview && (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
             DISPATCH is listed as the route for this load. Confirm the delivery route before the truck leaves.
@@ -530,9 +607,11 @@ function ReadyToLeaveCard({ note, canLoad, onChanged }: { note: JoyLoadNote; can
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           {placeLabel(note.routeWarehouseName)} · ready to leave
+          {noteClock(note) ? ` · ${noteClock(note)}` : ""}
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
+        <OrderRoster orders={ordersOnNote(note)} />
         <div className="space-y-1 text-sm">
           {note.results.map((row) => (
             <div key={row.salesOrderId} className="flex flex-wrap gap-3">
@@ -583,9 +662,12 @@ function LeftTodayCard({ note }: { note: JoyLoadNote }) {
         <CardTitle className="text-base">
           {note.number} · {note.truck}
         </CardTitle>
-        <p className="text-sm text-muted-foreground">{placeLabel(note.routeWarehouseName)} · left today</p>
+        <p className="text-sm text-muted-foreground">
+          {placeLabel(note.routeWarehouseName)} · {noteClock(note) || "left today"}
+        </p>
       </CardHeader>
-      <CardContent className="space-y-1 pb-4 text-sm">
+      <CardContent className="space-y-3 pb-4 text-sm">
+        <OrderRoster orders={ordersOnNote(note)} />
         {note.results.map((row) => (
           <div key={row.salesOrderId} className="flex flex-wrap gap-3">
             {row.invoiceId ? (

@@ -137,7 +137,14 @@ export type JoyMovementSummary = {
 };
 
 export type JoyRouteOrderLine = { lineId: string; productId: string; name: string; unit?: string; quantity: number };
-export type JoyRouteOrder = { id: string; number: string; customerName: string; branchName: string; lines: JoyRouteOrderLine[] };
+export type JoyRouteOrder = {
+  id: string;
+  number: string;
+  customerName: string;
+  branchName: string;
+  orderedAt?: string;
+  lines: JoyRouteOrderLine[];
+};
 export type JoyRouteProduct = { productId: string; sku?: string; name: string; unit?: string; orderedQty: number };
 export type JoyWaitingRoute = {
   warehouseId: string;
@@ -161,6 +168,7 @@ export type JoyLoadNote = {
   id: string;
   number: string;
   date: string;
+  createdAt?: string;
   status: JoyLoadNoteStatus;
   truck: string;
   routeWarehouseId: string;
