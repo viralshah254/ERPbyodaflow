@@ -2124,6 +2124,17 @@
     "hints": []
   },
   {
+    "route": "/inventory/opening-costs",
+    "title": "Opening costs",
+    "description": "One company cost per product, in KES, used in every warehouse. Selling prices stay on the price lists.",
+    "sections": [],
+    "fields": [
+      "Product code or name",
+      "Company cost (KES)"
+    ],
+    "hints": []
+  },
+  {
     "route": "/inventory/valuation",
     "title": "Inventory Valuation",
     "description": "Latest costing snapshot per SKU and warehouse\\u2014run costing to refresh; GL tie-out is done with finance outside this screen.",
