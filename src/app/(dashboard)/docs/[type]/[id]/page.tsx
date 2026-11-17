@@ -2284,7 +2284,13 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(type === "sales-order" && routeDispatch
+              ...(document.joyRoute ? [
+                { label: "Delivery route", value: document.joyRoute.routeName },
+                { label: "Delivery date", value: document.joyRoute.deliveryDate },
+                { label: "Sales rep", value: document.joyRoute.salesRep },
+                { label: "M-Pesa till", value: document.joyRoute.tillNumber },
+              ] : []),
+              ...(type === "sales-order" && routeDispatch && !document.joyRoute
                 ? [
                     {
                       label: "Route warehouse",

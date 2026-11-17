@@ -294,6 +294,7 @@ export default function DocTypeListPage() {
     getSavedViews(scope),
   );
   const [rows, setRows] = React.useState<DocListRow[]>([]);
+  const [loadError, setLoadError] = React.useState<{ denied: boolean; message: string } | null>(null);
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [fetching, setFetching] = React.useState(false);
   const [pageOffset, setPageOffset] = React.useState(0);
@@ -329,6 +330,7 @@ export default function DocTypeListPage() {
       } else {
         setFetching(true);
       }
+      setLoadError(null);
       try {
         const page = await fetchDocumentListPageApi(type as DocTypeKey, {
           limit: loadDocumentIds.length ? Math.min(100, Math.max(loadDocumentIds.length, PAGE_SIZE)) : PAGE_SIZE,
@@ -344,7 +346,13 @@ export default function DocTypeListPage() {
         setSelectedIds([]);
         hasLoadedOnce.current = true;
       } catch (error) {
-        toast.error((error as Error).message);
+        const failure = error as Error & { status?: number };
+        setRows([]);
+        setSelectedIds([]);
+        setLoadError({
+          denied: failure.status === 403,
+          message: failure.message || "Could not load documents.",
+        });
       } finally {
         setInitialLoading(false);
         setFetching(false);
@@ -636,6 +644,21 @@ export default function DocTypeListPage() {
             savedViewsScope="doc-sales-order"
             initialStatus={statusFromUrl}
           />
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <PageShell>
+        <PageHeader title={label} breadcrumbs={[{ label: "Documents", href: "/docs" }, { label }]} />
+        <div role="alert" className="mx-6 my-5 space-y-2 rounded-md border p-5">
+          <h2 className="font-semibold">{loadError.denied ? "You don’t have access to this area" : "Could not load documents"}</h2>
+          <p className="text-sm text-muted-foreground">
+            {loadError.denied ? "Ask your ERP administrator to review your access in Users & Roles." : loadError.message}
+          </p>
+          {!loadError.denied && <Button variant="outline" onClick={() => void loadPage(pageOffset)}>Retry</Button>}
         </div>
       </PageShell>
     );

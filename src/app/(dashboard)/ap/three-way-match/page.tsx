@@ -39,7 +39,7 @@ export default function ThreeWayMatchPage() {
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
   const permissions = useAuthStore((s) => s.permissions);
   const isPlatformOperator = useAuthStore((s) => s.isPlatformOperator);
-  const canWrite = isPlatformOperator || permissions.includes("finance.write") || permissions.includes("*");
+  const canWrite = isPlatformOperator || permissions.includes("finance.write") || permissions.includes("purchasing.bills.write") || permissions.includes("*");
 
   const [selectedPO, setSelectedPO] = React.useState<LineId | null>(null);
   const [selectedGRN, setSelectedGRN] = React.useState<LineId | null>(null);

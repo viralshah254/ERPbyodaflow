@@ -6,14 +6,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { isApiConfigured } from "@/lib/api/client";
 import {
   fetchSalesDocumentFlowApi,
+  resolveSalesLineItemLayout,
   updateSalesDocumentFlowApi,
   type SalesDocumentFlowMode,
   type SalesDocumentFlowSettings,
+  type SalesLineItemLayout,
 } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
@@ -27,6 +30,12 @@ const CLASSIC_STEPS = [
   "Signed delivery note",
   "Invoice",
 ];
+
+const LINE_ITEM_LAYOUTS = {
+  picker: { label: "UI 1 · Product picker", hint: "Find and add products with the existing picker." },
+  line_by_line: { label: "UI 2 · Line by line", hint: "Choose a product, enter its quantity, and press Enter to start the next line." },
+  catalogue: { label: "UI 3 · Full catalogue", hint: "Search the catalogue and enter quantities directly. Only products with a positive quantity are included." },
+} satisfies Record<SalesLineItemLayout, { label: string; hint: string }>;
 
 const PICK_PACK_FIRST_STEPS = [
   "Sales order",
@@ -232,6 +241,7 @@ export default function SalesDocumentFlowPage() {
   }, [fmcg]);
 
   const routeMode = settings.mode === "route_dispatch" || settings.mode === "joy_dispatch";
+  const lineItemLayout = resolveSalesLineItemLayout(settings);
   const steps =
     settings.mode === "pick_pack_first"
       ? PICK_PACK_FIRST_STEPS
@@ -257,37 +267,37 @@ export default function SalesDocumentFlowPage() {
     <PageLayout
       title="Document flow"
       description="Choose how approved sales orders move through the warehouse, the invoice, and proof of delivery."
+      actions={
+        <Button onClick={() => void save()} disabled={loading || saving}>
+          {saving ? "Saving…" : "Save document flow"}
+        </Button>
+      }
     >
       <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Sales order lines</CardTitle>
+          <CardTitle>Sales order and invoice lines</CardTitle>
           <CardDescription>
-            When this is on, a new sales order lists every finished good and the user enters quantities. Lines left blank are not saved.
+            Choose how your organisation enters products on sales orders and invoices.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <Label htmlFor="prefillSalesOrderFinishedGoods">Enter sales orders on the full finished-goods sheet</Label>
-              <p className="text-sm text-muted-foreground">
-                New and edited sales orders and invoices list every finished good. Raw materials, packaging and semi-finished items stay off the order.
-              </p>
-            </div>
-            <Switch
-              id="prefillSalesOrderFinishedGoods"
-              checked={settings.prefillSalesOrderFinishedGoods}
-              disabled={loading}
-              onCheckedChange={(checked) =>
-                setSettings((prev) => ({ ...prev, prefillSalesOrderFinishedGoods: checked }))
-              }
-            />
+          <div className="max-w-md space-y-2">
+            <Label htmlFor="lineItemLayout">Line entry layout</Label>
+            <Select
+              value={lineItemLayout}
+              disabled={loading || saving}
+              onValueChange={(value: SalesLineItemLayout) => setSettings((prev) => ({ ...prev, lineItemLayout: value }))}
+            >
+              <SelectTrigger id="lineItemLayout" aria-describedby="lineItemLayoutHint"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(LINE_ITEM_LAYOUTS).map(([value, layout]) => (
+                  <SelectItem key={value} value={value}>{layout.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p id="lineItemLayoutHint" className="text-sm text-muted-foreground">{LINE_ITEM_LAYOUTS[lineItemLayout].hint}</p>
           </div>
-          {!fmcg ? (
-            <Button onClick={() => void save()} disabled={loading || saving}>
-              {saving ? "Saving…" : "Save"}
-            </Button>
-          ) : null}
         </CardContent>
       </Card>
       {!fmcg ? (
@@ -413,9 +423,6 @@ export default function SalesDocumentFlowPage() {
                   />
                 </div>
               ))}
-              <Button onClick={() => void save()} disabled={loading || saving}>
-                {saving ? "Saving…" : "Save document flow"}
-              </Button>
             </CardContent>
           </Card>
         </div>

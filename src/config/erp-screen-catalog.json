@@ -4961,11 +4961,11 @@
   {
     "route": "/settings/sales/document-flow",
     "title": "Document flow",
-    "description": "Configure the sales document sequence used by this organisation.",
+    "description": "Choose how the organisation enters products on sales orders and invoices.",
     "sections": [
       {
-        "title": "Sales order lines",
-        "description": "When this is on, a new sales order lists every finished good and the user enters quantities. Lines left blank are not saved."
+        "title": "Sales order and invoice lines",
+        "description": "Choose the product picker, line-by-line entry, or the full catalogue."
       },
       {
         "title": "FMCG sales",
@@ -4981,7 +4981,7 @@
       }
     ],
     "fields": [
-      "Show all finished goods on new sales orders"
+      "Line entry layout"
     ],
     "hints": []
   },

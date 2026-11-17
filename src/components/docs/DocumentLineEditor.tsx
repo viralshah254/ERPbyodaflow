@@ -111,6 +111,7 @@ interface DocumentLineEditorProps {
    * Users enter quantities directly; no add-products dialog is needed.
    */
   sheetFinishedGoods?: boolean;
+  lineByLine?: boolean;
   /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
   repriceExistingRevision?: number;
   /** Available tax codes for the tax column select. */
@@ -258,6 +259,7 @@ export function DocumentLineEditor({
   pricingByProductId,
   productFilter,
   sheetFinishedGoods = false,
+  lineByLine = false,
   repriceExistingRevision = 0,
   taxCodes = [],
   defaultLineTaxCodeId,
@@ -278,6 +280,7 @@ export function DocumentLineEditor({
   linesRef.current = lines;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
   const searchInputRef = React.useRef<HTMLInputElement | null>(null);
+  const searchResultsId = React.useId();
   const setProductRef = React.useRef<(lineId: string, productId: string) => void>(() => {});
   const [productPickerOpen, setProductPickerOpen] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState("");
@@ -312,7 +315,7 @@ export function DocumentLineEditor({
 
   const handleLineQtyDraft = (lineId: string, raw: string) => {
     setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], qty: raw } }));
-    const partial = parsePartialDecimalString(raw);
+    const partial = raw === "" && (sheetFinishedGoods || lineByLine) ? 0 : parsePartialDecimalString(raw);
     if (partial != null && partial >= 0) setQty(lineId, partial);
   };
 
@@ -568,7 +571,7 @@ export function DocumentLineEditor({
   resolvePriceRef.current = resolvePrice;
 
   const commitProducts = React.useCallback(
-    (items: CatalogAddItem[], replaceLineId?: string, focusQty = true) => {
+    (items: Array<CatalogAddItem & { lineId?: string }>, replaceLineId?: string, focusQty = true) => {
       if (!items.length) return;
       if (replaceLineId && items[0]) {
         const cached = listProducts();
@@ -633,7 +636,7 @@ export function DocumentLineEditor({
           const baseQty = q > 0 ? computeBaseQty(p.id, uom, q) : 0;
           const { price, reason, discount } = resolvePrice(p.id, priceQty, uom);
           const draft: DocumentLine = {
-            id: `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
+            id: item.lineId ?? `line-${stamp}-${i}-${Math.random().toString(36).slice(2, 9)}`,
             productId: p.id,
             sku: displayItemCode(p) || p.sku,
             name: p.name,
@@ -1091,6 +1094,12 @@ export function DocumentLineEditor({
     productFilter && productFilter !== "all" && filteredProducts === null
   );
 
+  React.useEffect(() => {
+    if (lineByLine && !productListLoading && document.activeElement === document.body) {
+      searchInputRef.current?.focus();
+    }
+  }, [lineByLine, productListLoading]);
+
   const productGroupKey = React.useCallback(
     (p: ProductRow) => (fmcgOrg ? productCategoryKey(p) : productFamilyKey(p)),
     [fmcgOrg]
@@ -1121,7 +1130,7 @@ export function DocumentLineEditor({
       products.some((p) => inChip(p) && productMatchesLineSearch(p, searchSplit.stripped!))
   );
   const remoteSupportsQty = Boolean(
-    searchSplit.stripped &&
+    remoteSearchKey === searchSplit.text && searchSplit.stripped &&
       remoteMatches.some((p) => inChip(p) && productMatchesLineSearch(p, searchSplit.stripped!))
   );
   const useQtyFromSearch = strippedMatchesLocal || remoteSupportsQty;
@@ -1182,20 +1191,25 @@ export function DocumentLineEditor({
   }, [searchQuery, categoryChip]);
 
   React.useEffect(() => {
+    if (!lineByLine || !searchOpen || highlightIndex === 0) return;
+    document.getElementById(`${searchResultsId}-${highlightIndex}`)?.scrollIntoView?.({ block: "nearest" });
+  }, [lineByLine, searchOpen, searchResultsId, highlightIndex]);
+
+  React.useEffect(() => {
     if (!pendingQtyFocusId) return;
     const id = pendingQtyFocusId;
     const timer = window.setTimeout(() => {
-      const el = editorRef.current?.querySelector<HTMLInputElement>(
-        `[data-line-qty="${CSS.escape(id)}"]`
-      );
+      const el = Array.from(editorRef.current?.querySelectorAll<HTMLInputElement>("[data-line-qty]") ?? [])
+        .find((input) => input.dataset.lineQty === id);
       if (!el) return;
       el.focus();
-      window.setTimeout(() => el.select(), 30);
-      el.closest("[data-line-row]")?.scrollIntoView({ block: "nearest" });
+      if (lineByLine) el.select();
+      else window.setTimeout(() => el.select(), 30);
+      el.closest("[data-line-row]")?.scrollIntoView?.({ block: "nearest" });
       setPendingQtyFocusId(null);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [lines, pendingQtyFocusId]);
+  }, [lines, pendingQtyFocusId, lineByLine]);
 
   React.useEffect(() => {
     if (!searchOpen) return;
@@ -1211,9 +1225,11 @@ export function DocumentLineEditor({
   }, [searchOpen]);
 
   const addFromSearch = (product: ProductRow, keepSearch: boolean) => {
-    const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : 1;
     const replacing = swapLineId;
-    commitProducts([{ product, qty, asNewLine: false }], replacing ?? undefined, !keepSearch || Boolean(replacing));
+    const lineId = lineByLine && !replacing ? `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` : undefined;
+    const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : lineByLine ? 0 : 1;
+    commitProducts([{ product, qty, asNewLine: lineByLine, lineId }], replacing ?? undefined, !lineId && (!keepSearch || Boolean(replacing)));
+    if (lineId) setPendingQtyFocusId(lineId);
     setSearchQuery("");
     setCategoryChip(null);
     if (keepSearch && !replacing) {
@@ -1226,7 +1242,8 @@ export function DocumentLineEditor({
 
   const displayedLines = React.useMemo(() => {
     if (!sheetFinishedGoods || !searchQuery.trim()) return lines;
-    const candidates = lines.map((line) => ({ ...products.find((p) => p.id === line.productId), name: line.name, sku: line.sku, line }));
+    const productsById = new Map(products.map((product) => [product.id, product]));
+    const candidates = lines.map((line) => ({ name: line.name, sku: line.sku, ...productsById.get(line.productId), line }));
     return preferExactProductIdentifiers(candidates.filter((p) => productMatchesSearch(p, searchQuery)), searchQuery).map((p) => p.line);
   }, [lines, products, searchQuery, sheetFinishedGoods]);
 
@@ -1247,6 +1264,13 @@ export function DocumentLineEditor({
     lineId: string,
     field: "qty" | "price"
   ) => {
+    if (event.nativeEvent.isComposing) return;
+    if (lineByLine && field === "qty" && event.key === "Enter") {
+      event.preventDefault();
+      const qty = parseDecimalString(event.currentTarget.value);
+      if (Number.isFinite(qty) && qty > 0) searchInputRef.current?.focus();
+      return;
+    }
     if (event.key === "ArrowUp" || event.key === "ArrowDown" || (sheetFinishedGoods && event.key === "Enter" && !event.shiftKey)) {
       event.preventDefault();
       moveFieldFocus(lineId, field, event.key === "ArrowUp" ? -1 : 1);
@@ -1254,6 +1278,7 @@ export function DocumentLineEditor({
   };
 
   const onEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (lineByLine) return;
     if (event.key !== "Enter" || !event.shiftKey) return;
     if (productPickerOpen) return;
     if (document.querySelector("[data-radix-select-content]")) return;
@@ -1281,10 +1306,11 @@ export function DocumentLineEditor({
   };
 
   const onSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setSearchOpen(true);
-      setHighlightIndex((i) => Math.min(i + 1, Math.max(searchResults.length - 1, 0)));
+      setHighlightIndex((i) => searchOpen ? Math.min(i + 1, Math.max(searchResults.length - 1, 0)) : 0);
       return;
     }
     if (event.key === "ArrowUp") {
@@ -1301,25 +1327,23 @@ export function DocumentLineEditor({
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       const product = searchResults[highlightIndex];
-      if (product) addFromSearch(product, false);
+      if (product && (!lineByLine || searchOpen)) addFromSearch(product, false);
     }
   };
 
-  const LineTable = sheetFinishedGoods ? "table" : InteractiveTable;
-  const showChips = searchOpen && !searchQuery.trim() && groupOptions.length > 0;
+  const LineTable = sheetFinishedGoods || lineByLine ? "table" : InteractiveTable;
+  const showChips = !lineByLine && searchOpen && !searchQuery.trim() && groupOptions.length > 0;
   const swapLine = swapLineId ? lines.find((l) => l.id === swapLineId) : undefined;
 
-  return (
-    <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
-      <Label>{lineItemsLabel}</Label>
-      <div data-line-composer className="relative space-y-2">
+  const composer = (
+      <div data-line-composer className={cn("relative space-y-2", lineByLine && "rounded-lg border bg-muted/20 p-3")}>
         {sheetFinishedGoods ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">All active finished goods are listed below. Enter the quantities sold; leave the others at 0. Prices and totals update automatically.</p>
             <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); editorRef.current?.querySelector<HTMLInputElement>("[data-line-qty]")?.focus(); } }} aria-label="Filter finished goods" placeholder="Find name, product code, SKU or barcode" className="max-w-lg" />
             <p className="text-xs text-muted-foreground">{lines.length} products · {lines.filter((line) => line.qty > 0).length} selected · Enter or arrow keys move between quantities.</p>
           </div>
-        ) : fmcgOrg && !swapLineId ? (
+        ) : fmcgOrg && !lineByLine && !swapLineId ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
@@ -1330,9 +1354,7 @@ export function DocumentLineEditor({
               Add products
             </Button>
             <p className="text-xs text-muted-foreground">
-              {sheetFinishedGoods
-                ? "Update quantities for the products needed. Leave unused products at 0."
-                : "Select several products, set the quantity on each row, then add the lines."}
+              Select several products, set the quantity on each row, then add the lines.
               <span className="mx-1.5">·</span>
               <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd>
             </p>
@@ -1351,28 +1373,39 @@ export function DocumentLineEditor({
                 const value = e.target.value;
                 setSearchQuery(value);
                 if (!value.trim()) setCategoryChip(null);
-                setSearchOpen(true);
+                setSearchOpen(!lineByLine || Boolean(value.trim()));
               }}
-              onFocus={() => setSearchOpen(true)}
+              onFocus={() => {
+                if (!lineByLine || searchQuery.trim()) setSearchOpen(true);
+              }}
               onKeyDown={onSearchKeyDown}
+              autoComplete="off"
+              enterKeyHint={lineByLine ? "next" : undefined}
               aria-label="Search products to add"
+              role={lineByLine ? "combobox" : undefined}
+              aria-autocomplete={lineByLine ? "list" : undefined}
               aria-expanded={searchOpen}
-              aria-controls="line-product-results"
+              aria-controls={searchOpen ? searchResultsId : undefined}
+              aria-activedescendant={lineByLine && searchOpen && searchResults[highlightIndex] ? `${searchResultsId}-${highlightIndex}` : undefined}
             />
           </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setProductPickerOpen(true)}
-            disabled={productListLoading}
-          >
-            Browse
-          </Button>
+          {!lineByLine ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setProductPickerOpen(true)}
+              disabled={productListLoading}
+            >
+              Browse
+            </Button>
+          ) : null}
         </div>
         )}
-        {fmcgOrg && !swapLineId ? null : (
+        {lineByLine ? (
+          <p className="text-xs text-muted-foreground">Choose a product, enter its quantity, then press Enter for the next line.</p>
+        ) : sheetFinishedGoods || (fmcgOrg && !swapLineId) ? null : (
         <p className="text-xs text-muted-foreground">
           <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd> new line
           <span className="mx-1.5">·</span>
@@ -1384,9 +1417,11 @@ export function DocumentLineEditor({
             Replacing {swapLine.name}. Pick a product, or press Escape to keep it.
           </p>
         ) : null}
-        {searchOpen && !(fmcgOrg && !swapLineId) ? (
+        {searchOpen && !sheetFinishedGoods && (lineByLine || !fmcgOrg || swapLineId) ? (
           <div
-            id="line-product-results"
+            id={searchResultsId}
+            role={lineByLine ? "listbox" : undefined}
+            aria-label={lineByLine ? "Matching products" : undefined}
             className="max-h-80 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-sm"
           >
             {showChips ? (
@@ -1414,13 +1449,17 @@ export function DocumentLineEditor({
               </div>
             ) : null}
             {searchResults.length === 0 ? (
-              <p className="p-3 text-sm text-muted-foreground">No products match.</p>
+              <p role="status" className="p-3 text-sm text-muted-foreground">No products match.</p>
             ) : (
-              <ul>
+              <ul role={lineByLine ? "presentation" : undefined}>
                 {searchResults.map((p, index) => (
-                  <li key={p.id}>
+                  <li key={p.id} role={lineByLine ? "presentation" : undefined}>
                     <button
                       type="button"
+                      id={lineByLine ? `${searchResultsId}-${index}` : undefined}
+                      role={lineByLine ? "option" : undefined}
+                      aria-selected={lineByLine ? index === highlightIndex : undefined}
+                      tabIndex={lineByLine ? -1 : undefined}
                       className={cn(
                         "flex w-full items-start gap-3 px-3 py-2 text-left",
                         index === highlightIndex ? "bg-muted" : "hover:bg-muted/60"
@@ -1449,8 +1488,14 @@ export function DocumentLineEditor({
           </div>
         ) : null}
       </div>
+  );
 
-      {!sheetFinishedGoods && <DocumentProductPickerSheet
+  return (
+    <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
+      <Label>{lineItemsLabel}</Label>
+      {!lineByLine ? composer : null}
+
+      {!sheetFinishedGoods && !lineByLine && <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         sheetFinishedGoods={sheetFinishedGoods}
@@ -1467,10 +1512,15 @@ export function DocumentLineEditor({
         onAddMany={(items) => commitProducts(items)}
       />}
 
-      {sheetFinishedGoods && catalogError ? <div role="alert" className="rounded border border-destructive p-3"><p>Could not load the finished-goods catalogue. Your entered quantities are preserved.</p><Button type="button" variant="outline" onClick={() => setCatalogRetry((n) => n + 1)}>Retry catalogue</Button></div> : null}
+      {(sheetFinishedGoods || lineByLine) && catalogError ? (
+        <div role="alert" className="space-y-2 rounded border border-destructive p-3">
+          <p>Could not load the product catalogue. Your entered quantities are preserved.</p>
+          <Button type="button" variant="outline" onClick={() => setCatalogRetry((n) => n + 1)}>Retry catalogue</Button>
+        </div>
+      ) : null}
       {sheetFinishedGoods && lines.length > 0 && displayedLines.length === 0 ? <p role="status">No finished goods match this search. Clear the filter to see all products; entered quantities are retained.</p> : null}
       {lines.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+        lineByLine ? composer : <p className="text-sm text-muted-foreground">
           {sheetFinishedGoods ? (productListLoading ? "Loading all finished goods…" : catalogError ? "Catalogue unavailable." : "No active finished goods are configured.") : fmcgOrg
             ? "No lines yet. Add products to build this order."
             : "No lines yet. Search above to add the first product."}
@@ -1568,7 +1618,9 @@ export function DocumentLineEditor({
                       data-line-field="qty"
                       className="h-8 w-full px-2"
                       aria-label={`${lineColumnLabels?.qtyHeader ?? "Quantity"} for ${l.name}`}
-                      value={lineQtyValue(l)}
+                      value={lineByLine && l.qty === 0 && lineQtyValue(l) === "0" ? "" : lineQtyValue(l)}
+                      placeholder={lineByLine ? "Qty" : undefined}
+                      enterKeyHint={lineByLine ? "next" : undefined}
                       onValueChange={(raw) => handleLineQtyDraft(l.id, raw)}
                       onBlur={() => finalizeLineQtyDraft(l.id, lineQtyValue(l))}
                       onKeyDown={(event) => onFieldKeyDown(event, l.id, "qty")}
@@ -1723,6 +1775,7 @@ export function DocumentLineEditor({
               </tbody>
             </LineTable>
           </div>
+          {lineByLine ? composer : null}
           <div className="mt-4 flex justify-end">
             <dl className="w-full max-w-xs space-y-1.5 text-sm">
               {totalTax > 0 && !linesAreTaxInclusive ? (

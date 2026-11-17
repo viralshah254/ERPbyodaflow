@@ -110,7 +110,7 @@ export default function AccountsReceivablePage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Open receivable items</CardTitle>
             </CardHeader>
-            <CardContent className="text-2xl font-semibold tabular-nums">{openCount}</CardContent>
+            <CardContent className="text-2xl font-semibold tabular-nums">{openCount.toLocaleString("en-KE")}</CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2">
@@ -126,7 +126,7 @@ export default function AccountsReceivablePage() {
             </CardHeader>
             <CardContent>
               <p className={cn("text-2xl font-semibold tabular-nums", overdue.length > 0 && "text-amber-600 dark:text-amber-300")}>
-                {overdue.length}
+                {overdue.length.toLocaleString("en-KE")}
               </p>
               {overdue.length > 0 ? (
                 <p className="mt-1 text-xs text-muted-foreground tabular-nums">{Object.entries(overdueTotals).map(([currency, total]) => formatMoney(total, currency)).join(" · ")} still unpaid</p>
@@ -140,9 +140,9 @@ export default function AccountsReceivablePage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">Receipts</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-semibold tabular-nums">{payments.length}</p>
+              <p className="text-2xl font-semibold tabular-nums">{payments.length.toLocaleString("en-KE")}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {mpesaReceipts} by M-Pesa ·{" "}
+                {mpesaReceipts.toLocaleString("en-KE")} by M-Pesa ·{" "}
                 <Link href="/ar/payments" className="underline-offset-2 hover:underline">
                   Record a receipt
                 </Link>

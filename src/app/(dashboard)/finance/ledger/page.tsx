@@ -17,8 +17,10 @@ import {
   fetchFinanceAccountsApi,
   fetchFinancePeriodsApi,
   fetchLedgerEntriesPageApi,
+  type FinancePeriod,
   type LedgerEntry,
 } from "@/lib/api/finance";
+import { currentFiscalPeriodId } from "@/lib/finance/current-fiscal-period";
 import { formatMoney } from "@/lib/money";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { toast } from "sonner";
@@ -36,9 +38,9 @@ export default function LedgerPage() {
   const [searchInput, setSearchInput] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [accountId, setAccountId] = React.useState("");
-  const [periodId, setPeriodId] = React.useState("");
+  const [periodId, setPeriodId] = React.useState<string>();
   const [accounts, setAccounts] = React.useState<Array<{ id: string; code: string; name: string }>>([]);
-  const [periods, setPeriods] = React.useState<Array<{ id: string; fiscalYear: string; periodNumber: number }>>([]);
+  const [periods, setPeriods] = React.useState<FinancePeriod[]>([]);
   const [entries, setEntries] = React.useState<LedgerEntry[]>([]);
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [fetching, setFetching] = React.useState(false);
@@ -55,17 +57,22 @@ export default function LedgerPage() {
   }, [searchInput]);
 
   React.useEffect(() => {
-    Promise.all([fetchFinanceAccountsApi(), fetchFinancePeriodsApi()])
-      .then(([nextAccounts, nextPeriods]) => {
-        setAccounts(nextAccounts);
+    fetchFinanceAccountsApi().then(setAccounts)
+      .catch((error) => toast.error((error as Error).message || "Failed to load ledger accounts."));
+    fetchFinancePeriodsApi()
+      .then((nextPeriods) => {
         setPeriods(nextPeriods);
-        setPeriodId(nextPeriods.find((period) => period.status === "OPEN")?.id ?? nextPeriods[0]?.id ?? "");
+        setPeriodId(currentFiscalPeriodId(nextPeriods));
       })
-      .catch((error) => toast.error((error as Error).message || "Failed to load ledger filters."));
+      .catch((error) => {
+        toast.error((error as Error).message || "Failed to load fiscal periods.");
+        setPeriodId("");
+      });
   }, []);
 
   const loadPage = React.useCallback(
     async (offset: number) => {
+      if (periodId === undefined) return;
       const isFirstLoad = !hasLoadedOnce.current;
       if (isFirstLoad) setInitialLoading(true);
       else setFetching(true);
@@ -198,7 +205,7 @@ export default function LedgerPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={periodId || "__all_periods"} onValueChange={(value) => setPeriodId(value === "__all_periods" ? "" : value)}>
+              <Select disabled={periodId === undefined} value={periodId || "__all_periods"} onValueChange={(value) => setPeriodId(value === "__all_periods" ? "" : value)}>
                 <SelectTrigger className="w-44"><SelectValue placeholder="All periods" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all_periods">All periods</SelectItem>

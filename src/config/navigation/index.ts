@@ -53,6 +53,17 @@ function hasRuntimePermission(permissions: string[], required: string): boolean 
   return wildcardPrefixes.some((prefix) => required.startsWith(`${prefix}.`));
 }
 
+const managedDocumentPermissions: Record<string, string> = {
+  "/docs/invoice": "sales.invoices.read",
+  "/docs/credit-note": "sales.invoices.read",
+  "/docs/debit-note": "sales.invoices.read",
+  "/docs/bill": "purchasing.bills.read",
+  "/docs/purchase-credit-note": "purchasing.bills.read",
+  "/docs/purchase-debit-note": "purchasing.bills.read",
+  "/docs/journal": "finance.journals.read",
+  "/docs/delivery-note": "sales.deliveries.read",
+};
+
 function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
   if (item.moduleKey && !input.enabledModules.includes(item.moduleKey)) return false;
   if (item.requiresOrgTypes?.length) {
@@ -62,8 +73,12 @@ function itemPasses(item: NavItemConfig, input: BuildVisibleNavInput): boolean {
     const hasFlags = item.requiresFlags.every((flag) => input.featureFlags[flag] === true);
     if (!hasFlags) return false;
   }
-  if (item.requiresPermissions?.length) {
-    const hasPermission = item.requiresPermissions.some((perm) => hasRuntimePermission(input.permissions, perm));
+  const managedDocument = item.href && input.permissions.includes("access.accounts.managed")
+    ? managedDocumentPermissions[item.href]
+    : undefined;
+  const required = managedDocument ? [managedDocument] : item.requiresPermissions;
+  if (required?.length) {
+    const hasPermission = required.some((perm) => hasRuntimePermission(input.permissions, perm));
     if (!hasPermission) return false;
   }
   const templateId = canonicalIndustryTemplateId(input.templateId);

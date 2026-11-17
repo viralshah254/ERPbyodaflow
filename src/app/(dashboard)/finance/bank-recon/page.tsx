@@ -66,6 +66,7 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { BankSettlementReview, BankSettlementEvidence, type ReviewedBankSettlement } from "@/components/finance/BankSettlementReview";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { JOY_BAKERS_ORG_ID } from "@/lib/api/joy-route-orders";
 import { useAuthStore } from "@/stores/auth-store";
 import { bankAllocationAction, allocationBalance } from "@/lib/finance/bank-allocation-workflow";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
@@ -111,9 +112,12 @@ type BookItemDetail = {
 
 export default function BankReconPage() {
   const baseCurrency = useBaseCurrency();
+  const isJoyBakers = useAuthStore((state) => state.org?.orgId === JOY_BAKERS_ORG_ID);
   const permissions = useAuthStore((state) => state.permissions);
   const userId = useAuthStore((state) => state.user?.userId);
-  const canWrite = permissions.includes("finance.write");
+  const canPostFinancialEntries = permissions.includes("finance.write");
+  const canWrite = canPostFinancialEntries || permissions.includes("finance.reconciliation.write");
+  const canMatchDocument = canWrite && (canPostFinancialEntries || permissions.includes("finance.receipts.write"));
   const canReadControls = permissions.includes("finance.read");
   const mutationLock = React.useRef(false);
   const snapshotRequest = React.useRef(0);
@@ -536,7 +540,8 @@ export default function BankReconPage() {
       "/api/import/bank-statement",
       file,
       (data) => {
-        if (data.imported != null) toast.success(`Imported ${data.imported} line(s). Run auto-match to link payments.`);
+        if (data.message) toast.success(data.message);
+        else if (data.imported != null) toast.success(`Imported ${data.imported} line(s). Run auto-match to link payments.`);
         else toast.success("Import completed. Run auto-match to link payments.");
         setImportOpen(false);
         setBankAccountId(accountId);
@@ -592,6 +597,9 @@ export default function BankReconPage() {
               <Icons.Sparkles className="mr-2 h-4 w-4" />
               {autoMatching ? "Matching…" : "Auto-match"}
             </Button>
+            {isJoyBakers && (
+              <Button variant="outline" size="sm" asChild><Link href="/finance/payment-matching">Payment matching</Link></Button>
+            )}
             <Button variant="ghost" size="sm" asChild>
               <Link href="/treasury/bank-accounts">Bank accounts</Link>
             </Button>
@@ -806,7 +814,7 @@ export default function BankReconPage() {
                               >
                                 Match
                               </Button>
-                              <Button size="sm" variant="ghost" disabled={!canWrite || mutating} onClick={() => handleCreatePayment(line)}>
+                              <Button size="sm" variant="ghost" disabled={!canPostFinancialEntries || mutating} onClick={() => handleCreatePayment(line)}>
                                 Group allocation
                               </Button>
                             </div>
@@ -852,7 +860,7 @@ export default function BankReconPage() {
                         </span>
                         <Button
                           size="sm"
-                          disabled={!canWrite || mutating || matchingDocId !== null || item.outstanding + 0.005 < Math.abs(selectedLine.amount) || (item.currency != null && item.currency !== currency)}
+                          disabled={!canMatchDocument || mutating || matchingDocId !== null || item.outstanding + 0.005 < Math.abs(selectedLine.amount) || (item.currency != null && item.currency !== currency)}
                           onClick={() => setConfirmMatch({ lineId: selectedLine.id, amount: Math.abs(selectedLine.amount), currency, document: item })}
                         >
                           {matchingDocId === item.id ? "Posting…" : "Create and match"}
@@ -1076,7 +1084,7 @@ export default function BankReconPage() {
             <Button
               variant="outline"
               size="sm"
-              disabled={!canWrite || mutating || !selectedStmt || creatingAdjusting}
+              disabled={!canPostFinancialEntries || mutating || !selectedStmt || creatingAdjusting}
               onClick={() => void handleCreateAdjustingEntry()}
             >
               <Icons.Plus className="mr-2 h-4 w-4" />
@@ -1221,7 +1229,7 @@ export default function BankReconPage() {
           <SheetFooter className="mt-6">
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
             {pendingLine && !settlementEnabled && <div className="mr-auto text-sm" role="status">Allocated {formatMoney(allocationBalance(pendingLine.amount, openItemAllocations).allocated, currency)} · Remaining {formatMoney(allocationBalance(pendingLine.amount, openItemAllocations).remaining, currency)}</div>}
-            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={!canWrite || mutating || creating || !counterpartyId || !pendingLine || !allocationReady}>
+            <Button onClick={() => void handleCreatePaymentSubmit()} disabled={!canPostFinancialEntries || mutating || creating || !counterpartyId || !pendingLine || !allocationReady}>
               {creating ? "Saving…" : "Suggest grouped allocation"}
             </Button>
           </SheetFooter>

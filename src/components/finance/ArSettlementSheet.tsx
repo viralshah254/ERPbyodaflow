@@ -27,6 +27,7 @@ import {
   sumAmounts,
 } from "@/lib/ar/settlement-edit";
 import { formatMoney } from "@/lib/money";
+import { groupReceiptMoney, parseReceiptMoney } from "@/lib/ar/receipt-money";
 import type { ArOpenItem, CreditNoteApplicationLine, SettlementPreview } from "@/lib/types/ar";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { useCopilotStore } from "@/stores/copilot-store";
@@ -133,7 +134,7 @@ export function ArSettlementSheet({
 
   React.useEffect(() => {
     if (!open || !customerId) return;
-    const parsed = Number(amount);
+    const parsed = parseReceiptMoney(amount);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setPreview(null);
       return;
@@ -166,7 +167,7 @@ export function ArSettlementSheet({
     };
   }, [open, customerId, amount, reference, pinnedInvoice, dirty]);
 
-  const parsedAmount = Number(amount);
+  const parsedAmount = parseReceiptMoney(amount);
   const cashApplied = sumAmounts(Object.values(invoiceAmounts));
   const creditsApplied = sumAmounts(creditApplications.map((line) => line.amount));
   const unapplied = Number.isFinite(parsedAmount) ? roundMoney(parsedAmount - cashApplied) : 0;
@@ -277,11 +278,10 @@ export function ArSettlementSheet({
             <div className="space-y-2">
               <Label>Amount received</Label>
               <Input
-                type="number"
-                min="0"
-                step="0.01"
+                inputMode="decimal"
                 value={amount}
                 onChange={(event) => setAmount(event.target.value)}
+                onBlur={() => setAmount(groupReceiptMoney(amount))}
               />
             </div>
             <div className="space-y-2">
@@ -354,7 +354,7 @@ export function ArSettlementSheet({
             <span>Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}</span>
             {loadingItems ? <span className="text-muted-foreground">Loading open items…</span> : null}
           </div>
-          {problem && customerId && Number(amount) > 0 ? (
+          {problem && customerId && parseReceiptMoney(amount) > 0 ? (
             <p className="text-sm text-destructive">{problem}</p>
           ) : null}
 

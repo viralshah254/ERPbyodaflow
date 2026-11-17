@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fetchPostingBatchBySourceApi, fetchPostingBatchDetailApi, type PostingBatchDetail } from "@/lib/api/finance";
@@ -26,6 +27,7 @@ export function PostingBatchSheet(props: {
     const resolvedSourceId = sourceId;
     let cancelled = false;
     async function load() {
+      setBatch(null);
       setLoading(true);
       try {
         const summary = await fetchPostingBatchBySourceApi(resolvedSourceType, resolvedSourceId);
@@ -53,9 +55,22 @@ export function PostingBatchSheet(props: {
         <SheetHeader>
           <SheetTitle>Posting Batch</SheetTitle>
           <SheetDescription>
-            {batch
-              ? `${batch.sourceType} · ${batch.sourceNumber ?? batch.sourceId} · ${batch.postingDate.slice(0, 10)}`
-              : "Canonical finance posting detail"}
+            {batch ? (
+              <>
+                {batch.sourceType} ·{" "}
+                {batch.sourceType === "invoice" ? (
+                  <Link
+                    href={`/docs/invoice/${encodeURIComponent(batch.sourceId)}`}
+                    className="font-medium text-primary underline underline-offset-2"
+                  >
+                    {batch.sourceNumber ?? batch.sourceId}
+                  </Link>
+                ) : (
+                  batch.sourceNumber ?? batch.sourceId
+                )}
+                {" · "}{batch.postingDate.slice(0, 10)}
+              </>
+            ) : "Canonical finance posting detail"}
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4">

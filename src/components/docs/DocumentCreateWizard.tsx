@@ -1,6 +1,8 @@
 "use client";
 
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
+import { fetchJoyOrderRoute, JOY_BAKERS_ORG_ID, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
+import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -103,7 +105,6 @@ import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
-import { fetchSalesDocumentFlowApi } from "@/lib/api/sales-document-flow";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -567,6 +568,7 @@ export function DocumentCreateWizard({
   const operatingProfile = useOperatingProfile(currentOrgId);
   /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
   const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
+  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && currentOrgId === JOY_BAKERS_ORG_ID;
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -597,13 +599,16 @@ export function DocumentCreateWizard({
   const skipEditAutosaveRef = React.useRef(false);
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
-  const [prefillFinishedGoods, setPrefillFinishedGoods] = React.useState(false);
-  const sheetFinishedGoods = usesInlineQuantitySheet({ type, editing: isEditMode, prefillSalesOrders: prefillFinishedGoods, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
+  const usesSalesLayout = type === "sales-order" || type === "invoice";
+  const salesLayoutReady = !usesSalesLayout || !currentOrgId || operatingProfile.ready;
+  const sheetFinishedGoods = usesInlineQuantitySheet({ type, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
+  const lineByLine = usesSalesLayout && operatingProfile.lineItemLayout === "line_by_line";
+  const skipEmptyQuantities = sheetFinishedGoods || lineByLine;
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
   const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
-    () => (sheetFinishedGoods ? lines.filter((line) => line.qty > 0) : lines),
-    [lines, sheetFinishedGoods]
+    () => (skipEmptyQuantities ? lines.filter((line) => line.qty > 0) : lines),
+    [lines, skipEmptyQuantities]
   );
   const linesOperational = React.useMemo(
     () => documentLinesOperational(billableLines),
@@ -611,10 +616,10 @@ export function DocumentCreateWizard({
   );
   const linesBlockedMessage = React.useCallback(
     (context: "continue" | "review" | "submit") =>
-      sheetFinishedGoods && lines.length > 0 && billableLines.length === 0
+      skipEmptyQuantities && lines.length > 0 && billableLines.length === 0
         ? "Enter a quantity for at least one product."
         : documentLinesOperationalErrorMessage(billableLines, context),
-    [billableLines, lines.length, sheetFinishedGoods]
+    [billableLines, lines.length, skipEmptyQuantities]
   );
   const [submitting, setSubmitting] = React.useState(false);
   const [invoiceCopyFile, setInvoiceCopyFile] = React.useState<File | null>(null);
@@ -752,24 +757,42 @@ export function DocumentCreateWizard({
   }, [showShipTo, selectedPartyId]);
 
   const watchedWarehouse = form.watch("warehouse");
+  const orderDate = form.watch("date");
+  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string>();
+  const routeDeliveryDate = deliveryDateOverride ?? orderDate;
+  const routeLookupKey = JSON.stringify([selectedPartyId, selectedDeliverySite, routeDeliveryDate]);
+  const [routeLookup, setRouteLookup] = React.useState<{
+    key: string; routes: CollectionRoute[]; defaultRouteId?: string; saved?: boolean; error?: string;
+  }>();
+  const activeRouteLookup = routeLookup?.key === routeLookupKey ? routeLookup : undefined;
+  const [routeSelection, setRouteSelection] = React.useState<{
+    key: string; routeId: string; collector?: RouteCollector;
+  }>();
+  const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
+  const activeCollectionRoute = activeRouteLookup?.routes.find((route) =>
+    route.id === (manualRoute?.routeId ?? activeRouteLookup.defaultRouteId));
+  const routeCollector = manualRoute ? manualRoute.collector : activeCollectionRoute?.collectors[0];
+
+  React.useEffect(() => {
+    if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
+    let active = true;
+    fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite)
+      .then((result) => { if (active) setRouteLookup({ key: routeLookupKey, ...result }); })
+      .catch((error) => {
+        if (active) setRouteLookup({ key: routeLookupKey, routes: [], error: error.message || "Could not load delivery routes." });
+      });
+    return () => { active = false; };
+  }, [joyRouteOrderEnabled, routeLookupKey, selectedPartyId, routeDeliveryDate, selectedDeliverySite]);
+
+  React.useEffect(() => {
+    if (joyRouteOrderEnabled) form.setValue("warehouse", activeCollectionRoute?.id ?? "");
+  }, [joyRouteOrderEnabled, form, activeCollectionRoute?.id]);
+
 
   React.useEffect(() => {
     if (isEditMode) return;
     deleteDocumentDraftApi(type).catch(() => {});
   }, [type, isEditMode]);
-
-  React.useEffect(() => {
-    if (isEditMode || type !== "sales-order" || !isApiConfigured()) return;
-    let cancelled = false;
-    fetchSalesDocumentFlowApi()
-      .then((settings) => {
-        if (!cancelled) setPrefillFinishedGoods(settings.prefillSalesOrderFinishedGoods);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [isEditMode, type]);
 
   React.useEffect(() => {
     if (!scanId || isEditMode) return;
@@ -1101,12 +1124,16 @@ export function DocumentCreateWizard({
     []
   );
 
+  const lineProductIdsKey = React.useMemo(
+    () => JSON.stringify([...new Set(lines.map((line) => line.productId).filter(Boolean))]),
+    [lines]
+  );
   React.useEffect(() => {
     if (step !== 2) return;
     // Purchasing docs use cost-based / manual pricing; bulk prefetching all packaging
     // and price-list data for every product creates hundreds of parallel API calls.
     // Skip for purchasing flows — data will be fetched lazily per selected line.
-    if (sheetFinishedGoods) return;
+    if (!salesLayoutReady || sheetFinishedGoods) return;
     const isPurchasingDoc =
       type === "bill" || type === "purchase-order" || type === "grn" ||
       type === "purchase-request" || type === "purchase-credit-note" || type === "purchase-debit-note";
@@ -1116,7 +1143,7 @@ export function DocumentCreateWizard({
       setLinePackagingReady(true);
       return;
     }
-    const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))] as string[];
+    const productIds: string[] = JSON.parse(lineProductIdsKey);
     if (!productIds.length) {
       setLinePackagingReady(true);
       return;
@@ -1126,7 +1153,7 @@ export function DocumentCreateWizard({
     return () => {
       cancelled = true;
     };
-  }, [step, type, lines, prefetchLineProductData, sheetFinishedGoods]);
+  }, [step, type, lineProductIdsKey, prefetchLineProductData, salesLayoutReady, sheetFinishedGoods]);
 
   const selectedPartyOption = React.useMemo(() => {
     if (selectedPartyDetail) return toPartyLookupOption(selectedPartyDetail);
@@ -1161,7 +1188,7 @@ export function DocumentCreateWizard({
     partyDetailLoading,
   ]);
 
-  const linesStepReady = lineCatalogReady && linePackagingReady && salesPricingReady;
+  const linesStepReady = salesLayoutReady && lineCatalogReady && linePackagingReady && salesPricingReady;
 
   React.useEffect(() => {
     if (step !== 2) {
@@ -1225,14 +1252,14 @@ export function DocumentCreateWizard({
     (next: DocumentLine[] | ((prev: DocumentLine[]) => DocumentLine[])) => {
       setLines((prev) => {
         const resolved = typeof next === "function" ? next(prev) : next;
-        const counted = sheetFinishedGoods ? resolved.filter((line) => line.qty > 0) : resolved;
+        const counted = skipEmptyQuantities ? resolved.filter((line) => line.qty > 0) : resolved;
         const total = counted.reduce((s, l) => s + l.amount, 0);
         form.setValue("linesCount", counted.length);
         form.setValue("totalAmount", total);
         return resolved;
       });
     },
-    [form, sheetFinishedGoods]
+    [form, skipEmptyQuantities]
   );
 
   const handlePackagingUpdated = React.useCallback((productId: string, items: ProductPackaging[]) => {
@@ -1470,7 +1497,10 @@ export function DocumentCreateWizard({
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
-        warehouseId: form.getValues("warehouse") || undefined,
+        warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
+        ...(joyRouteOrderEnabled && routeCollector ? {
+          joyRouteOrder: { deliveryDate: routeDeliveryDate, salesRepId: routeCollector.salesRepId, tillNumber: routeCollector.tillNumber },
+        } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1554,6 +1584,10 @@ export function DocumentCreateWizard({
       showShipTo,
       hasDeliverySiteChange,
       selectedDeliverySite,
+      joyRouteOrderEnabled,
+      activeCollectionRoute,
+      routeCollector,
+      routeDeliveryDate,
       baseCurrency,
       form,
       billableLines,
@@ -1575,7 +1609,7 @@ export function DocumentCreateWizard({
 
   const persistEditDraft = React.useCallback(
     (immediate = false) => {
-      if (explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
+      if (!salesLayoutReady || explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
       const doSave = () => {
         if (isOdaflowFmcgEdit && odaflowBaselineRef.current) {
           const baseline = odaflowBaselineRef.current;
@@ -1599,7 +1633,7 @@ export function DocumentCreateWizard({
       }
       editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
     },
-    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, type]
+    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, salesLayoutReady, type]
   );
 
   const persistWizardProgress = React.useCallback(
@@ -1634,7 +1668,11 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (!routeDeliveryStore) return false;
+    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeCollector || !routeDeliveryDate)) {
+      toast.error("Choose a delivery date, route, sales rep and till.");
+      return true;
+    }
+    if (!routeDeliveryStore || joyRouteOrderEnabled) return false;
     if (String(form.getValues("warehouse") ?? "").trim()) return false;
     form.setError("warehouse", {
       type: "required",
@@ -1642,7 +1680,7 @@ export function DocumentCreateWizard({
     });
     toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
-  }, [form, routeDeliveryStore]);
+  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeCollector, routeDeliveryDate]);
 
   const goToStep = React.useCallback(
     async (targetStep: number) => {
@@ -2715,7 +2753,7 @@ export function DocumentCreateWizard({
               )}
               <div className="grid gap-4 sm:grid-cols-2">
                 {headerFields.filter((f) => {
-                  if (f.type === "po-search") return false;
+                  if (f.type === "po-search" || (joyRouteOrderEnabled && f.id === "warehouse")) return false;
                   // For franchise outlets, the HQ supplier is auto-set — hide the party picker.
                   if (isHqDoc && f.id === "party") return false;
                   return true;
@@ -2770,6 +2808,27 @@ export function DocumentCreateWizard({
                   {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}
                   {deliverySiteError && <p className="text-xs text-destructive">{deliverySiteError}</p>}
                 </div>
+              )}
+              {joyRouteOrderEnabled && (
+                <JoyOrderRouteFields
+                  date={routeDeliveryDate}
+                  onDateChange={setDeliveryDateOverride}
+                  routes={activeRouteLookup?.routes ?? []}
+                  route={activeCollectionRoute}
+                  savedRoute={activeRouteLookup?.saved}
+                  onRouteChange={(routeId) => setRouteSelection({
+                    key: routeLookupKey,
+                    routeId,
+                    collector: activeRouteLookup?.routes.find((row) => row.id === routeId)?.collectors[0],
+                  })}
+                  collector={routeCollector}
+                  onCollectorChange={(collector) => setRouteSelection({
+                    key: routeLookupKey, routeId: activeCollectionRoute?.id ?? "", collector,
+                  })}
+                  hasCustomer={!!selectedPartyId}
+                  loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
+                  error={activeRouteLookup?.error}
+                />
               )}
               {type === "delivery-note" ? (
                 <p className="text-xs text-muted-foreground mt-2">
@@ -2999,9 +3058,10 @@ export function DocumentCreateWizard({
                 </a>
               </div>
             )}
-            <div className={cn(!linesStepReady && "pointer-events-none opacity-60")}>
-            <DocumentLineEditor
+            <div className={cn(!linesStepReady && !skipEmptyQuantities && "pointer-events-none opacity-60")}>
+            {salesLayoutReady ? <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
+              lineByLine={lineByLine}
               packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}
@@ -3045,7 +3105,7 @@ export function DocumentCreateWizard({
                     }
                   : undefined
               }
-            />
+            /> : null}
             </div>
             {fmcgOrg && effectiveTaxConfig ? (
               <div className="mt-4 rounded-lg border p-3 text-sm">
@@ -3124,12 +3184,18 @@ export function DocumentCreateWizard({
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Route warehouse</span>
                     <p className="font-medium">
-                      {(fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
+                      {activeCollectionRoute?.name || (fieldOptions["warehouse"] ?? []).find((w) => w.id === form.watch("warehouse"))?.label ||
                         form.watch("warehouse") ||
                         "—"}
                     </p>
                   </div>
                 ) : null}
+                {joyRouteOrderEnabled && routeCollector && (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Delivery and collection</span>
+                    <p className="font-medium">{routeDeliveryDate} · {routeCollector.salesRep} · Till {routeCollector.tillNumber}</p>
+                  </div>
+                )}
                 {type === "delivery-note" ? (
                   <>
                     <div className="space-y-1">
@@ -3269,7 +3335,7 @@ export function DocumentCreateWizard({
           </Button>
         </div>
         <div className="flex gap-2">
-          {step < 3 ? (
+          {step < 3 && !(lineByLine && step === 2) ? (
             <Button
               onClick={() => void validateAndNext()}
               disabled={stepAdvanceBlocked}
@@ -3277,14 +3343,14 @@ export function DocumentCreateWizard({
             >
               Next
             </Button>
-          ) : (
+          ) : step === 3 ? (
             <Button onClick={() => void onSubmit()} disabled={submitting}>
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
-          )}
+          ) : null}
           {step < 3 && (
             <Button
-              variant="outline"
+              variant={lineByLine && step === 2 ? "default" : "outline"}
               onClick={() => void onReview()}
               disabled={step === 2 && (!linesStepReady || !linesOperational)}
               title={

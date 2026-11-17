@@ -49,9 +49,10 @@ export default function KraIntegrationSettingsPage() {
   const canSave = hasRuntimePermission(permissions, "admin.settings");
 
   const [postingMode, setPostingMode] = React.useState<InvoicePostingMode>("KRA_REQUIRED");
+  const [requireCustomerKraPin, setRequireCustomerKraPin] = React.useState<boolean | undefined>();
   const [modeLoaded, setModeLoaded] = React.useState(false);
   const [modeSaving, setModeSaving] = React.useState(false);
-  React.useEffect(() => { void fetchInvoicePostingMode().then(data => { setPostingMode(data.mode); setModeLoaded(true); }).catch(() => toast.error("Failed to load invoice posting mode.")); }, []);
+  React.useEffect(() => { void fetchInvoicePostingMode().then(data => { setPostingMode(data.mode); setRequireCustomerKraPin(data.requireCustomerKraPin); setModeLoaded(true); }).catch(() => toast.error("Failed to load invoice posting mode.")); }, []);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [testing, setTesting] = React.useState(false);
@@ -190,7 +191,30 @@ export default function KraIntegrationSettingsPage() {
               <SelectTrigger aria-label="Invoice posting mode"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="ACCOUNTING_ONLY">Accounting only — no KRA submission</SelectItem><SelectItem value="KRA_REQUIRED">KRA signing required</SelectItem></SelectContent>
             </Select>
-            <Button disabled={!canSave || !modeLoaded || modeSaving} onClick={async () => { setModeSaving(true); try { await saveInvoicePostingMode(postingMode); toast.success("Invoice posting mode saved."); } catch (error) { toast.error(error instanceof Error ? error.message : "Could not save posting mode."); } finally { setModeSaving(false); } }}>Save posting mode</Button>
+            {requireCustomerKraPin !== undefined && (
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="require-customer-kra-pin"
+                  checked={requireCustomerKraPin}
+                  onCheckedChange={(checked) => setRequireCustomerKraPin(checked === true)}
+                  disabled={!canSave || modeSaving}
+                />
+                <Label htmlFor="require-customer-kra-pin">Require a customer KRA PIN before signing invoices</Label>
+              </div>
+            )}
+            <Button disabled={!canSave || !modeLoaded || modeSaving} onClick={async () => {
+              setModeSaving(true);
+              try {
+                const saved = await saveInvoicePostingMode(postingMode, requireCustomerKraPin);
+                setPostingMode(saved.mode);
+                setRequireCustomerKraPin(saved.requireCustomerKraPin);
+                toast.success("Invoice posting settings saved.");
+              } catch (error) {
+                toast.error(error instanceof Error ? error.message : "Could not save posting settings.");
+              } finally {
+                setModeSaving(false);
+              }
+            }}>Save posting settings</Button>
           </CardContent>
         </Card>
         {incotexLocked ? (

@@ -111,10 +111,9 @@ export const SETTINGS_HUB_GROUPS: SettingsHubGroup[] = [
       {
         href: "/settings/sales/document-flow",
         label: "Document flow",
-        description: "Sales order, pick & pack, invoice, delivery note, and proof of delivery",
+        description: "Line entry layouts for sales orders and invoices, plus fulfilment settings",
         icon: "GitBranch",
         requiresPermissions: ["settings.org.read"],
-        requiresFmcg: true,
       },
       {
         href: "/settings/sales/returns-policy",

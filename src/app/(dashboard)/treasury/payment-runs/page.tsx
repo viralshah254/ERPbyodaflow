@@ -72,7 +72,10 @@ function exportPaymentRunCSV(bills: BillDueRow[], method: PaymentMethod) {
   URL.revokeObjectURL(url);
 }
 
+import { useHasPermission } from "@/lib/rbac/use-write-guard";
+
 export default function PaymentRunsPage() {
+  const canPrepare = useHasPermission("finance.write", "finance.receipts.write");
   const router = useRouter();
   const [createOpen, setCreateOpen] = React.useState(false);
   const [selectedBills, setSelectedBills] = React.useState<Set<string>>(new Set());
@@ -177,10 +180,10 @@ export default function PaymentRunsPage() {
         actions={
           <div className="flex items-center gap-2">
             <ExplainThis prompt="Explain payment runs, bank files, and approval flow." label="Explain payment runs" />
-            <Button size="sm" onClick={() => setCreateOpen(true)} data-tour-step="create-button">
+            {canPrepare && <Button size="sm" onClick={() => setCreateOpen(true)} data-tour-step="create-button">
               <Icons.Plus className="mr-2 h-4 w-4" />
               New payment run
-            </Button>
+            </Button>}
           </div>
         }
       />

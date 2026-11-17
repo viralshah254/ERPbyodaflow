@@ -73,6 +73,7 @@ import { useAuthStore } from "@/stores/auth-store";
 import { fetchRuntimeSession } from "@/lib/api/context";
 import { isSeafoodOrg } from "@/config/industry";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { AccountsAccessPanel } from "@/components/settings/accounts-access-panel";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 
 /** Roles that belong to seafood / franchise verticals — hide for FMCG orgs. */
@@ -92,6 +93,7 @@ export default function UsersRolesPage() {
   const searchParams = useSearchParams();
   const deepLinkUserId = searchParams.get("userId")?.trim() ?? "";
   const canManageUsers = useHasPermission("admin.users");
+  const canManageSettings = useHasPermission("admin.settings");
   const currentUserId = useAuthStore((s) => s.user?.userId);
   const setSession = useAuthStore((s) => s.setSession);
   const templateId = useOrgContextStore((s) => s.templateId);
@@ -479,6 +481,7 @@ export default function UsersRolesPage() {
               ) : null}
             </TabsTrigger>
             <TabsTrigger value="roles">Roles</TabsTrigger>
+            {canManageUsers && canManageSettings && <TabsTrigger value="access">Access</TabsTrigger>}
             {showFranchisees ? (
               <TabsTrigger value="franchisees" onClick={loadFranchiseOutlets}>
                 Franchisees
@@ -731,6 +734,9 @@ export default function UsersRolesPage() {
             </Card>
           </TabsContent>
 
+          {canManageUsers && canManageSettings && (
+            <TabsContent value="access"><AccountsAccessPanel users={users} /></TabsContent>
+          )}
           <TabsContent value="roles" className="space-y-4">
             <Card data-tutorial-hint="roles-permissions">
               <CardHeader className="flex flex-row items-center justify-between gap-2 flex-wrap">
@@ -1134,12 +1140,38 @@ export default function UsersRolesPage() {
             ) : null}
           </div>
           <SheetFooter className="mt-6 flex flex-col gap-2">
+            {canManageUsers && editingUser && editingUser.id !== currentUserId &&
+              !editingUserIsOwner && (editingUser.status ?? "ACTIVE") === "ACTIVE" && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                disabled={savingUser || deletingUser}
+                onClick={async () => {
+                  const name = [editingUser.firstName, editingUser.lastName].filter(Boolean).join(" ") || editingUser.email;
+                  if (!confirm(`Revoke ERP access for ${name}? You can restore it by setting their status to Active.`)) return;
+                  try {
+                    setSavingUser(true);
+                    await updateUserApi(editingUser.id, { status: "SUSPENDED" });
+                    toast.success(`ERP access revoked for ${name}.`);
+                    setUserSheetOpen(false);
+                    await refreshUsers();
+                  } catch (error) {
+                    toast.error(error instanceof Error ? error.message : "Failed to revoke ERP access.");
+                  } finally {
+                    setSavingUser(false);
+                  }
+                }}
+              >
+                Revoke ERP access
+              </Button>
+            )}
             {editingUser && !editingUserIsOwner && (
               <Button
                 variant="destructive"
                 size="sm"
                 className="w-full"
-                disabled={deletingUser}
+                disabled={deletingUser || savingUser}
                 onClick={async () => {
                   if (
                     !confirm(

@@ -13,7 +13,8 @@ export function fetchDocumentHub(params?: { status?: string; documentType?: stri
 
 export async function uploadDocumentHubFiles(
   files: File[],
-  sourceTransaction?: { docType: string; docId: string }
+  sourceTransaction?: { docType: string; docId: string },
+  purpose?: "remittance_advice",
 ) {
   const encoded = await Promise.all(
     files.map(async (file) => ({
@@ -24,7 +25,7 @@ export async function uploadDocumentHubFiles(
   );
   return apiRequest<{ uploads: Array<{ fileId: string; items: ScannedDocument[] }> }>("/api/document-hub/uploads", {
     method: "POST",
-    body: { files: encoded, sourceTransaction },
+    body: { files: encoded, sourceTransaction, purpose },
   });
 }
 
