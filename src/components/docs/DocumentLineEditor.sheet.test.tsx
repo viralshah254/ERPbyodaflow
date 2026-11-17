@@ -62,6 +62,34 @@ it("moves from product to quantity and back to a fresh product search with Enter
   expect(within(quantity.closest("tr")!).getByText("KES 100.00")).toBeInTheDocument();
 });
 
+it("adds several ticked products in one step", async () => {
+  function LineByLineForm() {
+    const [lines, setLines] = React.useState<DocumentLine[]>([]);
+    return (
+      <DocumentLineEditor
+        currency="KES"
+        fmcgOrg
+        lineByLine
+        productFilter="sellable"
+        lines={lines}
+        onLinesChange={setLines}
+        catalogPricesByProductId={{ queen: 40, cake: 100 }}
+      />
+    );
+  }
+  render(<LineByLineForm />);
+  const search = screen.getByRole("combobox", { name: "Search products to add" });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.change(search, { target: { value: "Queen" } });
+  fireEvent.click(await screen.findByRole("checkbox", { name: "Select Queen cakes" }));
+  fireEvent.change(search, { target: { value: "Celebration" } });
+  fireEvent.click(await screen.findByRole("checkbox", { name: "Select Celebration cake" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add 2 products" }));
+  expect(await screen.findByLabelText("Quantity for Queen cakes")).toBeInTheDocument();
+  expect(screen.getByLabelText("Quantity for Celebration cake")).toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Search products to add" })).toHaveValue("");
+});
+
 it("loads 100 inline rows with one metadata batch and no per-product detail or variant requests", async () => {
   api.configured = true;
   const rows = Array.from({ length: 100 }, (_, i) => ({ ...products[0], id: `fg-${i}`, sku: String(i), code: String(i), name: `Finished ${i}` }));

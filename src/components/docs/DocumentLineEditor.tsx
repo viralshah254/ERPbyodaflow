@@ -6,6 +6,7 @@ import { Table as InteractiveTable } from "@/components/ui/table";
 import * as React from "react";
 import { productMatchesSearch, preferExactProductIdentifiers, splitProductSearchQuantity } from "@/lib/products/product-search";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
 import { sanitizeDecimalInput, parseDecimalString, parsePartialDecimalString, formatDecimalDisplay } from "@/lib/decimal-input";
@@ -292,6 +293,7 @@ export function DocumentLineEditor({
   const [expandedLineIds, setExpandedLineIds] = React.useState<Record<string, boolean>>({});
   const [remoteMatches, setRemoteMatches] = React.useState<ProductRow[]>([]);
   const [remoteSearchKey, setRemoteSearchKey] = React.useState("");
+  const [pickedProducts, setPickedProducts] = React.useState<Map<string, ProductRow>>(() => new Map());
 
   React.useEffect(() => {
     if (!fmcgOrg || !swapLineId) return;
@@ -1230,6 +1232,12 @@ export function DocumentLineEditor({
     const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : lineByLine ? 0 : 1;
     commitProducts([{ product, qty, asNewLine: lineByLine, lineId }], replacing ?? undefined, !lineId && (!keepSearch || Boolean(replacing)));
     if (lineId) setPendingQtyFocusId(lineId);
+    setPickedProducts((prev) => {
+      if (!prev.has(product.id)) return prev;
+      const next = new Map(prev);
+      next.delete(product.id);
+      return next;
+    });
     setSearchQuery("");
     setCategoryChip(null);
     if (keepSearch && !replacing) {
@@ -1238,6 +1246,39 @@ export function DocumentLineEditor({
     } else {
       setSearchOpen(false);
     }
+  };
+
+  const togglePickedProduct = (product: ProductRow) => {
+    setPickedProducts((prev) => {
+      const next = new Map(prev);
+      if (next.has(product.id)) next.delete(product.id);
+      else next.set(product.id, product);
+      return next;
+    });
+    setSearchOpen(true);
+  };
+
+  const addPickedProducts = () => {
+    const items = [...pickedProducts.values()];
+    if (!items.length || swapLineId) return;
+    const stamp = Date.now();
+    const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : lineByLine ? 0 : 1;
+    const firstId = lineByLine ? `line-${stamp}-0` : undefined;
+    commitProducts(
+      items.map((product, i) => ({
+        product,
+        qty,
+        asNewLine: lineByLine,
+        lineId: lineByLine ? `line-${stamp}-${i}` : undefined,
+      })),
+      undefined,
+      !lineByLine
+    );
+    if (firstId) setPendingQtyFocusId(firstId);
+    setPickedProducts(new Map());
+    setSearchQuery("");
+    setCategoryChip(null);
+    setSearchOpen(false);
   };
 
   const displayedLines = React.useMemo(() => {
@@ -1322,6 +1363,7 @@ export function DocumentLineEditor({
     if (event.key === "Escape") {
       setSearchOpen(false);
       setSwapLineId(null);
+      setPickedProducts(new Map());
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -1404,7 +1446,7 @@ export function DocumentLineEditor({
         </div>
         )}
         {lineByLine ? (
-          <p className="text-xs text-muted-foreground">Choose a product, enter its quantity, then press Enter for the next line.</p>
+          <p className="text-xs text-muted-foreground">Tick products to add several at once, or choose one, enter its quantity, then press Enter for the next line.</p>
         ) : sheetFinishedGoods || (fmcgOrg && !swapLineId) ? null : (
         <p className="text-xs text-muted-foreground">
           <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd> new line
@@ -1418,11 +1460,12 @@ export function DocumentLineEditor({
           </p>
         ) : null}
         {searchOpen && !sheetFinishedGoods && (lineByLine || !fmcgOrg || swapLineId) ? (
+          <div className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-sm">
           <div
             id={searchResultsId}
             role={lineByLine ? "listbox" : undefined}
             aria-label={lineByLine ? "Matching products" : undefined}
-            className="max-h-80 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-sm"
+            className="max-h-72 overflow-y-auto"
           >
             {showChips ? (
               <div className="flex flex-wrap gap-1.5 border-b p-2">
@@ -1453,7 +1496,16 @@ export function DocumentLineEditor({
             ) : (
               <ul role={lineByLine ? "presentation" : undefined}>
                 {searchResults.map((p, index) => (
-                  <li key={p.id} role={lineByLine ? "presentation" : undefined}>
+                  <li key={p.id} role={lineByLine ? "presentation" : undefined} className="flex items-start gap-2 pl-2 pr-2">
+                    {!swapLineId ? (
+                      <Checkbox
+                        className="mt-3"
+                        checked={pickedProducts.has(p.id)}
+                        onCheckedChange={() => togglePickedProduct(p)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        aria-label={`Select ${p.name}`}
+                      />
+                    ) : null}
                     <button
                       type="button"
                       id={lineByLine ? `${searchResultsId}-${index}` : undefined}
@@ -1461,7 +1513,7 @@ export function DocumentLineEditor({
                       aria-selected={lineByLine ? index === highlightIndex : undefined}
                       tabIndex={lineByLine ? -1 : undefined}
                       className={cn(
-                        "flex w-full items-start gap-3 px-3 py-2 text-left",
+                        "flex min-w-0 flex-1 items-start gap-3 px-3 py-2 text-left",
                         index === highlightIndex ? "bg-muted" : "hover:bg-muted/60"
                       )}
                       onMouseEnter={() => setHighlightIndex(index)}
@@ -1485,6 +1537,35 @@ export function DocumentLineEditor({
                 ))}
               </ul>
             )}
+          </div>
+          {!swapLineId ? (
+            <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+              <span className="text-xs text-muted-foreground">
+                {pickedProducts.size === 0 ? "Tick products to add several at once" : `${pickedProducts.size} selected`}
+                {pickedProducts.size > 0 ? (
+                  <button
+                    type="button"
+                    className="ml-2 underline underline-offset-2 hover:text-foreground"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setPickedProducts(new Map())}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                disabled={pickedProducts.size === 0}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={addPickedProducts}
+              >
+                {pickedProducts.size === 0
+                  ? "Add selected"
+                  : `Add ${pickedProducts.size} ${pickedProducts.size === 1 ? "product" : "products"}`}
+              </Button>
+            </div>
+          ) : null}
           </div>
         ) : null}
       </div>
