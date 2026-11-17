@@ -223,6 +223,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "inventory-costing", label: "Costing", href: "/inventory/costing", icon: "Calculator", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-stock-explorer", label: "Stock Explorer", href: "/inventory/stock-explorer", icon: "Search", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-valuation", label: "Valuation", href: "/inventory/valuation", icon: "Scale", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
+      { key: "inventory-opening-costs", label: "Opening costs", href: "/inventory/opening-costs", icon: "BadgeDollarSign", moduleKey: "inventory", requiresPermissions: ["inventory.read", "finance.read", "finance.write"] },
       { key: "inventory-quality", label: "Losses, damages & recalls", href: "/inventory/quality", icon: "ShieldAlert", moduleKey: "inventory", requiresPermissions: ["inventory.read"] },
       { key: "inventory-warehouses", label: "Warehouses & Locations", href: "/inventory/warehouses", icon: "MapPin", moduleKey: "inventory", termKey: "warehouse", requiresPermissions: ["inventory.read"] },
     ],

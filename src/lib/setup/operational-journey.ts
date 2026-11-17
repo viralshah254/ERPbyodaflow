@@ -17,7 +17,7 @@ const META: Record<string, { stage: SetupStage; owner: string; action: string; d
   return_controls: { stage: "operations", owner: "Warehouse & finance", action: "Review return workflow" },
   count_controls: { stage: "operations", owner: "Warehouse & finance", action: "Review stock counts" },
   reorder_policy: { stage: "operations", owner: "Procurement", action: "Review replenishment" },
-  company_cost: { stage: "finance", owner: "Finance", action: "Review SKU valuation" },
+  company_cost: { stage: "finance", owner: "Finance", action: "Set opening costs" },
   wip: { stage: "finance", owner: "Production & finance", action: "Classify legacy production" },
   stock_gl: { stage: "finance", owner: "Finance", action: "Open ledger", dependsOn: ["mapping", "company_cost", "wip"] },
   ar_ap: { stage: "finance", owner: "Finance", action: "Reconcile control accounts", dependsOn: ["mapping"] },

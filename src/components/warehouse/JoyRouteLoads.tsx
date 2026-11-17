@@ -421,7 +421,13 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
         <OrderRoster orders={ordersOnNote(note)} />
         {routeNeedsReview && (
           <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-            DISPATCH is listed as the route for this load. Confirm the delivery route before the truck leaves.
+            DISPATCH is listed as the route for this load. Confirm the delivery route on the sales order before the truck leaves.
+            {ordersOnNote(note)[0] ? (
+              <>
+                {" "}
+                <Link className="text-primary underline" href={`/docs/sales-order/${encodeURIComponent(ordersOnNote(note)[0].id)}`}>Open the sales order</Link>
+              </>
+            ) : null}
           </p>
         )}
         {valuationIssues.length > 0 && (
@@ -429,11 +435,15 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
             <p className="font-semibold">Finance needs to reconcile opening stock values</p>
             <ul className="list-disc pl-5">
               {valuationIssues.map((issue) => (
-                <li key={issue.productId}>{[issue.sku, issue.name].filter(Boolean).join(" · ")}</li>
+                <li key={issue.productId}>
+                  <Link className="text-primary underline underline-offset-2" href={`/inventory/opening-costs?products=${encodeURIComponent(issue.productId)}`}>
+                    {[issue.sku, issue.name].filter(Boolean).join(" · ")}
+                  </Link>
+                </li>
               ))}
             </ul>
             <div className="flex flex-wrap items-center gap-3">
-              <Link href="/settings/fmcg-setup" className="text-primary underline">Open FMCG setup</Link>
+              <Link href={`/inventory/opening-costs?products=${encodeURIComponent(valuationIssues.map((issue) => issue.productId).join(","))}`} className="text-primary underline">Set opening costs</Link>
               <Button variant="outline" size="sm" disabled={busy} onClick={async () => {
                 setBusy(true);
                 try { await onChanged(); }
