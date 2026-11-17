@@ -39,6 +39,28 @@ function gapText(gap: number): string {
   return gap < 0 ? `Take ${roundQty(Math.abs(gap))} off the orders.` : `Put ${roundQty(gap)} back on the orders.`;
 }
 
+/** Scroll a card inside the page, never the locked app shell. scrollIntoView shifts the whole window. */
+function revealInPage(id: string) {
+  const node = document.getElementById(id);
+  const scroller = node?.closest("[data-guide-scroll]");
+  if (!node || !(scroller instanceof HTMLElement)) return;
+  const sticky = scroller.querySelector<HTMLElement>(":scope > .sticky");
+  const headerHeight = sticky?.getBoundingClientRect().height ?? 0;
+  const top =
+    node.getBoundingClientRect().top -
+    scroller.getBoundingClientRect().top +
+    scroller.scrollTop -
+    headerHeight -
+    12;
+  scroller.scrollTo({ top: Math.max(0, top) });
+}
+
+function resetShellScroll() {
+  document.documentElement.scrollTop = 0;
+  document.body.scrollTop = 0;
+  document.getElementById("app-root")?.scrollTo(0, 0);
+}
+
 function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
@@ -61,6 +83,7 @@ function WaitingRouteCard({
   dispatchName,
   onCreated,
   activeNote,
+  focused,
 }: {
   route: JoyWaitingRoute;
   trucks: string[];
@@ -69,11 +92,12 @@ function WaitingRouteCard({
   dispatchName: string;
   onCreated: () => Promise<void>;
   activeNote?: JoyLoadNote;
+  focused?: boolean;
 }) {
   const [truck, setTruck] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   return (
-    <Card id={`route-${route.warehouseId}`}>
+    <Card id={`route-${route.warehouseId}`} className={focused ? "min-w-0 ring-2 ring-primary" : "min-w-0"}>
       <CardHeader className="space-y-1">
         <CardTitle>{placeLabel(route.warehouseName)}</CardTitle>
         <p className="text-sm text-muted-foreground">
@@ -82,24 +106,26 @@ function WaitingRouteCard({
         <p className="text-xs text-muted-foreground">{route.orders.map((order) => order.number).join(", ")}</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="py-1 pr-3">SKU</th>
-              <th className="py-1 pr-3">Product</th>
-              <th className="py-1 pr-3 text-right">Ordered</th>
-            </tr>
-          </thead>
-          <tbody>
-            {route.products.map((product) => (
-              <tr key={product.productId} className="border-t">
-                <td className="py-1 pr-3">{product.sku ?? ""}</td>
-                <td className={`py-1 pr-3 ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
-                <td className="py-1 text-right font-medium tabular-nums">{product.orderedQty}</td>
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="w-16 py-1 pr-3">SKU</th>
+                <th className="py-1 pr-3">Product</th>
+                <th className="w-24 py-1 text-right">Ordered</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {route.products.map((product) => (
+                <tr key={product.productId} className="border-t">
+                  <td className="py-1 pr-3 align-top">{product.sku ?? ""}</td>
+                  <td className={`break-words py-1 pr-3 align-top ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
+                  <td className="py-1 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {activeNote ? (
           <p className="rounded-md border bg-muted/50 p-3 text-sm">
             Waiting for {activeNote.number} to clear.{" "}
@@ -169,7 +195,7 @@ function LoadingNoteCard({
   const invalid = rows.some((row) => !Number.isFinite(row.qty) || row.qty < 0 || row.qty > row.line.orderedQty);
   const full = !invalid && rows.every((row) => Math.abs(row.short) < 0.0001);
   return (
-    <Card id={`note-${note.id}`}>
+    <Card id={`note-${note.id}`} className="min-w-0">
       <CardHeader className="space-y-1">
         <CardTitle>
           {note.number} · {note.truck}
@@ -182,22 +208,23 @@ function LoadingNoteCard({
         <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loading note
         </Button>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full table-fixed text-sm">
           <thead className="text-left text-xs text-muted-foreground">
             <tr>
-              <th className="py-1 pr-3">SKU</th>
+              <th className="w-16 py-1 pr-3">SKU</th>
               <th className="py-1 pr-3">Product</th>
-              <th className="py-1 pr-3 text-right">Ordered</th>
-              <th className="py-1 pr-3 text-right">Loaded</th>
-              <th className="py-1" />
+              <th className="w-24 py-1 pr-3 text-right">Ordered</th>
+              <th className="w-28 py-1 pr-3 text-right">Loaded</th>
+              <th className="w-24 py-1" />
             </tr>
           </thead>
           <tbody>
             {rows.map(({ line, short }) => (
               <tr key={line.productId} className={`border-t ${Math.abs(short) > 0.0001 ? "bg-amber-50 dark:bg-amber-950/30" : ""}`}>
-                <td className="py-1 pr-3">{line.sku ?? ""}</td>
-                <td className={`py-1 pr-3 ${CAPS_ON_PRODUCT_CLASS}`}>{line.name}</td>
-                <td className="py-1 pr-3 text-right tabular-nums">{line.orderedQty}</td>
+                <td className="py-1 pr-3 align-top">{line.sku ?? ""}</td>
+                <td className={`break-words py-1 pr-3 align-top ${CAPS_ON_PRODUCT_CLASS}`}>{line.name}</td>
+                <td className="py-1 pr-3 text-right align-top tabular-nums">{line.orderedQty}</td>
                 <td className="py-1 pr-3">
                   <div className="flex justify-end">
                     <Input
@@ -214,6 +241,7 @@ function LoadingNoteCard({
             ))}
           </tbody>
         </table>
+        </div>
         {canLoad ? (
           <div className="flex flex-wrap items-center gap-3">
             <Button
@@ -636,14 +664,16 @@ function JoyRouteLoadsInner() {
 
   React.useEffect(() => {
     if (!data) return;
-    const target = focusedNote ? `note-${focusedNote.id}`
-      : focusWarehouse && !financeView ? `route-${focusWarehouse}`
-      : step === "leave" ? "step-leave" : "";
-    if (target) document.getElementById(target)?.scrollIntoView({ block: "start" });
-  }, [data, focusedNote, focusWarehouse, financeView, step]);
+    resetShellScroll();
+    if (focusNote) revealInPage(`note-${focusNote}`);
+  }, [data, focusNote]);
 
   if (!data) return <p className="p-3 text-sm text-muted-foreground">Loading routes…</p>;
 
+  const waiting = focusWarehouse
+    ? [...data.waiting].sort((a, b) => Number(b.warehouseId === focusWarehouse) - Number(a.warehouseId === focusWarehouse))
+    : data.waiting;
+  const openedRoute = focusWarehouse ? waiting.find((route) => route.warehouseId === focusWarehouse) : undefined;
   const loading = data.notes.filter((note) => note.status === "OPEN");
   const finance = data.notes.filter((note) => note.status === "AWAITING_FINANCE" || note.status === "INVOICING");
   const ready = data.notes.filter((note) => note.status === "INVOICED" && !note.departedAt);
@@ -653,7 +683,7 @@ function JoyRouteLoadsInner() {
     !financeView
       ? [
           <Section key="waiting" id="step-load" title="Choose a truck" empty="No approved orders are waiting for a truck.">
-            {data.waiting.map((route) => (
+            {waiting.map((route) => (
               <WaitingRouteCard
                 key={route.warehouseId}
                 route={route}
@@ -661,6 +691,7 @@ function JoyRouteLoadsInner() {
                 busyTrucks={data.busyTrucks}
                 canLoad={canLoad}
                 dispatchName={data.dispatchWarehouseName}
+                focused={route.warehouseId === focusWarehouse}
                 activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
                   (note.status === "OPEN" || note.status === "AWAITING_FINANCE" || note.status === "INVOICING"))}
                 onCreated={reload}
@@ -707,7 +738,7 @@ function JoyRouteLoadsInner() {
       : [];
 
   return (
-    <div className="space-y-4 p-3 sm:px-5">
+    <div className="min-w-0 space-y-4 p-3 sm:px-5">
       <nav aria-label="Route load queues" className="flex flex-wrap gap-2">
         <Button asChild size="sm" variant={financeView ? "ghost" : "secondary"}>
           <Link href={queueHref("dispatch")} aria-current={financeView ? undefined : "page"}>Dispatch</Link>
@@ -716,7 +747,13 @@ function JoyRouteLoadsInner() {
           <Link href={queueHref("finance")} aria-current={financeView ? "page" : undefined}>Finance Review <Badge variant="outline">{finance.length}</Badge></Link>
         </Button>
       </nav>
-      {!financeView && <p className="text-sm text-muted-foreground">Pick stock from {placeLabel(data.dispatchWarehouseName)}. Short loads go to Finance Review.</p>}
+      {!financeView && (
+        <p className="text-sm text-muted-foreground">
+          {openedRoute
+            ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order. Pick stock from ${placeLabel(data.dispatchWarehouseName)}.`
+            : `Pick stock from ${placeLabel(data.dispatchWarehouseName)}. Short loads go to Finance Review.`}
+        </p>
+      )}
       {financeView ? financeBlock : step === "leave" ? [...leaveBlocks, ...loadBlocks] : [...loadBlocks, ...leaveBlocks]}
     </div>
   );
