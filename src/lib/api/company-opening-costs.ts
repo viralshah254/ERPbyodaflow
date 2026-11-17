@@ -40,7 +40,6 @@ export async function fetchCompanyOpeningCosts(params: {
 export async function saveCompanyOpeningCost(input: {
   productId: string;
   unitCost: number;
-  evidence: string;
 }): Promise<OpeningCostRow> {
   requireLiveApi("Company opening costs");
   return apiRequest<OpeningCostRow>("/api/inventory/company-opening-costs", { method: "POST", body: input });

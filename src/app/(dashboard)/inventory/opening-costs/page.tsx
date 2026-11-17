@@ -21,7 +21,7 @@ import { toast } from "sonner";
 const PAGE_SIZE = 25;
 const SEARCH_DEBOUNCE_MS = 300;
 
-type Draft = { cost: string; evidence: string };
+type Draft = { cost: string };
 
 export default function OpeningCostsPage() {
   const searchParams = useSearchParams();
@@ -69,11 +69,11 @@ export default function OpeningCostsPage() {
   }, [load]);
 
   const save = async (row: OpeningCostRow) => {
-    const draft = drafts[row.productId] ?? { cost: "", evidence: "" };
+    const draft = drafts[row.productId] ?? { cost: "" };
     const unitCost = Number(draft.cost);
     setSavingId(row.productId);
     try {
-      const saved = await saveCompanyOpeningCost({ productId: row.productId, unitCost, evidence: draft.evidence });
+      const saved = await saveCompanyOpeningCost({ productId: row.productId, unitCost });
       setRows((current) => current.map((item) => (item.productId === row.productId ? { ...item, ...saved, onHand: item.onHand } : item)));
       toast.success(`Opening cost saved for ${row.code || row.name}.`);
     } catch (error) {
@@ -87,7 +87,7 @@ export default function OpeningCostsPage() {
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
         title="Opening costs"
-        description="Record the company opening cost for products that already have stock. This is the cost finance reviews before a load can be invoiced."
+        description="One company cost for each product, in KES, used in every warehouse. Selling prices stay on the price lists."
         breadcrumbs={[{ label: "Inventory", href: "/inventory/costing" }, { label: "Opening costs" }]}
         sticky
         showCommandHint
@@ -97,10 +97,11 @@ export default function OpeningCostsPage() {
           <CardHeader>
             <CardTitle>Products that need a company opening cost</CardTitle>
             <CardDescription className="max-w-3xl">
-              Search by product code or name. Inventory valuation only shows the last costing snapshot.{" "}
-              <Link href="/inventory/valuation" className="font-medium text-foreground underline underline-offset-2">
-                Open valuation
-              </Link>
+              Enter the cost of the product itself. The same figure applies in every warehouse.{" "}
+              <Link href="/pricing/price-lists" className="font-medium text-foreground underline underline-offset-2">
+                Price lists
+              </Link>{" "}
+              hold the selling prices.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -125,20 +126,19 @@ export default function OpeningCostsPage() {
                   <p className="text-sm text-muted-foreground">You can review these products. Saving an opening cost needs finance access.</p>
                 ) : null}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[46rem] text-sm">
+                  <table className="w-full min-w-[36rem] text-sm">
                     <thead>
                       <tr className="border-b text-left text-xs text-muted-foreground">
                         <th className="px-2 py-2 font-medium">Code</th>
                         <th className="px-2 py-2 font-medium">Product</th>
                         <th className="px-2 py-2 text-right font-medium">On hand</th>
-                        <th className="px-2 py-2 font-medium">Opening cost</th>
-                        <th className="px-2 py-2 font-medium">Review reference</th>
+                        <th className="px-2 py-2 font-medium">Company cost (KES)</th>
                         <th className="px-2 py-2 font-medium" />
                       </tr>
                     </thead>
                     <tbody>
                       {rows.map((row) => {
-                        const draft = drafts[row.productId] ?? { cost: "", evidence: "" };
+                        const draft = drafts[row.productId] ?? { cost: "" };
                         const saving = savingId === row.productId;
                         return (
                           <tr key={row.productId} className="border-b align-top">
@@ -153,33 +153,21 @@ export default function OpeningCostsPage() {
                             <td className="px-2 py-3">
                               {row.missing ? (
                                 <Input
-                                  aria-label={`Opening cost for ${row.code || row.name}`}
+                                  aria-label={`Company cost for ${row.code || row.name}`}
                                   inputMode="decimal"
                                   value={draft.cost}
                                   disabled={!canSave || saving}
-                                  onChange={(event) => setDrafts((current) => ({ ...current, [row.productId]: { ...draft, cost: event.target.value } }))}
+                                  placeholder="0.00"
+                                  onChange={(event) => setDrafts((current) => ({ ...current, [row.productId]: { cost: event.target.value } }))}
                                   className="w-32"
                                 />
                               ) : (
                                 <span className="tabular-nums">{formatMoney(row.unitCost ?? 0, row.currency || "KES")}</span>
                               )}
                             </td>
-                            <td className="px-2 py-3">
-                              {row.missing ? (
-                                <Input
-                                  aria-label={`Review reference for ${row.code || row.name}`}
-                                  value={draft.evidence}
-                                  disabled={!canSave || saving}
-                                  placeholder="Finance review reference"
-                                  onChange={(event) => setDrafts((current) => ({ ...current, [row.productId]: { ...draft, evidence: event.target.value } }))}
-                                />
-                              ) : (
-                                <span className="text-muted-foreground">{row.evidence || "Recorded"}</span>
-                              )}
-                            </td>
                             <td className="px-2 py-3 text-right">
                               {row.missing && canSave ? (
-                                <Button size="sm" disabled={saving || !draft.cost.trim() || draft.evidence.trim().length < 3} onClick={() => void save(row)}>
+                                <Button size="sm" disabled={saving || !(Number(draft.cost) > 0)} onClick={() => void save(row)}>
                                   {saving ? "Saving\u2026" : "Save"}
                                 </Button>
                               ) : null}
@@ -189,7 +177,7 @@ export default function OpeningCostsPage() {
                       })}
                       {!loading && rows.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="px-2 py-8 text-center text-muted-foreground">
+                          <td colSpan={5} className="px-2 py-8 text-center text-muted-foreground">
                             {searchQuery ? `No products match \u201c${searchQuery}\u201d.` : "Every product with stock already has a company opening cost."}
                           </td>
                         </tr>
