@@ -25,3 +25,6 @@ export async function proposeFiscalOutcome(id: string, proposal: FiscalRecoveryP
 export async function approveFiscalOutcome(id: string, proposalDigest: string) {
   return apiRequest(`/api/kra/fiscal-recovery/${encodeURIComponent(id)}/approve`, { method: "POST", body: { proposalDigest } });
 }
+export async function checkFiscalResult(id: string) {
+  return apiRequest<{ contract: string; outcome: "accepted" | "rejected" | "unreachable"; message: string; cuInvoiceNumber?: string }>(`/api/kra/fiscal-recovery/${encodeURIComponent(id)}/check`, { method: "POST" });
+}
