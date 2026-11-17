@@ -12,6 +12,7 @@ import type { DocTypeKey } from "@/config/documents/types";
 import { toast } from "sonner";
 
 const statusLabel: Record<string, string> = {
+  QUEUED: "Waiting in queue",
   PREPARED: "Not sent to KRA",
   DISPATCHING: "Waiting for KRA",
   UNCERTAIN: "KRA result unknown",
@@ -32,7 +33,13 @@ function kraResultMissing(error?: string) {
   return /fetch failed|KRA result was not collected|could not be reached|did not answer in time/i.test(error ?? "");
 }
 
-function attemptStatus(row: { state: string; error?: string; receipt?: { cuInvoiceNumber?: string; receiptNumber?: string } | null }) {
+function waitingInQueue(row: { state: string; queue?: string }) {
+  return row.state === "QUEUED" && row.queue !== "ready";
+}
+
+function attemptStatus(row: { state: string; queue?: string; error?: string; receipt?: { cuInvoiceNumber?: string; receiptNumber?: string } | null }) {
+  if (row.state === "QUEUED" && row.queue === "ready") return "Ready to sign";
+  if (waitingInQueue(row)) return "Waiting in queue";
   if (row.state === "UNCERTAIN" && !row.receipt && kraResultMissing(row.error)) return "No KRA result yet";
   return statusLabel[row.state] ?? row.state;
 }
@@ -45,6 +52,8 @@ function plainError(error?: string) {
 
 function nextStep(row: FiscalRecoveryAttempt | null, name: string, canApprove: boolean, waiting: boolean) {
   if (!row) return "Choose an invoice. The next step shows here.";
+  if (waitingInQueue(row)) return `${name} is waiting in the queue. ${row.waitingForDocumentNumber || "The invoice ahead"} has to finish before this invoice can be signed.`;
+  if (row.state === "QUEUED") return `${name} is next in the queue. Open it and use Sign and post.`;
   if (!row.receipt && kraResultMissing(row.error)) return `${name} has no KRA result yet. Incotex could not be reached. Press Check KRA again.`;
   if (waiting && ["PREPARED", "DISPATCHING", "UNCERTAIN"].includes(row.state)) return `KRA may still be answering ${name}. Wait two minutes, then refresh.`;
   if (row.state === "SIGNED") return `${name} was accepted by KRA. Open it and recover the posting. Do not sign it again.`;
@@ -79,10 +88,10 @@ export default function FiscalRecoveryPage() {
   const [changing, setChanging] = React.useState(false);
   const [guideOpen, setGuideOpen] = React.useState(false);
   const [names, setNames] = React.useState<Record<string, string>>({});
+  const [missingDocument, setMissingDocument] = React.useState(false);
   const named = React.useRef(new Set<string>());
   const selection = React.useRef(0);
   const request = React.useRef(0);
-  const opened = React.useRef("");
   const invalidate = React.useCallback(() => { request.current++; selection.current++; }, []);
   const load = React.useCallback(async () => {
     const generation = ++request.current;
@@ -112,10 +121,15 @@ export default function FiscalRecoveryPage() {
     return () => { cancelled = true; };
   }, [rows]);
   React.useEffect(() => {
-    if (!documentFilter || rows.length !== 1 || opened.current === rows[0]._id) return;
-    opened.current = rows[0]._id;
+    if (documentFilter && rows.length > 0) setMissingDocument(false);
+    if (loading || error || !documentFilter || rows.length > 0) return;
+    setMissingDocument(true);
+    setDocumentFilter("");
+  }, [loading, error, documentFilter, rows.length]);
+  React.useEffect(() => {
+    if (rows.length !== 1 || selected?._id === rows[0]._id) return;
     void open(rows[0]);
-  }, [documentFilter, rows]);
+  }, [rows, selected]);
 
   function resetChoice(row: FiscalRecoveryAttempt) {
     setChanging(false);
@@ -198,10 +212,11 @@ export default function FiscalRecoveryPage() {
       </section>
       {!allowed ? <p role="alert" className="rounded-xl border p-5">Finance and tax read permissions are required to view this queue.</p> : error ? <div role="alert" className="rounded-xl border border-destructive/40 p-5"><p className="font-semibold">The recovery queue could not load</p><p className="mt-1 text-sm">{error}</p></div> : <div className="grid items-start gap-5 xl:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)]">
         <section className="min-w-0 rounded-2xl border border-border/80 bg-card p-4 shadow-[0_18px_50px_-28px_rgba(0,0,0,0.85)]">
+          {missingDocument && <div className="mb-4 rounded-xl bg-primary/5 p-3 text-sm leading-6">This invoice was not sent to KRA. The invoice that is still open is listed here.</div>}
           {documentFilter && <div className="mb-4 rounded-xl bg-primary/5 p-3 text-sm"><p>Showing one invoice.</p><Button className="mt-2" variant="outline" size="sm" onClick={() => setDocumentFilter("")}>Show all attempts</Button></div>}
           <label htmlFor="fiscal-search" className="mb-2 block text-sm font-medium">Find an invoice</label>
           <Input id="fiscal-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Invoice number"/>
-          {loading ? <p role="status" className="py-8 text-center text-sm text-muted-foreground">Loading recovery queue…</p> : !filtered.length ? <div className="py-10 text-center"><p className="font-medium">{query ? "No matching invoices" : "No outstanding attempts in your scope"}</p></div> : <div className="mt-4 space-y-2">{filtered.map((row) => <button key={row._id} disabled={busy} onClick={() => void open(row)} aria-pressed={selected?._id === row._id} className={`w-full rounded-xl border p-4 text-left transition hover:border-primary/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${selected?._id === row._id ? "border-primary/70 bg-primary/[0.07] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)]" : "border-border/70 bg-background/40"}`}><span className="flex items-center justify-between gap-2"><span className="text-base font-semibold tracking-tight">{documentLabel(row, names)}</span><ArrowUpRight className="size-4 shrink-0 text-muted-foreground"/></span><span className="mt-2 block text-xs font-medium text-primary">{attemptStatus(row)}</span><span className="mt-1 block text-xs text-muted-foreground">{providerName(row.provider)} · {new Date(row.updatedAt).toLocaleString()}</span></button>)}</div>}
+          {loading ? <p role="status" className="py-8 text-center text-sm text-muted-foreground">Loading recovery queue…</p> : !filtered.length ? <div className="py-10 text-center"><p className="font-medium">{query ? "No matching invoices" : "No outstanding attempts in your scope"}</p></div> : <div className="mt-4 space-y-2">{filtered.map((row) => <button key={row._id} disabled={busy} onClick={() => void open(row)} aria-pressed={selected?._id === row._id} className={`w-full rounded-xl border p-4 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary ${waitingInQueue(row) ? "border-amber-400/80 bg-amber-400/[0.10] hover:border-amber-300" : selected?._id === row._id ? "border-primary/70 bg-primary/[0.07] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] hover:border-primary/40" : "border-border/70 bg-background/40 hover:border-primary/40"}`}><span className="flex items-center justify-between gap-2"><span className="text-base font-semibold tracking-tight">{documentLabel(row, names)}</span><ArrowUpRight className="size-4 shrink-0 text-muted-foreground"/></span><span className={`mt-2 block text-xs font-medium ${waitingInQueue(row) ? "text-amber-300" : "text-primary"}`}>{attemptStatus(row)}</span><span className="mt-1 block text-xs text-muted-foreground">{waitingInQueue(row) && row.waitingForDocumentNumber ? `After ${row.waitingForDocumentNumber} · ` : ""}{providerName(row.provider)} · {new Date(row.updatedAt).toLocaleString()}</span></button>)}</div>}
           {hasMore && <p role="status" className="mt-4 text-xs text-amber-700 dark:text-amber-400">Showing the oldest 100 attempts. Finish these before the rest of the queue.</p>}
         </section>
         <section className="min-w-0 overflow-hidden rounded-2xl border border-border/80 bg-card shadow-[0_18px_50px_-28px_rgba(0,0,0,0.85)]">{detailError ? <p role="alert" className="p-6">{detailError}</p> : !selected ? <p className="px-6 py-16 text-center text-sm text-muted-foreground">Select an invoice.</p> : <div>
@@ -209,12 +224,12 @@ export default function FiscalRecoveryPage() {
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">Invoice</p>
               <h3 className="mt-1 text-2xl font-semibold tracking-tight">{documentLabel(selected, names)}</h3>
-              <p className="mt-3 inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">{attemptStatus(selected)}</p>
+              <p className={`mt-3 inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${waitingInQueue(selected) ? "bg-amber-400/15 text-amber-200" : "bg-primary/10 text-primary"}`}>{attemptStatus(selected)}</p>
             </div>
             <Button asChild variant="outline" size="sm"><Link href={`/docs/${selected.typeKey}/${selected.documentId}`}>Open invoice<ArrowUpRight className="ml-2 size-4"/></Link></Button>
           </div>
           <div className="space-y-4 px-6 py-5">
-          {selected.error && <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.06] px-4 py-3 text-sm leading-6"><p>{plainError(selected.error)}</p>{noResult && canWrite && <Button className="mt-3" disabled={busy} onClick={() => void checkKra()}>Check KRA again</Button>}</div>}
+          {selected.state === "QUEUED" ? <div className={`rounded-xl border px-4 py-3 text-sm leading-6 ${waitingInQueue(selected) ? "border-amber-400/50 bg-amber-400/[0.08] text-amber-50" : "border-border/70 bg-primary/5"}`}><p>{waitingInQueue(selected) ? `${documentLabel(selected, names)} stays in the queue until ${selected.waitingForDocumentNumber || "the invoice ahead"} is finished. It was not sent to KRA.` : `${documentLabel(selected, names)} is next. Open it and use Sign and post.`}</p></div> : selected.error && <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.06] px-4 py-3 text-sm leading-6"><p>{plainError(selected.error)}</p>{noResult && canWrite && <Button className="mt-3" disabled={busy} onClick={() => void checkKra()}>Check KRA again</Button>}</div>}
           {selected.receipt && <p className="rounded-xl bg-primary/5 px-4 py-3 text-sm"><span className="font-medium">CU invoice number</span><span className="mt-1 block tracking-tight">{selected.receipt.cuInvoiceNumber ?? selected.receipt.receiptNumber}</span></p>}
           {selected.review && <div className="rounded-xl border border-border/70 bg-background/40 px-4 py-4 text-sm">
             <p className="font-semibold">{noResult ? "No KRA result yet" : reviewable && !ownRelease ? "Waiting for a second person" : reviewable ? "Ready to clear" : "Reviewed decision"}</p>

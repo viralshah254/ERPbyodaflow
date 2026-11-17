@@ -271,7 +271,7 @@ function fiscalRecoveryToast(message: string): { title: string; description: str
   return null;
 }
 
-function toastDocumentActionError(error: unknown, documentId?: string) {
+function toastDocumentActionError(error: unknown, documentId?: string): "own" | "other" | false {
   const body = (error as { body?: { code?: string; grns?: Array<{ id: string; number: string }> } }).body;
   const grn = body?.code === "LINKED_GRN_NOT_POSTED" ? body.grns?.[0] : undefined;
   if (grn?.id) {
@@ -289,7 +289,8 @@ function toastDocumentActionError(error: unknown, documentId?: string) {
   const message = error instanceof Error ? error.message : "Request failed";
   const fiscal = fiscalRecoveryToast(message);
   if (fiscal) {
-    const href = documentId ? fiscalRecoveryHref(documentId) : "/finance/fiscal-recovery";
+    const otherDocument = /unresolved signing attempt/i.test(message);
+    const href = !otherDocument && documentId ? fiscalRecoveryHref(documentId) : "/finance/fiscal-recovery";
     toast.error(fiscal.title, {
       description: fiscal.description,
       action: {
@@ -300,7 +301,7 @@ function toastDocumentActionError(error: unknown, documentId?: string) {
       },
       duration: 20000,
     });
-    return true;
+    return otherDocument ? "other" : "own";
   }
   toast.error(message);
   return false;
@@ -413,7 +414,7 @@ export default function DocViewPage() {
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
   const [fiscalPostingPreflight, setFiscalPostingPreflight] = React.useState<FiscalPostingPreflight | null>(null);
-  const [fiscalRecoveryPrompt, setFiscalRecoveryPrompt] = React.useState(false);
+  const [fiscalRecoveryPrompt, setFiscalRecoveryPrompt] = React.useState<"own" | "other" | false>(false);
   const [fiscalPostingPreflightOpen, setFiscalPostingPreflightOpen] = React.useState(false);
   const [fiscalPostingPreflightChecking, setFiscalPostingPreflightChecking] = React.useState(false);
   const [startPickPackLoading, setStartPickPackLoading] = React.useState(false);
@@ -913,7 +914,8 @@ export default function DocViewPage() {
   }, [canPost, document?.id, document?.tax, document?.lines, id, signAndPost, type]);
 
   const reportActionError = React.useCallback((error: unknown) => {
-    if (toastDocumentActionError(error, id)) setFiscalRecoveryPrompt(true);
+    const prompt = toastDocumentActionError(error, id);
+    if (prompt) setFiscalRecoveryPrompt(prompt);
   }, [id]);
 
   const ensureFiscalPostingReady = React.useCallback(async () => {
@@ -2462,15 +2464,29 @@ export default function DocViewPage() {
             ]}
           />
         ))}
-        {(openFiscalAttempt(document) || fiscalRecoveryPrompt) ? (
+        {(openFiscalAttempt(document) || fiscalRecoveryPrompt || document?.fiscalState === "QUEUED") ? (
           <div role="status" className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
-            <p className="font-medium leading-snug">This document was not sent to KRA again</p>
-            <p className="mt-1 leading-relaxed">
-              A previous signing attempt is still open. Check what KRA received before you use Sign and post again.
-            </p>
-            <Button size="sm" className="mt-3" asChild>
-              <Link href={fiscalRecoveryHref(id)}>Open fiscal recovery</Link>
-            </Button>
+            {document?.fiscalState === "QUEUED" || (fiscalRecoveryPrompt === "other" && !openFiscalAttempt(document)) ? (
+              <>
+                <p className="font-medium leading-snug">This invoice is waiting in the queue</p>
+                <p className="mt-1 leading-relaxed">
+                  It was not sent. Fiscal recovery lists it in yellow until the invoice ahead of it is finished. When that invoice is done, use Sign and post.
+                </p>
+                <Button size="sm" className="mt-3" asChild>
+                  <Link href="/finance/fiscal-recovery">Open fiscal recovery</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="font-medium leading-snug">This document was not sent to KRA again</p>
+                <p className="mt-1 leading-relaxed">
+                  A previous signing attempt is still open. Check what KRA received before you use Sign and post again.
+                </p>
+                <Button size="sm" className="mt-3" asChild>
+                  <Link href={fiscalRecoveryHref(id)}>Open fiscal recovery</Link>
+                </Button>
+              </>
+            )}
           </div>
         ) : null}
         {odaflowSource ? (

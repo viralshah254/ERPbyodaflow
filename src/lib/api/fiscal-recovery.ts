@@ -2,7 +2,8 @@ import { apiRequest, requireLiveApi } from "./client";
 import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 export type FiscalRecoveryAttempt = {
   _id: string; documentId: string; documentNumber?: string | null; typeKey: string; provider: "incotex" | "etims_oscu";
-  state: "PREPARED" | "DISPATCHING" | "UNCERTAIN" | "SIGNED" | "POSTED" | "RELEASED";
+  state: "QUEUED" | "PREPARED" | "DISPATCHING" | "UNCERTAIN" | "SIGNED" | "POSTED" | "RELEASED";
+  queue?: "waiting" | "ready"; waitingForDocumentNumber?: string | null;
   generation: number; documentHash: string; payloadHash?: string; payload?: Record<string, unknown>; requestNumber?: number;
   createdAt: string; updatedAt: string; dispatchedAt?: string; error?: string; receipt?: KraSigningRecord;
   review?: { digest: string; outcome: "ACCEPTED" | "NOT_ACCEPTED"; reason: string; evidenceReference: string; proposedBy: string; proposedAt: string };
