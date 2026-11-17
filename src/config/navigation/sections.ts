@@ -542,6 +542,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "finance-notes", label: "Credit / debit notes", href: "/finance/notes", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.read"] },
       { key: "finance-tax", label: "Tax / VAT", href: "/finance/tax", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.tax.read"] },
       { key: "finance-kra-signing", label: "KRA signing monitor", href: "/finance/kra-signing", icon: "ShieldCheck", moduleKey: "finance", requiresPermissions: ["finance.read"] },
+      { key: "finance-fiscal-recovery", label: "Fiscal recovery", href: "/finance/fiscal-recovery", icon: "ShieldAlert", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.tax.read"] },
       { key: "finance-kra-cu", label: "KRA CU numbers", href: "/reports/kra-cu", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.read", "purchasing.bills.read", "sales.invoices.read"] },
       { key: "finance-procurement-review", label: "Procurement Review", href: "/finance/procurement-review", icon: "ClipboardList", moduleKey: "finance", requiresFlags: ["procurementAuditCashWeight"], requiresPermissions: ["finance.read"] },
       { key: "finance-fx-revaluations", label: "FX valuations", href: "/finance/fx-revaluations", icon: "ArrowRightLeft", moduleKey: "finance", requiresPermissions: ["finance.read", "finance.bank.read"] },

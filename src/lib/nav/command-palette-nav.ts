@@ -30,6 +30,7 @@ const KEYWORD_HINTS: Record<string, string[]> = {
   "/treasury/collections": ["ar", "receipts"],
   "/ar/receipts": ["cheque", "check", "cashbook", "collection", "deposit", "payment"],
   "/finance/bank-recon": ["reconcile", "statement"],
+  "/finance/fiscal-recovery": ["kra", "incotex", "etims", "uncertain", "signing", "cu", "receipt"],
   "/assets/overview": ["depreciation", "disposals", "register"],
   "/payroll/overview": ["employees", "pay runs", "payslips"],
   "/distribution/trips": ["trip", "logistics", "outbound"],
