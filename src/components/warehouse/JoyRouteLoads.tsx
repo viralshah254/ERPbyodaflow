@@ -18,6 +18,7 @@ import {
   fetchJoyLoadNotes,
   markJoyLoadDeparted,
   recordJoyLoaded,
+  type JoyLoadDocumentPlan,
   type JoyLoadNote,
   type JoyLoadNotes,
   type JoyWaitingRoute,
@@ -38,6 +39,65 @@ function parseQty(raw: string | undefined, fallback: number): number {
 function gapText(gap: number): string {
   if (Math.abs(gap) < 0.0001) return "Matches the truck.";
   return gap < 0 ? `Take ${roundQty(Math.abs(gap))} off the orders.` : `Put ${roundQty(gap)} back on the orders.`;
+}
+
+function lockedDocumentPlan(note: JoyLoadNote): JoyLoadDocumentPlan | null {
+  if (note.results.some((row) => row.invoiceId)) return "both";
+  if (note.documentPlan === "delivery_note" && note.results.some((row) => row.deliveryNoteId)) return "delivery_note";
+  return null;
+}
+
+function LoadDocumentActions({
+  busyPlan,
+  disabled,
+  locked,
+  resumeDeliveryNote,
+  resumeInvoice,
+  onChoose,
+}: {
+  busyPlan: JoyLoadDocumentPlan | null;
+  disabled?: boolean;
+  locked: JoyLoadDocumentPlan | null;
+  resumeDeliveryNote?: boolean;
+  resumeInvoice?: boolean;
+  onChoose: (plan: JoyLoadDocumentPlan) => void;
+}) {
+  const showNote = locked == null || locked === "delivery_note";
+  const showInvoice = locked == null || locked === "both";
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {showNote ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-auto whitespace-normal"
+            disabled={disabled || busyPlan != null}
+            onClick={() => onChoose("delivery_note")}
+          >
+            {busyPlan === "delivery_note" ? "Working…" : resumeDeliveryNote ? "Continue delivery notes" : "Delivery note now"}
+          </Button>
+        ) : null}
+        {showInvoice ? (
+          <Button
+            type="button"
+            className="h-auto whitespace-normal"
+            disabled={disabled || busyPlan != null}
+            onClick={() => onChoose("both")}
+          >
+            {busyPlan === "both" ? "Working…" : resumeInvoice ? "Continue invoices" : "Create invoices"}
+          </Button>
+        ) : null}
+      </div>
+      <p className="max-w-xl text-sm text-muted-foreground">
+        {locked === "delivery_note"
+          ? "The invoice waits until the customer stamps this delivery note."
+          : locked === "both"
+            ? "This load already started an invoice. Continue sends it with the delivery note."
+            : "Delivery note now waits until the customer stamps the note. Create invoices sends the invoice with the goods."}
+      </p>
+    </div>
+  );
 }
 
 /** Scroll a card inside the page, never the locked app shell. scrollIntoView shifts the whole window. */
@@ -443,7 +503,8 @@ function LoadingNoteCard({
   onChanged: () => Promise<void>;
 }) {
   const [loaded, setLoaded] = React.useState<Record<string, string>>({});
-  const [busy, setBusy] = React.useState(false);
+  const [busyPlan, setBusyPlan] = React.useState<JoyLoadDocumentPlan | "cancel" | null>(null);
+  const busy = busyPlan != null;
   const rows = note.lines.map((line) => {
     const qty = parseQty(loaded[line.productId], line.orderedQty);
     return { line, qty, short: roundQty(line.orderedQty - qty) };
@@ -496,45 +557,70 @@ function LoadingNoteCard({
         </table>
         </div>
         {canLoad ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              disabled={invalid || busy}
-              onClick={() => {
-                setBusy(true);
-                void recordJoyLoaded(
-                  note.id,
-                  rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
-                )
-                  .then(async (result) => {
-                    toast.success(
-                      result.status === "INVOICED"
-                        ? `${note.number} loaded in full. Invoices are ready.`
-                        : `${note.number} is short. Finance will choose which orders to reduce.`
-                    );
-                    await onChanged();
-                  })
-                  .catch(async (error) => {
-                    toast.error(errorMessage(error, "Could not record the load"));
-                    await onChanged();
-                  })
-                  .finally(() => setBusy(false));
-              }}
-            >
-              {full ? "Confirm load" : "Confirm short load"}
-            </Button>
+          <div className="space-y-3">
+            {full ? (
+              <LoadDocumentActions
+                busyPlan={busyPlan === "cancel" ? null : busyPlan}
+                disabled={invalid}
+                locked={null}
+                onChoose={(plan) => {
+                  setBusyPlan(plan);
+                  void recordJoyLoaded(
+                    note.id,
+                    rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty })),
+                    plan
+                  )
+                    .then(async () => {
+                      toast.success(
+                        plan === "delivery_note"
+                          ? `${note.number} loaded in full. Delivery notes are ready. Invoice after the customer stamps the note.`
+                          : `${note.number} loaded in full. Invoices and delivery notes are ready.`
+                      );
+                      await onChanged();
+                    })
+                    .catch(async (error) => {
+                      toast.error(errorMessage(error, "Could not record the load"));
+                      await onChanged();
+                    })
+                    .finally(() => setBusyPlan(null));
+                }}
+              />
+            ) : (
+              <Button
+                disabled={invalid || busy}
+                onClick={() => {
+                  setBusyPlan("both");
+                  void recordJoyLoaded(
+                    note.id,
+                    rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
+                  )
+                    .then(async () => {
+                      toast.success(`${note.number} is short. Finance chooses a delivery note now, or invoices with it.`);
+                      await onChanged();
+                    })
+                    .catch(async (error) => {
+                      toast.error(errorMessage(error, "Could not record the load"));
+                      await onChanged();
+                    })
+                    .finally(() => setBusyPlan(null));
+                }}
+              >
+                {busy ? "Working…" : "Confirm short load"}
+              </Button>
+            )}
             <button
               type="button"
               className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
               disabled={busy}
               onClick={() => {
-                setBusy(true);
+                setBusyPlan("cancel");
                 void cancelJoyLoadNote(note.id)
                   .then(async () => {
                     toast.success(`${note.number} cancelled. Its orders are waiting again.`);
                     await onChanged();
                   })
                   .catch((error) => toast.error(errorMessage(error, "Could not cancel")))
-                  .finally(() => setBusy(false));
+                  .finally(() => setBusyPlan(null));
               }}
             >
               Cancel
@@ -550,7 +636,10 @@ function LoadingNoteCard({
 
 function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; canFinance: boolean; onChanged: () => Promise<void> }) {
   const [qty, setQty] = React.useState<Record<string, string>>({});
-  const [busy, setBusy] = React.useState(false);
+  const [busyPlan, setBusyPlan] = React.useState<JoyLoadDocumentPlan | null>(null);
+  const [recheckBusy, setRecheckBusy] = React.useState(false);
+  const busy = busyPlan != null || recheckBusy;
+  const fixedPlan = lockedDocumentPlan(note);
   const invoiced = new Set(note.results.filter((row) => row.invoiceId).map((row) => row.salesOrderId));
   const lines = note.lines.map((line) => {
     const loaded = Number(line.loadedQty ?? 0);
@@ -648,9 +737,9 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 </Link>
               </Button>
               <Button variant="secondary" size="sm" disabled={busy} onClick={async () => {
-                setBusy(true);
+                setRecheckBusy(true);
                 try { await onChanged(); }
-                finally { setBusy(false); }
+                finally { setRecheckBusy(false); }
               }}>Recheck opening values</Button>
             </div>
           </section>
@@ -663,9 +752,9 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 <p className="text-sm text-muted-foreground">Verify the sales unit against the SKU’s stock unit, then recheck this load.</p>
               </div>
               <Button variant="outline" size="sm" disabled={busy} onClick={async () => {
-                setBusy(true);
+                setRecheckBusy(true);
                 try { await onChanged(); }
-                finally { setBusy(false); }
+                finally { setRecheckBusy(false); }
               }}>Recheck mappings</Button>
             </div>
             <ul className="divide-y divide-border">
@@ -722,7 +811,11 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
             </div>
           </div>
         )}
-        {completed > 0 && <p className="text-sm text-muted-foreground">{completed} order{completed === 1 ? "" : "s"} already invoiced and issued.</p>}
+        {completed > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {completed} order{completed === 1 ? "" : "s"} already {fixedPlan === "delivery_note" ? "issued on a delivery note" : "invoiced and issued"}.
+          </p>
+        )}
         {fullLines.length ? (
           <LoadedProductsPanel title="Loaded in full" lines={fullLines} collapsible />
         ) : null}
@@ -745,7 +838,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                     <th className="px-3 py-1.5 font-normal">Order</th>
                     <th className="px-3 py-1.5 font-normal">Customer</th>
                     <th className="px-3 py-1.5 text-right font-normal">Ordered</th>
-                    <th className="px-3 py-1.5 text-right font-normal">To invoice</th>
+                    <th className="px-3 py-1.5 text-right font-normal">To send</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -766,7 +859,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                           <Input
                             className={QTY_INPUT}
                             inputMode="decimal"
-                            aria-label={`Invoice quantity for ${row.salesOrderNumber}`}
+                            aria-label={`Quantity for ${row.salesOrderNumber}`}
                             disabled={busy || !canFinance || invoiced.has(row.salesOrderId)}
                             value={qty[key] ?? String(row.invoiceQty)}
                             onChange={(event) => setQty((current) => ({ ...current, [key]: event.target.value }))}
@@ -788,31 +881,38 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
           );
         })}
         {canFinance ? (
-          <Button
-            disabled={!canSubmit || busy || note.status !== "AWAITING_FINANCE"}
-            onClick={() => {
-              setBusy(true);
+          <LoadDocumentActions
+            busyPlan={busyPlan}
+            disabled={!canSubmit || note.status !== "AWAITING_FINANCE"}
+            locked={fixedPlan}
+            resumeDeliveryNote={note.results.some((row) => row.deliveryNoteId)}
+            resumeInvoice={note.results.some((row) => row.invoiceId)}
+            onChoose={(plan) => {
+              setBusyPlan(plan);
               void allocateJoyLoad(
                 note.id,
                 lines.flatMap((line) =>
                   line.allocations.map((a) => ({ salesOrderId: a.row.salesOrderId, lineId: a.row.lineId, quantity: a.value }))
-                )
+                ),
+                plan
               )
                 .then(async () => {
-                  toast.success(`${note.number} invoiced. Ready for the truck to leave.`);
+                  toast.success(
+                    plan === "delivery_note"
+                      ? `${note.number} has delivery notes. Invoice each one after the customer stamps the note.`
+                      : `${note.number} invoiced. Ready for the truck to leave.`
+                  );
                   await onChanged();
                 })
                 .catch(async (error) => {
-                  toast.error(errorMessage(error, "Could not create the invoices"));
+                  toast.error(errorMessage(error, plan === "delivery_note" ? "Could not create the delivery notes" : "Could not create the invoices"));
                   await onChanged();
                 })
-                .finally(() => setBusy(false));
+                .finally(() => setBusyPlan(null));
             }}
-          >
-            {busy ? "Working…" : note.results.some((row) => row.invoiceId) ? "Resume invoicing" : "Create invoices"}
-          </Button>
+          />
         ) : (
-          <p className="text-sm text-muted-foreground">Finance chooses which orders to reduce, then creates the invoices.</p>
+          <p className="text-sm text-muted-foreground">Finance can send a delivery note now, or create the invoices with it.</p>
         )}
       </CardContent>
     </Card>
@@ -842,8 +942,10 @@ function ReadyToLeaveCard({ note, canLoad, onChanged }: { note: JoyLoadNote; can
             </div>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          Sales orders keep the ordered quantities. Invoices show what was loaded.
+        <p className="text-sm text-muted-foreground">
+          {note.documentPlan === "delivery_note"
+            ? "Delivery notes go with the truck. Create each invoice after the customer clears the note. Sales orders keep the ordered quantities."
+            : "Sales orders keep the ordered quantities. Invoices show what was loaded."}
         </p>
         {canLoad ? (
           <Button
@@ -875,6 +977,9 @@ function LeftTodayCard({ note }: { note: JoyLoadNote }) {
       <LoadNoteHeader note={note} routeHint="Left today" titleClassName="text-base" headerClassName="space-y-2 py-4" />
       <CardContent className="space-y-3 pb-4 text-sm">
         <OrderRoster orders={ordersOnNote(note)} />
+        {note.documentPlan === "delivery_note" ? (
+          <p className="text-muted-foreground">Create each invoice after the customer clears the delivery note.</p>
+        ) : null}
         {note.results.map((row) => (
           <div key={row.salesOrderId} className="flex flex-wrap gap-3">
             {row.invoiceId ? (
@@ -1013,7 +1118,7 @@ function JoyRouteLoadsInner() {
   const leaveBlocks =
     !financeView
       ? [
-          <Section key="ready" id="step-leave" title="Ready to leave" empty="No invoiced loads are waiting to leave.">
+          <Section key="ready" id="step-leave" title="Ready to leave" empty="No loads are waiting to leave.">
             {ready.map((note) => (
               <ReadyToLeaveCard key={note.id} note={note} canLoad={canLoad} onChanged={reload} />
             ))}

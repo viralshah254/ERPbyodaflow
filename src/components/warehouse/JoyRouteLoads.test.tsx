@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { JoyRouteLoads } from "./JoyRouteLoads";
 
 const location = vi.hoisted(() => ({ search: "" }));
+const access = vi.hoisted(() => ({ write: false }));
 const api = vi.hoisted(() => ({
   waiting: [] as Array<{
     warehouseId: string;
@@ -15,7 +16,7 @@ const api = vi.hoisted(() => ({
   notes: [] as Array<Record<string, unknown>>,
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(location.search) }));
-vi.mock("@/lib/rbac/use-write-guard", () => ({ useHasPermission: () => false }));
+vi.mock("@/lib/rbac/use-write-guard", () => ({ useHasPermission: () => access.write }));
 vi.mock("@/lib/api/joy-dispatch", () => ({
   fetchJoyLoadNotes: async () => ({
     notes: api.notes,
@@ -28,6 +29,7 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
 afterEach(() => {
   cleanup();
   location.search = "";
+  access.write = false;
   api.waiting = [];
   api.notes = [];
 });
@@ -115,6 +117,43 @@ it("shows the load time, order, and customer on a finance card", async () => {
   expect(timeline).toHaveTextContent("Loaded");
   expect(timeline).toHaveTextContent(createdTime);
   expect(timeline).toHaveTextContent(loadedTime);
+});
+
+it("offers delivery note now beside create invoices on a full finance load", async () => {
+  access.write = true;
+  location.search = "step=finance";
+  api.notes = [{
+    id: "n1",
+    number: "LDN-0005",
+    date: "2026-11-13T07:26:00.000Z",
+    status: "AWAITING_FINANCE",
+    truck: "KCS 190N",
+    routeWarehouseId: "kajiado",
+    routeWarehouseName: "KAJIADO",
+    fulfilmentWarehouseName: "DISPATCH",
+    salesOrderIds: ["so-12"],
+    lines: [{
+      productId: "p2",
+      name: "JOY QUEEN CAKES 4PCS (135 GMS)",
+      unit: "EA",
+      orderedQty: 12,
+      loadedQty: 12,
+      allocations: [{
+        salesOrderId: "so-12",
+        salesOrderNumber: "S00012",
+        customerName: "NAIVAS LIMITED",
+        branchName: "Headquarters",
+        lineId: "l1",
+        orderedQty: 12,
+        invoiceQty: 12,
+      }],
+    }],
+    results: [],
+  }];
+  render(<JoyRouteLoads />);
+  expect(await screen.findByRole("button", { name: "Create invoices" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Delivery note now" })).toBeEnabled();
+  expect(screen.getByText(/waits until the customer stamps the note/)).toBeVisible();
 });
 
 it("opens dispatch by default and links to Finance Review", async () => {

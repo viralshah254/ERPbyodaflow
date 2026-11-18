@@ -155,6 +155,8 @@ export type JoyWaitingRoute = {
 };
 
 export type JoyLoadNoteStatus = "OPEN" | "AWAITING_FINANCE" | "INVOICING" | "INVOICED" | "CANCELLED";
+/** "both" sends the invoice with the delivery note. "delivery_note" waits until the customer clears the note. */
+export type JoyLoadDocumentPlan = "both" | "delivery_note";
 export type JoyLoadAllocation = {
   salesOrderId: string;
   salesOrderNumber: string;
@@ -193,6 +195,7 @@ export type JoyLoadNote = {
     deliveryNoteNumber?: string;
     stockIssued?: boolean;
   }>;
+  documentPlan?: JoyLoadDocumentPlan;
   mappingIssues?: Array<{
     productId: string;
     productSku?: string;
@@ -234,17 +237,22 @@ export async function createJoyLoadNote(input: { warehouseId: string; truck: str
   return apiRequest("/api/joy-dispatch/load-notes", { method: "POST", body: input });
 }
 
-export async function recordJoyLoaded(id: string, lines: Array<{ productId: string; loadedQty: number }>): Promise<JoyLoadNote> {
+export async function recordJoyLoaded(
+  id: string,
+  lines: Array<{ productId: string; loadedQty: number }>,
+  documents: JoyLoadDocumentPlan = "both"
+): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
-  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/loaded`, { method: "POST", body: { lines } });
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/loaded`, { method: "POST", body: { lines, documents } });
 }
 
 export async function allocateJoyLoad(
   id: string,
-  allocations: Array<{ salesOrderId: string; lineId: string; quantity: number }>
+  allocations: Array<{ salesOrderId: string; lineId: string; quantity: number }>,
+  documents: JoyLoadDocumentPlan = "both"
 ): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
-  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/allocate`, { method: "POST", body: { allocations } });
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/allocate`, { method: "POST", body: { allocations, documents } });
 }
 
 export async function cancelJoyLoadNote(id: string): Promise<JoyLoadNote> {
