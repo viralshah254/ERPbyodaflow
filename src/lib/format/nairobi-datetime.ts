@@ -9,6 +9,7 @@ function nairobiParts(date: Date) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    hourCycle: "h12",
   }).formatToParts(date);
 
   const get = (type: Intl.DateTimeFormatPartTypes) =>

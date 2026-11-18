@@ -33,6 +33,7 @@ export type RouteCloseFigures = {
   stock: { lines: RouteCloseStockLine[]; balanced: boolean };
   sales: { invoiced: number; credited: number; creditPendingApproval: number; netSales: number };
   money: { cashReceipts: number; mpesaReceipts: number; otherReceipts: number; collected: number; stillOwed: number; unexplained: number };
+  collections?: { verifiedMpesa: number; pendingMpesa: number; pendingCount: number; mpesaHandover: number };
   handover?: { declaredCash: number; declaredMpesa: number; cashGap: number; mpesaGap: number };
   issues: string[];
   balanced: boolean;
@@ -73,3 +74,10 @@ export async function approveRouteCloseApi(loadNoteId: string, note: string): Pr
   requireLiveApi("Route close");
   return apiRequest(`/api/dispatch/route-close/${encodeURIComponent(loadNoteId)}/approve`, { method: "POST", body: { note } });
 }
+
+export type RouteCollection = { _id: string; reference: string; partyName: string; amount: number; tillNumber?: string; invoiceHint?: string; paymentId?: string; verified?: boolean };
+const routeCollectionsPath = (id: string) => `/api/dispatch/route-close/${encodeURIComponent(id)}/collections`;
+export const fetchRouteCollections = (id: string) =>
+  apiRequest<{ enabled: boolean; items: RouteCollection[] }>(routeCollectionsPath(id));
+export const recordRouteCollection = (id: string, body: { partyId: string; reference: string; amount: number; tillNumber?: string; invoiceHint?: string }) =>
+  apiRequest<RouteCollection>(routeCollectionsPath(id), { method: "POST", body });

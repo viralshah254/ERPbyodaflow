@@ -6,6 +6,8 @@ import * as Icons from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RouteMpesaCollections } from "@/components/finance/RouteMpesaCollections";
+import { parseReceiptMoney, groupReceiptMoney } from "@/lib/ar/receipt-money";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -96,8 +98,8 @@ export default function RouteClosePage() {
     loadFigures(row.id);
   }
 
-  const cashValue = cash.trim() === "" ? NaN : Number(cash);
-  const mpesaValue = mpesa.trim() === "" ? NaN : Number(mpesa);
+  const cashValue = cash.trim() === "" ? NaN : parseReceiptMoney(cash);
+  const mpesaValue = mpesa.trim() === "" ? NaN : parseReceiptMoney(mpesa);
   const handoverValid = Number.isFinite(cashValue) && cashValue >= 0 && Number.isFinite(mpesaValue) && mpesaValue >= 0;
 
   React.useEffect(() => {
@@ -230,6 +232,10 @@ export default function RouteClosePage() {
                 </Equation>
               </div>
 
+              {figures.collections && selected && <RouteMpesaCollections key={selected} routeId={selected}
+                canCapture={figures.departed && selectedRow?.closeStatus === "OPEN"} summary={figures.collections}
+                onRecorded={() => loadFigures(selected, handoverValid ? { cash: cashValue, mpesa: mpesaValue } : undefined)} />}
+
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Stock by product</CardTitle>
@@ -296,11 +302,11 @@ export default function RouteClosePage() {
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="cash">Cash handed in</Label>
-                        <Input id="cash" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} />
+                        <Input id="cash" inputMode="decimal" value={cash} onChange={(e) => setCash(e.target.value)} onBlur={() => setCash(groupReceiptMoney(cash))} />
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="mpesa">M-Pesa handed in</Label>
-                        <Input id="mpesa" inputMode="decimal" value={mpesa} onChange={(e) => setMpesa(e.target.value)} />
+                        <Input id="mpesa" inputMode="decimal" value={mpesa} onChange={(e) => setMpesa(e.target.value)} onBlur={() => setMpesa(groupReceiptMoney(mpesa))} />
                       </div>
                     </div>
                     {figures.handover ? (

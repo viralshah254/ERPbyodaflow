@@ -18,6 +18,7 @@ import {
   fetchArPaymentsPageApi,
   submitArPaymentApi,
 } from "@/lib/api/payments";
+import { ArStatementReviewSheet } from "@/components/finance/ArStatementReviewSheet";
 import { ArChequeBatchSheet } from "@/components/finance/ArChequeBatchSheet";
 import type { BankAccountRow } from "@/lib/types/treasury";
 import { ArReconciliationSheet } from "@/components/finance/ArReconciliationSheet";
@@ -54,6 +55,7 @@ function appliedSummary(row: PaymentRow): string {
 import { useHasPermission } from "@/lib/rbac/use-write-guard";
 
 export default function ARPaymentsPage() {
+  const canReviewStatements = useHasPermission("finance.bank.read");
   const canRecord = useHasPermission("finance.write", "finance.receipts.write");
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -73,6 +75,8 @@ export default function ARPaymentsPage() {
   const [receiveOpen, setReceiveOpen] = React.useState(false);
   const [receiveSession, setReceiveSession] = React.useState(0);
   const [receivePrefill, setReceivePrefill] = React.useState<ReceivePrefill | null>(null);
+  const statementReference = searchParams.get("statementReference") || undefined;
+  const [statementOpen, setStatementOpen] = React.useState(() => Boolean(statementReference));
   const [batchOpen, setBatchOpen] = React.useState(() => searchParams.has("adviceId"));
   const [batchPayment, setBatchPayment] = React.useState<PaymentRow>();
   const [selectedPaymentId, setSelectedPaymentId] = React.useState<string | null>(() => searchParams.get("reconcile"));
@@ -290,7 +294,8 @@ export default function ARPaymentsPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {canReviewStatements && <Button variant="outline" onClick={() => setStatementOpen(true)}>Statements & matching</Button>}
             {canRecord && <DocumentHubUploadButton label="Scan cheque" />}
             {copilotEnabled ? (
               <Button variant="outline" size="sm" onClick={handleDraftReminder}>
@@ -298,14 +303,14 @@ export default function ARPaymentsPage() {
                 Draft payment reminder
               </Button>
             ) : null}
-            {canRecord && <>
-              <Button variant="outline" onClick={() => { setBatchPayment(undefined); setBatchOpen(true); }}>Reconcile cheques</Button>
-              <Button variant="outline" asChild><Link href="/ar/receipts">Collect receipts</Link></Button>
-              <Button onClick={() => openReceive(null)}>
-                <Icons.Plus className="mr-2 h-4 w-4" />
-                Receive Payment
-              </Button>
-            </>}
+            {canRecord && <Button variant="outline" onClick={() => { setBatchPayment(undefined); setBatchOpen(true); }}>Reconcile cheques</Button>}
+            <Button variant="outline" asChild>
+              <Link href="/ar/receipts">Collect receipts</Link>
+            </Button>
+            {canRecord && <Button onClick={() => openReceive(null)}>
+              <Icons.Plus className="mr-2 h-4 w-4" />
+              Receive Payment
+            </Button>}
           </div>
         }
       />
@@ -364,6 +369,9 @@ export default function ARPaymentsPage() {
         )}
       </div>
 
+      {canReviewStatements && statementOpen && <ArStatementReviewSheet
+        accounts={bankAccountOptions} initialReference={statementReference} onClose={() => setStatementOpen(false)}
+        onSaved={() => { void refreshData(); }} />}
       <ArSettlementSheet
         open={canRecord && receiveOpen}
         sessionKey={receiveSession}

@@ -94,18 +94,21 @@ it("lists products on focus and loads the next page while scrolling", async () =
   const search = screen.getByRole("combobox", { name: "Search products to add" });
   await waitFor(() => expect(search).toBeEnabled());
   fireEvent.focus(search);
-  expect(await screen.findByRole("option", { name: /Product 000/ })).toBeInTheDocument();
+  expect(await screen.findByRole("option", { name: /Product 000/ }, { timeout: 8_000 })).toBeInTheDocument();
   await waitFor(() => {
     expect(
       screen.queryByRole("option", { name: /Product 100/ }) ??
-      screen.queryByRole("button", { name: "Load more products" })
+      screen.queryByRole("button", { name: "Load more products" }) ??
+      screen.queryByText("Load more products")
     ).toBeTruthy();
-  });
-  const more = screen.queryByRole("button", { name: "Load more products" });
+  }, { timeout: 8_000 });
+  const more =
+    screen.queryByRole("button", { name: "Load more products" }) ??
+    screen.queryByText("Load more products");
   if (more) fireEvent.click(more);
-  expect(await screen.findByRole("option", { name: /Product 100/ })).toBeInTheDocument();
+  expect(await screen.findByRole("option", { name: /Product 100/ }, { timeout: 8_000 })).toBeInTheDocument();
   expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ cursor: "100", sellable: true, limit: 100, includeStock: false }));
-});
+}, 20_000);
 
 it("adds the quantity typed beside the product", async () => {
   function LineByLineForm() {

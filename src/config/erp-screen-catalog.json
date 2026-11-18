@@ -5595,6 +5595,18 @@
     "hints": []
   },
   {
+    "route": "/warehouse/route-pick-lists/[noteId]",
+    "title": "Loader note",
+    "description": "Confirm picked quantity for one Joy route load, then raise delivery notes and invoices from that truck.",
+    "sections": [
+      {
+        "title": "Loader note"
+      }
+    ],
+    "fields": [],
+    "hints": []
+  },
+  {
     "route": "/warehouse/route-pick-lists",
     "title": "Route pick lists",
     "description": "One list for many approved sales orders. Saving the picked quantity does not move stock.",
