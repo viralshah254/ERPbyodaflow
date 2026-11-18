@@ -60,6 +60,28 @@ describe("DataTable sort", () => {
   });
 });
 
+it("asks the parent to search instead of hiding rows that are not on this page", async () => {
+  const user = userEvent.setup();
+  const onSearchChange = vi.fn();
+  render(
+    <DataTable
+      serverSearch
+      search=""
+      onSearchChange={onSearchChange}
+      totalCount={240}
+      searchPlaceholder="SKU, product, code, or warehouse"
+      data={rows}
+      columns={columns}
+    />
+  );
+  expect(screen.getByPlaceholderText("SKU, product, code, or warehouse")).toBeVisible();
+  expect(screen.getByRole("status").textContent).toBe("2 of 240 rows");
+  await user.type(screen.getByRole("searchbox"), "queen");
+  expect(onSearchChange).toHaveBeenCalled();
+  expect(screen.getByText("Zebra")).toBeVisible();
+  expect(screen.getByText("Apple")).toBeVisible();
+});
+
 it('searches formatted columns and sorts their underlying numeric values', async () => {
   const user = userEvent.setup();
   render(<DataTable data={[{ id: 'a', amount: 1000 }, { id: 'b', amount: 25 }]} columns={[{ id: 'amount', header: 'Amount', accessor: row => <span>KES {row.amount.toLocaleString()}</span> }]} />);

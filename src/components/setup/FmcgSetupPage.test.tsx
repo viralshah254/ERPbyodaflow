@@ -14,7 +14,7 @@ const fixture = () => ({ version: "fmcg-setup-v2", capturedAt: "2026-11-02T12:00
     { id: "cutover", title: "Opening date and fiscal calendar", status: "PASS", detail: "One open period covers opening.", required: true, href: "/settings/financial/fiscal-years" },
     { id: "mapping", title: "Posting account mappings", status: "PENDING", detail: "Review accounts payable, production WIP and goods received not invoiced.", required: true, href: "/settings/financial/posting-mappings" },
     { id: "warehouses", title: "Classify operational stores", status: "PENDING", detail: "Three stores need purpose and branch review before they can supply demand.", required: true, href: "/master/warehouses" },
-    { id: "company_cost", title: "Reviewed company-wide SKU opening costs", status: "PENDING", detail: "Twenty positive stock positions need reviewed costs.", required: true, href: "/inventory/valuation" },
+    { id: "company_cost", title: "Reviewed company-wide SKU opening costs", status: "PENDING", detail: "Twenty positive stock positions need reviewed costs.", required: true, href: "/inventory/opening-costs" },
     { id: "stock_gl", title: "Current inventory and WIP tie to GL", status: "PENDING", detail: "Complete costs and account mappings before reconciliation.", required: true, href: "/finance/gl" },
   ], taxProfile: { vatRegistration: "UNCONFIRMED", withholdingVatAgent: "UNCONFIRMED", inputTaxRecoverability: "UNCONFIRMED", evidenceReference: "" },
   totals: { stockRows: 40, missingCostRows: 20, physicalValue: null, wipValue: null, glValue: null, difference: null },
@@ -29,6 +29,7 @@ describe("operational preparation flow", () => {
     expect(screen.getByText(/Complete first: Posting account mappings/)).toBeInTheDocument();
     expect(screen.getAllByText("Needs reconciliation")).toHaveLength(4);
     expect(screen.getByText(/Complete the checks and record client acceptance/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Set opening costs/ })).toHaveAttribute("href", "/inventory/opening-costs");
     expect(screen.getByRole("button", { name: /Activate opening from/ })).toBeDisabled();
     if (process.env.ERP_SETUP_PREVIEW_HTML) writeFileSync(process.env.ERP_SETUP_PREVIEW_HTML, `<!doctype html><html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FMCG setup · synthetic design review</title><link rel="stylesheet" href="/setup.css"></head><body><div style="max-width:1440px;margin:0 auto">${document.body.innerHTML}</div></body></html>`);
   });

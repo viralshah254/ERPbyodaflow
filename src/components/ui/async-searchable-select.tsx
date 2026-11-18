@@ -94,6 +94,8 @@ interface AsyncSearchableSelectProps {
    * Used by the receipt grid after Enter starts a new line.
    */
   openSignal?: string;
+  /** Associates the trigger with a label via htmlFor. */
+  id?: string;
 }
 
 export function AsyncSearchableSelect({
@@ -125,6 +127,7 @@ export function AsyncSearchableSelect({
   listHeader,
   reloadToken,
   openSignal,
+  id,
 }: AsyncSearchableSelectProps) {
   const orgId = useAuthStore((s) => s.org?.orgId);
   // Scope recent items per org so selections from one org never bleed into another
@@ -677,6 +680,7 @@ export function AsyncSearchableSelect({
     <div className={cn(!floating && "relative")}>
       <Button
         ref={triggerRef}
+        id={id}
         type="button"
         variant="outline"
         className={cn(

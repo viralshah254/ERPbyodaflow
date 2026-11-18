@@ -29,6 +29,7 @@ import {
   flattenNavSectionsToCommandItems,
   getRecentRoutes,
   recordRecentRoute,
+  paymentRecordingCommands,
   scoreNavItem,
   type RecentRoute,
 } from "@/lib/nav/command-palette-nav";
@@ -310,7 +311,7 @@ export function CommandPalette() {
         }
       : null;
 
-    const out: DisplayItem[] = [];
+    const out: DisplayItem[] = [...paymentRecordingCommands(q)];
     if (askAiItem) out.push(askAiItem);
 
     // ERP search results first when available
@@ -673,7 +674,7 @@ export function CommandPalette() {
             </span>
             {!isEmptyQuery && (
               <span>
-                {filteredNav.length + filteredStatic.length} pages · {searchResults.length} records
+                {paymentRecordingCommands(query).length + filteredNav.length + filteredStatic.length} pages · {searchResults.length} records
               </span>
             )}
           </div>

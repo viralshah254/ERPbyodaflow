@@ -53,6 +53,21 @@ const badgeStyles = {
   default: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400 border-gray-200 dark:border-gray-800",
 };
 
+const STATUS_ACRONYMS = new Set(["QC", "VAT", "GRN", "AR", "AP", "PO", "SKU", "UOM", "WIP", "BOM", "MRP", "KRA", "FX", "WHT"]);
+
+/** Turn DRAFT / IN_PROGRESS into Draft / In progress. Leave mixed-case labels alone. */
+export function humanStatusLabel(status: string): string {
+  if (!/^[A-Z0-9]+(?:_[A-Z0-9]+)*$/.test(status)) return status;
+  const words = status.split("_").filter(Boolean).map((word) => (
+    STATUS_ACRONYMS.has(word) ? word : word.toLowerCase()
+  ));
+  const first = status.split("_")[0];
+  if (words[0] && first && !STATUS_ACRONYMS.has(first)) {
+    words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+  }
+  return words.join(" ");
+}
+
 export function StatusBadge({ status, label, variant, className }: StatusBadgeProps) {
   const resolvedVariant = variant || statusVariants[status] || "default";
   
@@ -65,7 +80,7 @@ export function StatusBadge({ status, label, variant, className }: StatusBadgePr
         className
       )}
     >
-      {label ?? status}
+      {label ?? humanStatusLabel(status)}
     </Badge>
   );
 }

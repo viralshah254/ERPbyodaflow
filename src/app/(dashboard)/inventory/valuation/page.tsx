@@ -14,25 +14,57 @@ import {
 } from "@/lib/api/inventory-stock";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { cn } from "@/lib/utils";
+import { formatMoney } from "@/lib/money";
+import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import * as Icons from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 const DEFAULT_PAGE_SIZE = 25;
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const SEARCH_DEBOUNCE_MS = 300;
+
+function costingMethodLabel(method: string | null): string {
+  switch (method) {
+    case "WEIGHTED_AVERAGE":
+      return "Weighted average";
+    case "FIFO":
+      return "FIFO";
+    case "STANDARD_COST":
+      return "Standard cost";
+    default:
+      return method ? method.replaceAll("_", " ").toLowerCase() : "";
+  }
+}
+
+function formatSnapshotWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
 
 type ValuationRow = {
+  code: string;
   sku: string;
   productName: string;
   warehouseName: string;
   unitCost: number;
   stockQty: number;
   stockValue: number;
+  inSnapshot: boolean;
 };
 
 export default function InventoryValuationPage() {
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const isFranchisor = orgRole === "FRANCHISOR";
+  const currency = useBaseCurrency();
 
   const [valuationRows, setValuationRows] = React.useState<ValuationRow[]>([]);
   const [summary, setSummary] = React.useState<
@@ -60,10 +92,17 @@ export default function InventoryValuationPage() {
 
   const [pageOffset, setPageOffset] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(DEFAULT_PAGE_SIZE);
+  const [searchInput, setSearchInput] = React.useState("");
+  const [searchQuery, setSearchQuery] = React.useState("");
   const [frPageOffset, setFrPageOffset] = React.useState(0);
   const [frPageSize, setFrPageSize] = React.useState(DEFAULT_PAGE_SIZE);
   const valuationLoadedOnce = React.useRef(false);
   const franchiseLoadedOnce = React.useRef(false);
+
+  React.useEffect(() => {
+    const id = window.setTimeout(() => setSearchQuery(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(id);
+  }, [searchInput]);
 
   const loadValuationPage = React.useCallback(
     async (offset: number) => {
@@ -74,18 +113,21 @@ export default function InventoryValuationPage() {
         const payload = await fetchInventoryValuationPage({
           limit: pageSize,
           cursor: String(offset),
+          search: searchQuery || undefined,
         });
         setRanAt(payload.ranAt);
         setMethod(payload.method);
         setSummary(payload.summary);
         setValuationRows(
           payload.rows.map((row) => ({
+            code: row.code?.trim() || row.sku,
             sku: row.sku,
             productName: row.productName,
             warehouseName: row.warehouseName ?? row.warehouseId,
             unitCost: row.unitCost,
             stockQty: row.quantity,
             stockValue: row.inventoryValue,
+            inSnapshot: row.inSnapshot !== false,
           }))
         );
         setPageOffset(payload.offset);
@@ -100,7 +142,7 @@ export default function InventoryValuationPage() {
         setLoading(false);
       }
     },
-    [pageSize]
+    [pageSize, searchQuery]
   );
 
   React.useEffect(() => {
@@ -157,63 +199,105 @@ export default function InventoryValuationPage() {
     {
       id: "outlets",
       header: "Outlets",
+      className: "text-right",
       accessor: (r: FranchiseNetworkStockItem) => (
-        <div className="text-right tabular-nums text-muted-foreground">
-          {r.byOutlet.length}
-        </div>
+        <span className="tabular-nums text-muted-foreground">{r.byOutlet.length}</span>
       ),
     },
     {
       id: "qty",
-      header: "Available qty",
+      header: "In stock",
+      className: "text-right",
       accessor: (r: FranchiseNetworkStockItem) => (
-        <div className="text-right tabular-nums font-medium">
-          {r.totalAvailable.toLocaleString()}
-        </div>
+        <span className="tabular-nums font-medium">{r.totalAvailable.toLocaleString()}</span>
       ),
     },
     {
       id: "unitCost",
-      header: "HQ unit cost",
+      header: "Head office unit cost",
+      className: "text-right",
       accessor: (r: FranchiseNetworkStockItem) => (
-        <div className="text-right tabular-nums text-muted-foreground">
-          {r.unitCostKes > 0 ? `KES ${r.unitCostKes.toLocaleString()}` : "\u2014"}
-        </div>
+        <span className="tabular-nums text-muted-foreground">
+          {r.unitCostKes > 0 ? formatMoney(r.unitCostKes, "KES") : "—"}
+        </span>
       ),
     },
     {
       id: "value",
-      header: "Value (KES)",
+      header: "Stock value",
+      className: "text-right",
       accessor: (r: FranchiseNetworkStockItem) => (
-        <div className="text-right tabular-nums font-semibold">
-          {r.networkValueKes > 0 ? Math.round(r.networkValueKes).toLocaleString() : "\u2014"}
-        </div>
+        <span className="tabular-nums font-semibold">
+          {r.networkValueKes > 0 ? formatMoney(r.networkValueKes, "KES") : "—"}
+        </span>
       ),
     },
   ];
 
   const columns = [
-    { id: "sku", header: "SKU", accessor: (r: ValuationRow) => r.sku, sticky: true },
-    { id: "name", header: "Product", accessor: (r: ValuationRow) => r.productName },
+    {
+      id: "code",
+      header: "Code",
+      sticky: true,
+      sortValue: (r: ValuationRow) => r.code,
+      accessor: (r: ValuationRow) => <span className="font-mono text-sm">{r.code || "—"}</span>,
+    },
+    {
+      id: "name",
+      header: "Product",
+      sortValue: (r: ValuationRow) => r.productName,
+      accessor: (r: ValuationRow) => (
+        <div>
+          <div>{r.productName}</div>
+          {r.inSnapshot ? null : (
+            <div className="text-xs text-muted-foreground">No cost yet</div>
+          )}
+        </div>
+      ),
+    },
     { id: "wh", header: "Warehouse", accessor: (r: ValuationRow) => r.warehouseName },
-    { id: "unitCost", header: "Unit cost", accessor: (r: ValuationRow) => r.unitCost.toLocaleString() },
-    { id: "stock", header: "Stock qty", accessor: (r: ValuationRow) => r.stockQty.toLocaleString() },
-    { id: "value", header: "Stock value", accessor: (r: ValuationRow) => r.stockValue.toLocaleString() },
+    {
+      id: "unitCost",
+      header: "Unit cost",
+      className: "text-right",
+      sortValue: (r: ValuationRow) => (r.inSnapshot ? r.unitCost : null),
+      accessor: (r: ValuationRow) => (
+        <span className="tabular-nums">{r.inSnapshot ? formatMoney(r.unitCost, currency) : "—"}</span>
+      ),
+    },
+    {
+      id: "stock",
+      header: "In stock",
+      className: "text-right",
+      accessor: (r: ValuationRow) => <span className="tabular-nums">{r.stockQty.toLocaleString()}</span>,
+      sortValue: (r: ValuationRow) => r.stockQty,
+    },
+    {
+      id: "value",
+      header: "Stock value",
+      className: "text-right",
+      sortValue: (r: ValuationRow) => (r.inSnapshot ? r.stockValue : null),
+      accessor: (r: ValuationRow) => (
+        <span className="tabular-nums font-medium">{r.inSnapshot ? formatMoney(r.stockValue, currency) : "—"}</span>
+      ),
+    },
   ];
 
   const emptyMessage = loading
-    ? "Loading valuation\u2026"
+    ? "Loading stock value…"
     : loadError
-      ? "Could not load valuation."
+      ? "Could not load stock value."
+      : searchQuery
+        ? `No products match “${searchQuery}”.`
       : ranAt === null && valuationRows.length === 0
-        ? "No valuation snapshot yet. Run costing to persist inventory values."
-        : "No rows match the current data.";
+        ? "No stock value yet. Run costing to calculate it."
+        : "No products match this search.";
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
-        title="Inventory Valuation"
-        description="Latest costing snapshot per SKU and warehouse\u2014run costing to refresh; GL tie-out is done with finance outside this screen."
+        title="Inventory valuation"
+        description="Stock value by product and warehouse, from your latest costing run."
         breadcrumbs={[{ label: "Inventory", href: "/inventory/costing" }, { label: "Valuation" }]}
         sticky
         showCommandHint
@@ -223,7 +307,7 @@ export default function InventoryValuationPage() {
           <div className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <Icons.AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
             <div>
-              <div className="font-medium">Valuation unavailable</div>
+              <div className="font-medium">Stock value unavailable</div>
               <div className="mt-1 text-destructive/90">{loadError}</div>
             </div>
           </div>
@@ -233,9 +317,9 @@ export default function InventoryValuationPage() {
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-muted-foreground/20 bg-muted/40 px-4 py-3 text-sm">
             <Icons.Info className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
             <div className="flex flex-1 flex-wrap items-center gap-3 min-w-0">
-              <span>No valuation snapshot yet\u2014the last costing run hasn&apos;t been saved. Run costing so amounts appear here.</span>
+              <span>No stock value yet. Run costing and the amounts will show here.</span>
               <Button asChild size="sm" variant="secondary">
-                <Link href="/inventory/costing">Go to costing</Link>
+                <Link href="/inventory/costing">Run costing</Link>
               </Button>
             </div>
           </div>
@@ -245,29 +329,35 @@ export default function InventoryValuationPage() {
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <CardTitle>Valuation layers</CardTitle>
-                <CardDescription className="space-y-1 max-w-3xl">
+                <CardTitle>Stock value</CardTitle>
+                <CardDescription className="max-w-3xl space-y-1">
+                  <span className="block">
+                    These amounts come from your last costing run. New receipts and extra costs show up after you{" "}
+                    <Link href="/inventory/costing" className="font-medium text-foreground underline underline-offset-2">
+                      run costing
+                    </Link>
+                    . To record a company opening cost, open{" "}
+                    <Link href="/inventory/opening-costs" className="font-medium text-foreground underline underline-offset-2">
+                      opening costs
+                    </Link>
+                    .
+                  </span>
                   {ranAt ? (
-                    <>
-                      <span className="block">
-                        Same snapshot as Inventory costing (one line per product \u00d7 warehouse stock level). Run{" "}
-                        <strong className="font-medium">Run costing</strong> there to refresh\u2014including after new receipts
-                        or other-cost allocations. Not an independent \u201clive\u201d feed.
-                      </span>
-                      <span className="block text-muted-foreground text-xs">
-                        Snapshot: {method ?? "\u2014"} \u00b7 {new Date(ranAt).toLocaleString()}. Extra SKUs appear when that
-                        product has on-hand quantity in Stock levels under a warehouse when costing runs.
-                      </span>
-                    </>
+                    <span className="block text-xs text-muted-foreground">
+                      Last updated {formatSnapshotWhen(ranAt)}
+                      {method ? ` · ${costingMethodLabel(method)}` : ""}
+                    </span>
                   ) : (
-                    <span className="block">Latest persisted valuation from the backend costing snapshot.</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Nothing to show until costing has been run.
+                    </span>
                   )}
                 </CardDescription>
               </div>
               {!loading && (totalCount > 0 || summary.length > 0) ? (
                 <div className="text-right text-sm tabular-nums">
-                  <div className="text-muted-foreground">Total inventory value (this snapshot)</div>
-                  <div className="text-lg font-semibold">{totalDisplayValue.toLocaleString()}</div>
+                  <div className="text-muted-foreground">Total stock value</div>
+                  <div className="text-lg font-semibold">{formatMoney(totalDisplayValue, currency)}</div>
                 </div>
               ) : null}
             </div>
@@ -285,17 +375,31 @@ export default function InventoryValuationPage() {
                     )}
                   >
                     <div className="font-medium">{s.warehouse}</div>
-                    <div className="text-xs text-muted-foreground tabular-nums">
-                      {s.skuCount} SKU \u00b7 qty {s.totalQty.toLocaleString()} \u00b7{" "}
-                      <span className="text-foreground">{s.totalValue.toLocaleString()}</span>
+                    <div className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                      {s.skuCount.toLocaleString()} {s.skuCount === 1 ? "product" : "products"}
+                      {" · "}
+                      {s.totalQty.toLocaleString()} in stock
                     </div>
+                    <div className="mt-1 font-semibold tabular-nums">{formatMoney(s.totalValue, currency)}</div>
                   </div>
                 ))}
               </div>
             </CardContent>
           ) : null}
           <CardContent className="p-0">
-            <DataTable dataScope="page" data={valuationRows} columns={columns} emptyMessage={emptyMessage}
+            <DataTable
+              dataScope="page"
+              serverSearch
+              search={searchInput}
+              onSearchChange={(value) => {
+                setSearchInput(value);
+                setPageOffset(0);
+              }}
+              searchPlaceholder="Product code, name, or warehouse"
+              totalCount={totalCount}
+              data={valuationRows}
+              columns={columns}
+              emptyMessage={emptyMessage}
               scrollMode="natural"
               size="comfortable"
             />
@@ -317,7 +421,7 @@ export default function InventoryValuationPage() {
             if (!hasMore || loading) return;
             void loadValuationPage(pageOffset + pageSize);
           }}
-          entityLabel="valuation rows"
+          entityLabel="products"
           pageSizeOptions={PAGE_SIZE_OPTIONS}
           onPageSizeChange={(size) => {
             setPageSize(size);
@@ -333,36 +437,29 @@ export default function InventoryValuationPage() {
                   <div>
                     <CardTitle className="flex items-center gap-2">
                       <Icons.Store className="h-4 w-4 text-muted-foreground" />
-                      Franchise network \u2014 stock at outlets
+                      Stock at franchise outlets
                     </CardTitle>
-                    <CardDescription className="space-y-1 max-w-3xl">
+                    <CardDescription className="max-w-3xl space-y-1">
                       <span className="block">
-                        Per-SKU quantities currently held across all active franchise outlets, valued at the latest
-                        HQ unit cost from the costing snapshot.{" "}
-                        <strong className="font-medium">Management figure only</strong> \u2014 under the intercompany sale
-                        model, HQ recognized revenue and COGS when goods were invoiced to the franchise; this stock
-                        is on the franchisee&apos;s balance sheet and does not form part of HQ general-ledger inventory.
+                        Quantities at active outlets, priced at the latest head-office unit cost. Head office already recorded the sale when the goods were invoiced, so this stock sits on the franchisee’s books.
                       </span>
-                      {franchiseCostingRanAt && (
+                      {franchiseCostingRanAt ? (
                         <span className="block text-xs text-muted-foreground">
-                          Unit costs from costing snapshot: {new Date(franchiseCostingRanAt).toLocaleString()}.
-                          Products without a costing run show zero value.
+                          Unit costs from {formatSnapshotWhen(franchiseCostingRanAt)}. Products with no costing run yet show no value.
                         </span>
-                      )}
+                      ) : null}
                     </CardDescription>
                   </div>
                   {!franchiseLoading && frTotalCount > 0 && (
                     <div className="text-right text-sm tabular-nums">
-                      <div className="text-muted-foreground">Network total available qty</div>
+                      <div className="text-muted-foreground">Available at outlets</div>
                       <div className="text-lg font-semibold">{franchiseTotalQty.toLocaleString()}</div>
-                      {franchiseTotalValue > 0 && (
+                      {franchiseTotalValue > 0 ? (
                         <>
-                          <div className="text-muted-foreground mt-1">at HQ cost (KES)</div>
-                          <div className="text-base font-semibold">
-                            {Math.round(franchiseTotalValue).toLocaleString()}
-                          </div>
+                          <div className="mt-1 text-muted-foreground">At head-office cost</div>
+                          <div className="text-base font-semibold">{formatMoney(franchiseTotalValue, "KES")}</div>
                         </>
-                      )}
+                      ) : null}
                     </div>
                   )}
                 </div>
@@ -370,11 +467,11 @@ export default function InventoryValuationPage() {
               <CardContent className="p-0">
                 {franchiseLoading ? (
                   <div className="p-8 text-center text-sm text-muted-foreground">
-                    Loading franchise stock\u2026
+                    Loading outlet stock…
                   </div>
                 ) : frTotalCount === 0 ? (
                   <div className="p-8 text-center text-sm text-muted-foreground">
-                    No franchise stock found. Outlets must have posted GRNs to show stock here.
+                    No outlet stock yet. It appears here after an outlet receives goods.
                   </div>
                 ) : (
                   <DataTable dataScope="page"
@@ -404,7 +501,7 @@ export default function InventoryValuationPage() {
                   if (!frHasMore || franchiseLoading) return;
                   void loadFranchisePage(frPageOffset + frPageSize);
                 }}
-                entityLabel="franchise stock rows"
+                entityLabel="outlet products"
                 pageSizeOptions={PAGE_SIZE_OPTIONS}
                 onPageSizeChange={(size) => {
                   setFrPageSize(size);

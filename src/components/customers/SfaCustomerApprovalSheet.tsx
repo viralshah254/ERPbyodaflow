@@ -67,7 +67,7 @@ export function SfaCustomerApprovalSheet({
   busy: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (row: SfaCustomerApproval) => void;
-  onApprove: (row: SfaCustomerApproval) => void;
+  onApprove: (row: SfaCustomerApproval, mergeIntoPartyId?: string) => void;
   onReject: (row: SfaCustomerApproval) => void;
 }) {
   const [draft, setDraft] = React.useState<Draft | null>(null);
@@ -142,7 +142,7 @@ export function SfaCustomerApprovalSheet({
         <SheetHeader className="shrink-0 space-y-1 border-b px-6 py-4 text-left">
           <SheetTitle>{row?.name || "Customer"}</SheetTitle>
           <SheetDescription>
-            Correct the phone, KRA PIN, and address before this customer joins the list.
+            Correct the details, then approve. Approval checks for the same KRA PIN, phone, or a similar name before creating the customer.
           </SheetDescription>
         </SheetHeader>
 

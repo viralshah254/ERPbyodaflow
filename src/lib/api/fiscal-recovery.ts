@@ -1,8 +1,9 @@
 import { apiRequest, requireLiveApi } from "./client";
 import type { KraSigningRecord } from "@/lib/kra/kra-signing";
 export type FiscalRecoveryAttempt = {
-  _id: string; documentId: string; typeKey: string; provider: "incotex" | "etims_oscu";
-  state: "PREPARED" | "DISPATCHING" | "UNCERTAIN" | "SIGNED" | "POSTED" | "RELEASED";
+  _id: string; documentId: string; documentNumber?: string | null; typeKey: string; provider: "incotex" | "etims_oscu";
+  state: "QUEUED" | "PREPARED" | "DISPATCHING" | "UNCERTAIN" | "SIGNED" | "POSTED" | "RELEASED";
+  queue?: "waiting" | "ready"; waitingForDocumentNumber?: string | null;
   generation: number; documentHash: string; payloadHash?: string; payload?: Record<string, unknown>; requestNumber?: number;
   createdAt: string; updatedAt: string; dispatchedAt?: string; error?: string; receipt?: KraSigningRecord;
   review?: { digest: string; outcome: "ACCEPTED" | "NOT_ACCEPTED"; reason: string; evidenceReference: string; proposedBy: string; proposedAt: string };
@@ -20,8 +21,11 @@ export async function fetchFiscalAttempt(id: string) {
   return result.attempt;
 }
 export async function proposeFiscalOutcome(id: string, proposal: FiscalRecoveryProposal) {
-  return apiRequest(`/api/kra/fiscal-recovery/${encodeURIComponent(id)}/propose`, { method: "POST", body: proposal });
+  return apiRequest<{ ok: boolean; digest?: string }>(`/api/kra/fiscal-recovery/${encodeURIComponent(id)}/propose`, { method: "POST", body: proposal });
 }
 export async function approveFiscalOutcome(id: string, proposalDigest: string) {
   return apiRequest(`/api/kra/fiscal-recovery/${encodeURIComponent(id)}/approve`, { method: "POST", body: { proposalDigest } });
+}
+export async function checkFiscalResult(id: string) {
+  return apiRequest<{ contract: string; outcome: "accepted" | "rejected" | "unreachable"; message: string; cuInvoiceNumber?: string }>(`/api/kra/fiscal-recovery/${encodeURIComponent(id)}/check`, { method: "POST" });
 }

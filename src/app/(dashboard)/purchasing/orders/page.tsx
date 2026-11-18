@@ -39,6 +39,7 @@ import * as Icons from "lucide-react";
 import { DualCurrencyAmount } from "@/components/ui/dual-currency-amount";
 import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
+import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE_OPTIONS = [10, 25, 50] as const;
@@ -156,7 +157,15 @@ export default function PurchaseOrdersPage() {
         ),
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
+      {
+        id: "date",
+        header: "Created",
+        accessor: (r: PurchasingDocRow) => (
+          <span className="whitespace-nowrap text-muted-foreground">
+            {formatDocumentCreatedLabel(r.createdAt, r.date) || "—"}
+          </span>
+        ),
+      },
       { id: "party", header: "Supplier", accessor: "party" as keyof PurchasingDocRow },
       {
         id: "amount",

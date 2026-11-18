@@ -35,8 +35,8 @@ export function listProducts(): ProductRow[] {
 
 /**
  * Fetch the first page (up to 100) of products for document line pickers.
- * A single page is enough to populate the initial dropdown; subsequent typed
- * searches go to the server via `loadProductOptions` in DocumentLineEditor.
+ * Typed searches go to the server. FMCG line-by-line entry loads later pages
+ * as the open list is scrolled.
  */
 export async function fetchProductsForDocumentLines(
   filter: "purchasable" | "sellable" | "all"

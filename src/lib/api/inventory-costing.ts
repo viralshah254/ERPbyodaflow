@@ -31,11 +31,14 @@ export type InventoryValuationResponse = {
     productId: string;
     sku: string;
     productName: string;
+    code?: string;
     warehouseId: string;
     warehouseName?: string;
     quantity: number;
     unitCost: number;
     inventoryValue: number;
+    /** False when the row is current stock the last costing run did not include. */
+    inSnapshot?: boolean;
   }>;
 };
 

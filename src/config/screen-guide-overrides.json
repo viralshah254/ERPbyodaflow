@@ -519,6 +519,15 @@
       "Review Pack details and the Dispatch handoff; record actual quantities before completing the permitted task."
     ]
   },
+  "/warehouse/route-pick-lists/[noteId]": {
+    "title": "Loader note",
+    "summary": "Confirm picked quantity for one Joy route load on its own page, then raise the delivery notes and invoices from that truck.",
+    "tasks": [
+      "Open the loader note for the selected truck and confirm the picked quantities against the load.",
+      "Record the actual loaded quantity and resolve shorts before creating customer documents.",
+      "Raise the delivery note or invoice from this truck page; the route list stays a list of trucks."
+    ]
+  },
   "/warehouse/putaway/[id]": {
     "title": "Putaway task",
     "summary": "Allocate received inventory to the correct warehouse bins.",

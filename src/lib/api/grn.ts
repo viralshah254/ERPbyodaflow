@@ -8,10 +8,35 @@ import { type GrnDetailRow, type PurchasingDocRow } from "@/lib/types/purchasing
 
 export type { GrnDetailRow };
 
-type BackendGrnListItem = PurchasingDocRow & {
+type BackendGrnListItem = {
+  id: string;
+  number: string;
+  date?: string;
+  createdAt?: string;
+  party?: string;
+  poRef?: string;
+  warehouse?: string;
+  status?: string;
+  total?: number;
   warehouseId?: string;
   partyId?: string;
+  hasLandedCost?: boolean;
+  [key: string]: unknown;
 };
+
+function mapGrnListRow(item: BackendGrnListItem): PurchasingDocRow {
+  const { date, createdAt, ...rest } = item;
+  return {
+    ...(rest as PurchasingDocRow),
+    date: typeof date === "string" ? date.slice(0, 10) : "",
+    createdAt:
+      typeof createdAt === "string"
+        ? createdAt
+        : createdAt != null
+          ? String(createdAt)
+          : undefined,
+  };
+}
 
 type BackendGrnListPage = {
   items: BackendGrnListItem[];
@@ -59,7 +84,7 @@ export async function fetchInventoryReceiptsPageApi(
       : opts?.cursor != null && opts.cursor !== ""
         ? Number(opts.cursor) || 0
         : 0;
-  const items = (payload.items ?? []) as PurchasingDocRow[];
+  const items = (payload.items ?? []).map((item) => mapGrnListRow(item as BackendGrnListItem));
   const hasMore =
     typeof payload.hasMore === "boolean"
       ? payload.hasMore
@@ -83,8 +108,8 @@ export async function fetchGRNs(opts?: { availableForProcessing?: boolean }): Pr
   requireLiveApi("Goods receipts");
   try {
     const params = opts?.availableForProcessing ? "?availableForProcessing=true" : "";
-    const res = await apiRequest<{ items: PurchasingDocRow[] }>(`/api/purchasing/grn${params}`);
-    return res?.items ?? [];
+    const res = await apiRequest<{ items: BackendGrnListItem[] }>(`/api/purchasing/grn${params}`);
+    return (res?.items ?? []).map(mapGrnListRow);
   } catch {
     return [];
   }
@@ -108,7 +133,10 @@ export type GrnPostErrorCode =
   | "GRN_OPEN_VARIANCE"
   | "GRN_POST_FAILED"
   | "GRN_NOT_FOUND"
-  | "WAREHOUSE_CANNOT_RECEIVE";
+  | "WAREHOUSE_CANNOT_RECEIVE"
+  | "OPENING_COST_REQUIRED";
+
+export type OpeningCostGap = { productId: string; code: string; name: string };
 
 export type GrnPostError = Error & {
   code?: GrnPostErrorCode;
@@ -117,7 +145,39 @@ export type GrnPostError = Error & {
   billId?: string | null;
   billNumber?: string | null;
   warehouseId?: string | null;
+  products?: OpeningCostGap[];
 };
+
+export function openingCostsHref(products?: OpeningCostGap[] | null): string {
+  const ids = (products ?? []).map((product) => product.productId).filter(Boolean);
+  return ids.length
+    ? `/inventory/opening-costs?products=${encodeURIComponent(ids.join(","))}`
+    : "/inventory/opening-costs";
+}
+
+const OPENING_COST_FALLBACK = "A product on this receipt already has stock, but no opening cost. Enter the opening cost, then post this receipt.";
+
+export function isOpeningCostPostError(error: { code?: string; message?: string }): boolean {
+  return error.code === "OPENING_COST_REQUIRED" || /no opening cost|company-average opening value/i.test(error.message ?? "");
+}
+
+export function openingCostPostMessage(error: { code?: string; message?: string; products?: OpeningCostGap[] }): string {
+  if (error.products?.length && error.message) return error.message;
+  if (error.message && /no opening cost/i.test(error.message) && !/company-average opening value/i.test(error.message)) return error.message;
+  return OPENING_COST_FALLBACK;
+}
+
+function readOpeningCostProducts(value: unknown): OpeningCostGap[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const products = value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const row = item as { productId?: unknown; code?: unknown; name?: unknown };
+    const productId = String(row.productId ?? "").trim();
+    if (!productId) return [];
+    return [{ productId, code: String(row.code ?? ""), name: String(row.name ?? "") }];
+  });
+  return products.length ? products : undefined;
+}
 
 export interface GrnPostResult {
   id: string;
@@ -140,6 +200,7 @@ export async function postGRN(id: string): Promise<GrnPostResult> {
     typed.billId = (body.billId as string | null | undefined) ?? null;
     typed.billNumber = (body.billNumber as string | null | undefined) ?? null;
     typed.warehouseId = (body.warehouseId as string | null | undefined) ?? null;
+    typed.products = readOpeningCostProducts(body.products);
     throw typed;
   }
 }

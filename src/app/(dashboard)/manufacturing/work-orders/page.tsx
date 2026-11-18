@@ -258,20 +258,57 @@ export default function WorkOrdersPage() {
         ),
         sticky: true,
       },
+      { id: "status", header: "Status", className: "whitespace-nowrap", accessor: (r: ManufacturingWorkOrder) => <StatusBadge status={r.status} /> },
       {
         id: "product",
         header: "Product",
         accessor: (r: ManufacturingWorkOrder) => (
-          <span className="block max-w-[min(360px,45vw)] truncate text-sm" title={r.productName ?? r.productId}>
+          <span className="block max-w-[16rem] truncate text-sm" title={r.productName ?? r.productId}>
             {r.productName ?? r.productId}
           </span>
         ),
       },
-      { id: "bom", header: "BOM", accessor: (r: ManufacturingWorkOrder) => r.bomName ?? "—" },
-      { id: "routing", header: "Routing", accessor: (r: ManufacturingWorkOrder) => r.routingName ?? "—" },
+      {
+        id: "qty",
+        header: "Planned qty",
+        className: "whitespace-nowrap text-right",
+        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.plannedQuantity}</span>,
+      },
+      {
+        id: "produced",
+        header: "Produced",
+        className: "whitespace-nowrap text-right",
+        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.producedQuantity}</span>,
+      },
+      {
+        id: "open",
+        header: "Open",
+        className: "whitespace-nowrap text-right",
+        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.openQuantity}</span>,
+      },
+      { id: "dueDate", header: "Due date", className: "whitespace-nowrap", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
+      {
+        id: "bom",
+        header: "BOM",
+        accessor: (r: ManufacturingWorkOrder) => (
+          <span className="block max-w-[14rem] truncate" title={r.bomName ?? undefined}>
+            {r.bomName ?? "—"}
+          </span>
+        ),
+      },
+      {
+        id: "routing",
+        header: "Routing",
+        accessor: (r: ManufacturingWorkOrder) => (
+          <span className="block max-w-[10rem] truncate" title={r.routingName ?? undefined}>
+            {r.routingName ?? "—"}
+          </span>
+        ),
+      },
       {
         id: "grn",
         header: "GRN batch",
+        className: "whitespace-nowrap",
         accessor: (r: ManufacturingWorkOrder) =>
           r.grnNumber ? (
             <span className="text-xs font-medium text-primary">{r.grnNumber}</span>
@@ -279,23 +316,6 @@ export default function WorkOrdersPage() {
             <span className="text-xs text-muted-foreground">—</span>
           ),
       },
-      {
-        id: "qty",
-        header: "Planned qty",
-        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.plannedQuantity}</span>,
-      },
-      {
-        id: "produced",
-        header: "Produced",
-        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.producedQuantity}</span>,
-      },
-      {
-        id: "open",
-        header: "Open",
-        accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.openQuantity}</span>,
-      },
-      { id: "dueDate", header: "Due date", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
-      { id: "status", header: "Status", accessor: (r: ManufacturingWorkOrder) => <StatusBadge status={r.status} /> },
     ],
     []
   );

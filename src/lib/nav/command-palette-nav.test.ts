@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { COMMAND_NAV_FALLBACK_ITEMS } from "@/config/command-palette";
-import { scoreNavItem } from "@/lib/nav/command-palette-nav";
+import { paymentRecordingCommands, scoreNavItem } from "@/lib/nav/command-palette-nav";
 
 const uomCatalog = COMMAND_NAV_FALLBACK_ITEMS.find((item) => item.href === "/settings/uom");
 
@@ -11,5 +11,19 @@ describe("UOM catalog command search", () => {
       const tokens = query.split(/\s+/).filter(Boolean);
       expect(scoreNavItem(uomCatalog!, tokens)).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("payment recording command search", () => {
+  it("lists the customer receipt first, then the supplier payment", () => {
+    for (const query of ["record payment", "receive payment", "record payment receipt", "payments"]) {
+      const commands = paymentRecordingCommands(query);
+      expect(commands.map((item) => item.label)).toEqual([
+        "Record payment from customer",
+        "Record payment to supplier",
+      ]);
+    }
+    expect(paymentRecordingCommands("payment matching")).toEqual([]);
+    expect(paymentRecordingCommands("payment runs")).toEqual([]);
   });
 });

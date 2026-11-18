@@ -148,9 +148,12 @@ export default function ARPaymentsPage() {
   React.useEffect(() => {
     if (openedFromQuery.current) return;
     if (searchParams.get("receive") !== "1") return;
-    const customerId = searchParams.get("customerId")?.trim();
-    if (!customerId) return;
     openedFromQuery.current = true;
+    const customerId = searchParams.get("customerId")?.trim();
+    if (!customerId) {
+      openReceive(null);
+      return;
+    }
     const amount = Number(searchParams.get("amount"));
     openReceive({
       customerId,

@@ -6,6 +6,7 @@ import { Table as InteractiveTable } from "@/components/ui/table";
 import * as React from "react";
 import { productMatchesSearch, preferExactProductIdentifiers, splitProductSearchQuantity } from "@/lib/products/product-search";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
 import { sanitizeDecimalInput, parseDecimalString, parsePartialDecimalString, formatDecimalDisplay } from "@/lib/decimal-input";
@@ -28,7 +29,7 @@ import {
 } from "@/lib/data/products.repo";
 import { displayItemCode } from "@/lib/products/item-code";
 import type { ProductRow } from "@/lib/types/masters";
-import { fetchProductApi, fetchProductsApi } from "@/lib/api/products";
+import { fetchProductApi, fetchProductsApi, fetchProductsPageApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
 import { fetchPriceListsForUi } from "@/lib/api/pricing";
 import { getPriceForLine, getBaseQty } from "@/lib/products/price-resolver";
@@ -292,6 +293,15 @@ export function DocumentLineEditor({
   const [expandedLineIds, setExpandedLineIds] = React.useState<Record<string, boolean>>({});
   const [remoteMatches, setRemoteMatches] = React.useState<ProductRow[]>([]);
   const [remoteSearchKey, setRemoteSearchKey] = React.useState("");
+  const [pickedProducts, setPickedProducts] = React.useState<Map<string, ProductRow>>(() => new Map());
+  const [qtyDraftByProductId, setQtyDraftByProductId] = React.useState<Record<string, string>>({});
+  /** Further catalogue pages after the first 100, for browsing without a product name. */
+  const [browseCursor, setBrowseCursor] = React.useState<string | null>(null);
+  const [browseHasMore, setBrowseHasMore] = React.useState(false);
+  const [browseLoading, setBrowseLoading] = React.useState(false);
+  const searchListRef = React.useRef<HTMLDivElement | null>(null);
+  const browseSentinelRef = React.useRef<HTMLDivElement | null>(null);
+  const browsePagingRef = React.useRef(false);
 
   React.useEffect(() => {
     if (!fmcgOrg || !swapLineId) return;
@@ -406,12 +416,17 @@ export function DocumentLineEditor({
   React.useEffect(() => {
     if (!productFilter || productFilter === "all") {
       setFilteredProducts(null);
+      setBrowseCursor(null);
+      setBrowseHasMore(false);
       return;
     }
     let cancelled = false;
     setCatalogError(false);
     setSheetCatalogReady(false);
     setFilteredProducts(null);
+    setBrowseCursor(null);
+    setBrowseHasMore(false);
+    browsePagingRef.current = false;
     const load = sheetFinishedGoods ? fetchAllFinishedGoods(packSizeFromName) : fetchProductsForDocumentLines(productFilter);
     load
       .then(async (rows) => {
@@ -435,20 +450,59 @@ export function DocumentLineEditor({
               : rows;
           setFilteredProducts(sorted);
           setSheetCatalogReady(sheetFinishedGoods);
+          const canBrowse = lineByLine && fmcgOrg && !sheetFinishedGoods && rows.length >= 100;
+          setBrowseCursor(canBrowse ? String(rows.length) : null);
+          setBrowseHasMore(canBrowse);
         }
       })
       .catch(() => {
-        if (!cancelled) { setFilteredProducts([]); setCatalogError(true); }
+        if (!cancelled) { setFilteredProducts([]); setCatalogError(true); setBrowseHasMore(false); setBrowseCursor(null); }
       });
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry]);
+  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry, lineByLine, fmcgOrg]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
     onCatalogReadyChange?.(catalogReady);
   }, [productFilter, filteredProducts, onCatalogReadyChange, catalogError]);
+
+  const loadMoreBrowse = React.useCallback(async () => {
+    if (!lineByLine || !fmcgOrg || sheetFinishedGoods) return;
+    if (!browseHasMore || browseCursor == null || browsePagingRef.current) return;
+    if (!isApiConfigured() || !productFilter || productFilter === "all") return;
+    browsePagingRef.current = true;
+    setBrowseLoading(true);
+    try {
+      const page = await fetchProductsPageApi({
+        purchasable: productFilter === "purchasable" ? true : undefined,
+        sellable: productFilter === "sellable" ? true : undefined,
+        limit: 100,
+        cursor: browseCursor,
+        includeStock: false,
+      });
+      if (!page.items.length || page.nextCursor === browseCursor) {
+        setBrowseHasMore(false);
+        setBrowseCursor(null);
+        return;
+      }
+      setFilteredProducts((prev) => {
+        const seen = new Set((prev ?? []).map((row) => row.id));
+        const added = page.items.filter((item) => !seen.has(item.id));
+        if (!added.length) return prev ?? [];
+        return [...(prev ?? []), ...added];
+      });
+      setBrowseCursor(page.hasMore ? page.nextCursor : null);
+      setBrowseHasMore(page.hasMore && page.nextCursor != null);
+    } catch {
+      setBrowseHasMore(false);
+      setBrowseCursor(null);
+    } finally {
+      browsePagingRef.current = false;
+      setBrowseLoading(false);
+    }
+  }, [browseCursor, browseHasMore, fmcgOrg, lineByLine, productFilter, sheetFinishedGoods]);
 
   /** CoolCatch: product family. FMCG: product category. */
   const groupOptions = React.useMemo(() => {
@@ -1175,20 +1229,36 @@ export function DocumentLineEditor({
     };
   }, [productFilter, searchOpen, searchSplit.stripped, searchSplit.text, sheetFinishedGoods]);
 
+  const browsingCatalogue = lineByLine && fmcgOrg && !queryForList.trim();
   const searchResults = React.useMemo(() => {
     const byId = new Map<string, ProductRow>();
     for (const p of products) byId.set(p.id, p);
     if (remoteSearchKey === searchSplit.text) for (const p of remoteMatches) byId.set(p.id, p);
     const q = queryForList.trim();
-    return preferExactProductIdentifiers([...byId.values()]
+    const ranked = preferExactProductIdentifiers([...byId.values()]
       .filter((p) => inChip(p) && (!q || (remoteSearchKey === searchSplit.text && remoteMatches.some((item) => item.id === p.id)) || productMatchesLineSearch(p, q))), q)
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .slice(0, q ? 40 : 30);
-  }, [inChip, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text]);
+      .sort((a, b) => a.name.localeCompare(b.name));
+    return browsingCatalogue ? ranked : ranked.slice(0, q ? 40 : 30);
+  }, [browsingCatalogue, inChip, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text]);
 
   React.useEffect(() => {
     setHighlightIndex(0);
   }, [searchQuery, categoryChip]);
+
+  React.useEffect(() => {
+    if (!searchOpen || !browsingCatalogue || !browseHasMore || browseLoading) return;
+    const root = searchListRef.current;
+    const sentinel = browseSentinelRef.current;
+    if (!root || !sentinel || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMoreBrowse();
+      },
+      { root, rootMargin: "120px" }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [searchOpen, browsingCatalogue, browseHasMore, browseLoading, loadMoreBrowse, searchResults.length]);
 
   React.useEffect(() => {
     if (!lineByLine || !searchOpen || highlightIndex === 0) return;
@@ -1224,20 +1294,82 @@ export function DocumentLineEditor({
     return () => document.removeEventListener("mousedown", onPointer);
   }, [searchOpen]);
 
+  const draftQty = (productId: string): number | null => {
+    const raw = qtyDraftByProductId[productId];
+    if (raw == null || raw.trim() === "") return null;
+    const n = parseDecimalString(raw);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
   const addFromSearch = (product: ProductRow, keepSearch: boolean) => {
     const replacing = swapLineId;
+    const typedQty = draftQty(product.id);
     const lineId = lineByLine && !replacing ? `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` : undefined;
-    const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : lineByLine ? 0 : 1;
-    commitProducts([{ product, qty, asNewLine: lineByLine, lineId }], replacing ?? undefined, !lineId && (!keepSearch || Boolean(replacing)));
-    if (lineId) setPendingQtyFocusId(lineId);
+    const qty = qtyForAdd && qtyForAdd > 0 ? qtyForAdd : typedQty ?? (lineByLine ? 0 : 1);
+    const addedWithRowQty = typedQty != null && !(qtyForAdd && qtyForAdd > 0) && !replacing;
+    commitProducts([{ product, qty, asNewLine: lineByLine, lineId }], replacing ?? undefined, !lineId && (!keepSearch || Boolean(replacing)) && !addedWithRowQty);
+    if (lineId && !addedWithRowQty) setPendingQtyFocusId(lineId);
+    if (addedWithRowQty) {
+      setQtyDraftByProductId((prev) => {
+        if (!(product.id in prev)) return prev;
+        const next = { ...prev };
+        delete next[product.id];
+        return next;
+      });
+    }
+    setPickedProducts((prev) => {
+      if (!prev.has(product.id)) return prev;
+      const next = new Map(prev);
+      next.delete(product.id);
+      return next;
+    });
     setSearchQuery("");
     setCategoryChip(null);
-    if (keepSearch && !replacing) {
+    if ((keepSearch && !replacing) || addedWithRowQty) {
       setSearchOpen(true);
       searchInputRef.current?.focus();
     } else {
       setSearchOpen(false);
     }
+  };
+
+  const togglePickedProduct = (product: ProductRow) => {
+    setPickedProducts((prev) => {
+      const next = new Map(prev);
+      if (next.has(product.id)) next.delete(product.id);
+      else next.set(product.id, product);
+      return next;
+    });
+    setSearchOpen(true);
+  };
+
+  const addPickedProducts = () => {
+    const items = [...pickedProducts.values()];
+    if (!items.length || swapLineId) return;
+    const stamp = Date.now();
+    const qtyFor = (product: ProductRow) => draftQty(product.id) ?? (qtyForAdd && qtyForAdd > 0 ? qtyForAdd : lineByLine ? 0 : 1);
+    const firstQty = qtyFor(items[0]!);
+    const firstId = lineByLine && !(firstQty > 0) ? `line-${stamp}-0` : undefined;
+    commitProducts(
+      items.map((product, i) => ({
+        product,
+        qty: qtyFor(product),
+        asNewLine: lineByLine,
+        lineId: lineByLine ? `line-${stamp}-${i}` : undefined,
+      })),
+      undefined,
+      !lineByLine
+    );
+    if (firstId) setPendingQtyFocusId(firstId);
+    setPickedProducts(new Map());
+    setQtyDraftByProductId((prev) => {
+      const next = { ...prev };
+      for (const product of items) delete next[product.id];
+      return next;
+    });
+    setSearchQuery("");
+    setCategoryChip(null);
+    setSearchOpen(false);
   };
 
   const displayedLines = React.useMemo(() => {
@@ -1322,6 +1454,7 @@ export function DocumentLineEditor({
     if (event.key === "Escape") {
       setSearchOpen(false);
       setSwapLineId(null);
+      setPickedProducts(new Map());
       return;
     }
     if (event.key === "Enter" && !event.shiftKey) {
@@ -1373,10 +1506,10 @@ export function DocumentLineEditor({
                 const value = e.target.value;
                 setSearchQuery(value);
                 if (!value.trim()) setCategoryChip(null);
-                setSearchOpen(!lineByLine || Boolean(value.trim()));
+                setSearchOpen(!lineByLine || fmcgOrg || Boolean(value.trim()));
               }}
               onFocus={() => {
-                if (!lineByLine || searchQuery.trim()) setSearchOpen(true);
+                if (!lineByLine || fmcgOrg || searchQuery.trim()) setSearchOpen(true);
               }}
               onKeyDown={onSearchKeyDown}
               autoComplete="off"
@@ -1404,7 +1537,7 @@ export function DocumentLineEditor({
         </div>
         )}
         {lineByLine ? (
-          <p className="text-xs text-muted-foreground">Choose a product, enter its quantity, then press Enter for the next line.</p>
+          <p className="text-xs text-muted-foreground">Scroll the list to find a product. Enter the quantity on the right, then select it. Tick several to add them together.</p>
         ) : sheetFinishedGoods || (fmcgOrg && !swapLineId) ? null : (
         <p className="text-xs text-muted-foreground">
           <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd> new line
@@ -1418,11 +1551,13 @@ export function DocumentLineEditor({
           </p>
         ) : null}
         {searchOpen && !sheetFinishedGoods && (lineByLine || !fmcgOrg || swapLineId) ? (
+          <div className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-sm">
           <div
+            ref={searchListRef}
             id={searchResultsId}
             role={lineByLine ? "listbox" : undefined}
             aria-label={lineByLine ? "Matching products" : undefined}
-            className="max-h-80 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-sm"
+            className="max-h-72 overflow-y-auto"
           >
             {showChips ? (
               <div className="flex flex-wrap gap-1.5 border-b p-2">
@@ -1453,7 +1588,16 @@ export function DocumentLineEditor({
             ) : (
               <ul role={lineByLine ? "presentation" : undefined}>
                 {searchResults.map((p, index) => (
-                  <li key={p.id} role={lineByLine ? "presentation" : undefined}>
+                  <li key={p.id} role={lineByLine ? "presentation" : undefined} className="flex items-center gap-2 pl-2 pr-2">
+                    {!swapLineId ? (
+                      <Checkbox
+                        className="mt-0"
+                        checked={pickedProducts.has(p.id)}
+                        onCheckedChange={() => togglePickedProduct(p)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        aria-label={`Select ${p.name}`}
+                      />
+                    ) : null}
                     <button
                       type="button"
                       id={lineByLine ? `${searchResultsId}-${index}` : undefined}
@@ -1461,7 +1605,7 @@ export function DocumentLineEditor({
                       aria-selected={lineByLine ? index === highlightIndex : undefined}
                       tabIndex={lineByLine ? -1 : undefined}
                       className={cn(
-                        "flex w-full items-start gap-3 px-3 py-2 text-left",
+                        "flex min-w-0 flex-1 items-start gap-3 px-3 py-2 text-left",
                         index === highlightIndex ? "bg-muted" : "hover:bg-muted/60"
                       )}
                       onMouseEnter={() => setHighlightIndex(index)}
@@ -1477,14 +1621,82 @@ export function DocumentLineEditor({
                           {qtyForAdd ? ` · Add at qty ${qtyForAdd}` : ""}
                         </span>
                       </span>
-                      {priceLabelFor(p) ? (
-                        <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
-                      ) : null}
                     </button>
+                    {priceLabelFor(p) ? (
+                      <span className="shrink-0 text-sm tabular-nums">{priceLabelFor(p)}</span>
+                    ) : null}
+                    {lineByLine ? (
+                      <Input
+                        className="h-8 w-[4.5rem] shrink-0 px-2 text-right tabular-nums"
+                        inputMode="decimal"
+                        placeholder="Qty"
+                        aria-label={`Order quantity for ${p.name}`}
+                        value={qtyDraftByProductId[p.id] ?? ""}
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const raw = sanitizeDecimalInput(e.target.value);
+                          setQtyDraftByProductId((prev) => ({ ...prev, [p.id]: raw }));
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key !== "Enter") return;
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (draftQty(p.id) == null) return;
+                          addFromSearch(p, true);
+                        }}
+                      />
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
+            {browsingCatalogue && (browseLoading || browseHasMore) ? (
+              <div ref={browseSentinelRef} className="px-3 py-2 text-center">
+                {browseLoading ? (
+                  <p className="text-xs text-muted-foreground">Loading more products…</p>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => void loadMoreBrowse()}
+                  >
+                    Load more products
+                  </Button>
+                )}
+              </div>
+            ) : null}
+          </div>
+          {!swapLineId ? (
+            <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+              <span className="text-xs text-muted-foreground">
+                {pickedProducts.size === 0 ? "Tick products to add several at once" : `${pickedProducts.size} selected`}
+                {pickedProducts.size > 0 ? (
+                  <button
+                    type="button"
+                    className="ml-2 underline underline-offset-2 hover:text-foreground"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setPickedProducts(new Map())}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                disabled={pickedProducts.size === 0}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={addPickedProducts}
+              >
+                {pickedProducts.size === 0
+                  ? "Add selected"
+                  : `Add ${pickedProducts.size} ${pickedProducts.size === 1 ? "product" : "products"}`}
+              </Button>
+            </div>
+          ) : null}
           </div>
         ) : null}
       </div>

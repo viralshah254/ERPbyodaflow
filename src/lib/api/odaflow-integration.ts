@@ -2,6 +2,7 @@
  * API client for Odaflow → ERP integration admin endpoints.
  */
 import { apiRequest, getApiBase, requireLiveApi } from "./client";
+import type { DuplicateCustomerMatch } from "./sfa-customer-approvals";
 
 export type OdaflowIntegrationApiResponse = {
   orgId: string;
@@ -475,6 +476,7 @@ export async function createErpCustomerFromSfaMatchApi(params: {
   action: "pending_approval" | "created" | "approved";
   approvalId?: string;
   partyId?: string;
+  duplicates?: DuplicateCustomerMatch[];
 }> {
   requireLiveApi("Create ERP customer from SFA");
   return apiRequest("/api/integrations/odaflow/customers/matching/create-from-sfa", {

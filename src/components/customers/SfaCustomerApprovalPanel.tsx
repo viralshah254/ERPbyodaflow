@@ -20,10 +20,13 @@ import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import {
   approveSfaCustomerApi,
   fetchSfaCustomerApprovalsApi,
+  fetchSfaCustomerDuplicatesApi,
   rejectSfaCustomerApi,
+  type DuplicateCustomerMatch,
   type SfaCustomerApproval,
 } from "@/lib/api/sfa-customer-approvals";
 import { SfaCustomerApprovalSheet } from "@/components/customers/SfaCustomerApprovalSheet";
+import { SfaCustomerDuplicateDialog } from "@/components/customers/SfaCustomerDuplicateDialog";
 import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
 
 const PAGE_SIZE_OPTIONS = [10, 20, 25, 50] as const;
@@ -73,6 +76,10 @@ export function SfaCustomerApprovalPanel({
   const [hasMore, setHasMore] = React.useState(false);
   const [reloadToken, setReloadToken] = React.useState(0);
   const [selected, setSelected] = React.useState<SfaCustomerApproval | null>(null);
+  const [review, setReview] = React.useState<{
+    row: SfaCustomerApproval;
+    matches: DuplicateCustomerMatch[];
+  } | null>(null);
   const canEdit = useCanWriteSales();
 
   const onPendingCountRef = React.useRef(onPendingCount);
@@ -121,11 +128,37 @@ export function SfaCustomerApprovalPanel({
     setReloadToken((token) => token + 1);
   }
 
-  async function approve(row: SfaCustomerApproval): Promise<boolean> {
+  async function approve(
+    row: SfaCustomerApproval,
+    mergeIntoPartyId?: string,
+    options?: { skipDuplicateCheck?: boolean; createNew?: boolean }
+  ): Promise<boolean> {
+    if (!mergeIntoPartyId && !options?.skipDuplicateCheck) {
+      setBusyId(row._id);
+      try {
+        const matches = await fetchSfaCustomerDuplicatesApi(row._id);
+        if (matches.length > 0) {
+          setReview({ row, matches });
+          setBusyId(null);
+          return false;
+        }
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Could not check for an existing customer");
+        setBusyId(null);
+        return false;
+      }
+    }
     setBusyId(row._id);
     try {
-      await approveSfaCustomerApi(row._id);
-      toast.success(`${row.name} is now on the customer list.`);
+      const result = await approveSfaCustomerApi(row._id, mergeIntoPartyId, {
+        createNew: options?.createNew,
+      });
+      setReview(null);
+      toast.success(
+        mergeIntoPartyId
+          ? `${result.partyName || "The existing customer"} is now the ERP customer for this outlet. They can take orders.`
+          : `${row.name} is now on the customer list and can take orders.`
+      );
       onApproved?.();
       if (items.length <= 1 && pageOffset > 0) {
         setPageOffset(Math.max(0, pageOffset - pageSize));
@@ -196,8 +229,9 @@ export function SfaCustomerApprovalPanel({
         <div className="border-b px-4 py-3">
           <h2 className="text-sm font-semibold">Pending approval</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Direct customers created in Odaflow SFA stay here until you approve them. Open a row to
-            correct the phone, KRA PIN, or address, then approve them onto the customer list.
+            Direct customers created in Odaflow SFA stay here until you approve them. Approve checks
+            the KRA PIN, phone, code, and name. If someone similar is already on the list, you choose
+            whether to merge or create a new customer. They cannot take orders until then.
           </p>
         </div>
         {loading ? (
@@ -299,13 +333,35 @@ export function SfaCustomerApprovalPanel({
           setItems((current) => current.map((item) => (item._id === updated._id ? { ...item, ...updated } : item)));
           setSelected(updated);
         }}
-        onApprove={(row) => {
-          void approve(row).then((ok) => {
+        onApprove={(row, mergeIntoPartyId) => {
+          void approve(row, mergeIntoPartyId).then((ok) => {
             if (ok) setSelected(null);
           });
         }}
         onReject={(row) => {
           void reject(row).then((ok) => {
+            if (ok) setSelected(null);
+          });
+        }}
+      />
+
+      <SfaCustomerDuplicateDialog
+        customerName={review?.row.name || "This customer"}
+        matches={review?.matches ?? []}
+        open={review != null}
+        busy={review != null && busyId === review.row._id}
+        onOpenChange={(next) => {
+          if (!next) setReview(null);
+        }}
+        onMerge={(partyId) => {
+          if (!review) return;
+          void approve(review.row, partyId).then((ok) => {
+            if (ok) setSelected(null);
+          });
+        }}
+        onCreateNew={() => {
+          if (!review) return;
+          void approve(review.row, undefined, { skipDuplicateCheck: true, createNew: true }).then((ok) => {
             if (ok) setSelected(null);
           });
         }}

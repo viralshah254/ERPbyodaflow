@@ -55,6 +55,10 @@ interface DataTableProps<T> {
   pageSize?: number;
   onPageOffsetChange?: (offset: number) => void;
   dataScope?: 'all' | 'page';
+  /** The parent already searched the full list. Do not filter the loaded page again. */
+  serverSearch?: boolean;
+  /** Full result count when `serverSearch` is set. */
+  totalCount?: number;
   /** Disable the built-in input when a page already supplies its search toolbar. */
   searchable?: boolean;
   search?: string;
@@ -100,6 +104,8 @@ export function DataTable<T extends object>({
   pageSize,
   onPageOffsetChange,
   dataScope = "all",
+  serverSearch = false,
+  totalCount,
   searchable = true,
   search: searchProp,
   onSearchChange,
@@ -127,13 +133,13 @@ export function DataTable<T extends object>({
 
   const displayData = React.useMemo(() => {
     const source = allData ?? data;
-    const filtered = search.trim() ? source.filter(row => matchesTableSearch(columns.filter(columnCanSort).map(col => col.searchValue ? col.searchValue(row) : `${tableText(columnValue(col, row))} ${sortValue(col, row) ?? ''}`).join(' '), search)) : source;
+    const filtered = !serverSearch && search.trim() ? source.filter(row => matchesTableSearch(columns.filter(columnCanSort).map(col => col.searchValue ? col.searchValue(row) : `${tableText(columnValue(col, row))} ${sortValue(col, row) ?? ''}`).join(' '), search)) : source;
     const page = (rows: T[]) => allData && pageSize ? rows.slice(pageOffset, pageOffset + pageSize) : rows;
     if (disableClientSort || !sort) return page(filtered);
     const col = columns.find(c => c.id === sort.columnId);
     if (!col || !columnCanSort(col)) return page(filtered);
     return page([...filtered].sort((a, b) => compareTableValues(sortValue(col, a), sortValue(col, b), sort.dir)));
-  }, [data, allData, pageOffset, pageSize, search, sort, columns, disableClientSort]);
+  }, [data, allData, pageOffset, pageSize, search, serverSearch, sort, columns, disableClientSort]);
 
   const nextSortState = (
     prev: DataTableSortState,
@@ -234,8 +240,8 @@ export function DataTable<T extends object>({
         className,
       )}
     >
-      {searchable && <div className="flex shrink-0 flex-wrap items-center gap-3 border-b p-3 print:hidden"><Input type="search" aria-label="Search table" placeholder={dataScope === "page" ? "Search this page…" : searchPlaceholder} value={search} onChange={event => { setInternalSearch(event.target.value); onPageOffsetChange?.(0); onSearchChange?.(event.target.value); }} className="max-w-sm" /><span className="text-xs text-muted-foreground" role="status">{displayData.length} of {data.length} rows</span></div>}
-      {dataScope === "page" && <p className="shrink-0 px-3 py-2 text-xs text-muted-foreground print:hidden">Column sorting applies to the loaded page.</p>}
+      {searchable && <div className="flex shrink-0 flex-wrap items-center gap-3 border-b p-3 print:hidden"><Input type="search" aria-label="Search table" placeholder={serverSearch ? searchPlaceholder : dataScope === "page" ? "Search this page…" : searchPlaceholder} value={search} onChange={event => { setInternalSearch(event.target.value); onPageOffsetChange?.(0); onSearchChange?.(event.target.value); }} className="max-w-sm" /><span className="text-xs text-muted-foreground" role="status">{serverSearch && typeof totalCount === "number" ? `${displayData.length} of ${totalCount.toLocaleString()} rows` : `${displayData.length} of ${data.length} rows`}</span></div>}
+      {dataScope === "page" && !serverSearch && <p className="shrink-0 px-3 py-2 text-xs text-muted-foreground print:hidden">Column sorting applies to the loaded page.</p>}
       <div
         className={scrollClassName}
         style={autoMaxHeight ? { maxHeight: autoMaxHeight } : undefined}
@@ -245,8 +251,7 @@ export function DataTable<T extends object>({
           role={responsiveRows ? "table" : undefined}
           className={cn(
             "caption-bottom text-sm",
-            "w-full min-w-0",
-            scrollMode === "natural" && "min-w-full",
+            "w-max min-w-full",
             tableSizeClass,
           )}
         >

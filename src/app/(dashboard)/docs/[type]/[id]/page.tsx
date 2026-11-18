@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useAccountingOnly } from "@/lib/api/invoice-posting";
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { creditQuantityPreview } from "@/lib/docs/credit-quantity-preview";
 import { DocumentPageShell } from "@/components/docs/DocumentPageShell";
@@ -67,6 +67,8 @@ import {
   downloadDocumentExcelApi,
   downloadDocumentAttachmentApi,
   fetchDocumentDetailApi,
+  fetchFiscalPostingPreflightApi,
+  type FiscalPostingPreflight,
   patchDocumentApi,
   requestDocumentApprovalApi,
   sendDocumentEmailApi,
@@ -120,12 +122,17 @@ import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { isRouteDispatchMode } from "@/lib/api/sales-document-flow";
-import { fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
+import { fetchJoyLoadNoteForDeliveryNote, fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
 import {
   FmcgPackagingConversionBlocker,
   packagingMissingLineLabel,
   productPackagingHref,
 } from "@/components/docs/FmcgPackagingConversionBlocker";
+import {
+  FiscalPostingPreflightBanner,
+  FiscalPostingPreflightDialog,
+  preflightFromPostingError,
+} from "@/components/docs/FiscalPostingPreflightDialog";
 
 const POD_QTY_TOLERANCE = 0.02;
 const POD_WEIGHT_TOLERANCE_KG = 0.05;
@@ -236,7 +243,35 @@ function salesOrderFulfilmentInProgress(linkedDeliveryNote: LinkedDocSummary | n
   return DN_NEEDS_FULFILMENT_STATUSES.has(String(linkedDeliveryNote.status ?? "").trim().toUpperCase());
 }
 
-function toastDocumentActionError(error: unknown) {
+const OPEN_FISCAL_STATES = ["PREPARED", "DISPATCHING", "UNCERTAIN", "SIGNED"];
+
+function fiscalRecoveryHref(documentId: string) {
+  return `/finance/fiscal-recovery?documentId=${encodeURIComponent(documentId)}`;
+}
+
+function openFiscalAttempt(document: { fiscalState?: string; status?: string; kraSigning?: { status?: string } | null } | null | undefined) {
+  if (!document || document.status === "POSTED" || document.status === "CANCELLED") return false;
+  if (document.kraSigning?.status === "signed") return false;
+  return OPEN_FISCAL_STATES.includes(document.fiscalState ?? "");
+}
+
+function fiscalRecoveryToast(message: string): { title: string; description: string } | null {
+  if (/already has a fiscal attempt/i.test(message)) {
+    return {
+      title: "This document was not sent to KRA again",
+      description: "A previous signing attempt is still open. Open fiscal recovery and confirm what KRA received before you try again.",
+    };
+  }
+  if (/unresolved signing attempt/i.test(message)) {
+    return {
+      title: "KRA is still finishing another document",
+      description: "Open fiscal recovery and resolve that attempt before sending this one.",
+    };
+  }
+  return null;
+}
+
+function toastDocumentActionError(error: unknown, documentId?: string): "own" | "other" | false {
   const body = (error as { body?: { code?: string; grns?: Array<{ id: string; number: string }> } }).body;
   const grn = body?.code === "LINKED_GRN_NOT_POSTED" ? body.grns?.[0] : undefined;
   if (grn?.id) {
@@ -249,9 +284,27 @@ function toastDocumentActionError(error: unknown) {
       },
       duration: 12000,
     });
-    return;
+    return false;
   }
-  toast.error(error instanceof Error ? error.message : "Request failed");
+  const message = error instanceof Error ? error.message : "Request failed";
+  const fiscal = fiscalRecoveryToast(message);
+  if (fiscal) {
+    const otherDocument = /unresolved signing attempt/i.test(message);
+    const href = !otherDocument && documentId ? fiscalRecoveryHref(documentId) : "/finance/fiscal-recovery";
+    toast.error(fiscal.title, {
+      description: fiscal.description,
+      action: {
+        label: "Open fiscal recovery",
+        onClick: () => {
+          window.location.href = href;
+        },
+      },
+      duration: 20000,
+    });
+    return otherDocument ? "other" : "own";
+  }
+  toast.error(message);
+  return false;
 }
 
 function isCreditNoteDoc(type: string | null | undefined): boolean {
@@ -285,6 +338,8 @@ function CreditLineCapacity({ capacity, unit }: {
 export default function DocViewPage() {
   const params = useParams();
   const router = useRouter();
+  const pathname = usePathname();
+  const fiscalReturnTo = pathname;
   const type = params.type as string;
   const id = params.id as string;
   const terminology = useTerminology();
@@ -358,6 +413,10 @@ export default function DocViewPage() {
   const [applyAmount, setApplyAmount] = React.useState("");
   const [applyLoading, setApplyLoading] = React.useState(false);
   const [actionLoading, setActionLoading] = React.useState(false);
+  const [fiscalPostingPreflight, setFiscalPostingPreflight] = React.useState<FiscalPostingPreflight | null>(null);
+  const [fiscalRecoveryPrompt, setFiscalRecoveryPrompt] = React.useState<"own" | "other" | false>(false);
+  const [fiscalPostingPreflightOpen, setFiscalPostingPreflightOpen] = React.useState(false);
+  const [fiscalPostingPreflightChecking, setFiscalPostingPreflightChecking] = React.useState(false);
   const [startPickPackLoading, setStartPickPackLoading] = React.useState(false);
   const [odaflowApprovalOpen, setOdaflowApprovalOpen] = React.useState(false);
   const [odaflowApprovalAction, setOdaflowApprovalAction] = React.useState<"request" | "approve" | "submit" | null>(null);
@@ -549,7 +608,11 @@ export default function DocViewPage() {
     if (type !== "delivery-note" || !document) return false;
     if (document.podConfirmation?.confirmedAt) return false;
     const st = String(document.status ?? "").toUpperCase();
-    if (!["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) return false;
+    const routeStamp = isRouteDispatchMode(document.salesFlow?.mode);
+    const stampable = routeStamp
+      ? ["DRAFT", "APPROVED", "IN_TRANSIT", "DELIVERED", "POSTED"]
+      : ["IN_TRANSIT", "DELIVERED", "POSTED"];
+    if (!stampable.includes(st)) return false;
     return (
       can(authUser, Permissions.SALES_DELIVERIES_POD) ||
       can(authUser, Permissions.SALES_WRITE)
@@ -829,21 +892,107 @@ export default function DocViewPage() {
     void refreshDocument(true);
   }, [id, refreshDocument, signAndPost, type]);
 
+  const loadFiscalPostingPreflight = React.useCallback(async () => {
+    if (!signAndPost || !canPost) return null;
+    const result = await fetchFiscalPostingPreflightApi(type as DocTypeKey, id);
+    setFiscalPostingPreflight(result);
+    return result;
+  }, [canPost, id, signAndPost, type]);
+
+  React.useEffect(() => {
+    if (!signAndPost || !canPost || !document?.id) {
+      setFiscalPostingPreflight(null);
+      return;
+    }
+    let cancelled = false;
+    void fetchFiscalPostingPreflightApi(type as DocTypeKey, id)
+      .then((result) => {
+        if (!cancelled) setFiscalPostingPreflight(result);
+      })
+      .catch(() => {
+        if (!cancelled) setFiscalPostingPreflight(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canPost, document?.id, document?.tax, document?.lines, id, signAndPost, type]);
+
+  const reportActionError = React.useCallback((error: unknown) => {
+    const prompt = toastDocumentActionError(error, id);
+    if (prompt) setFiscalRecoveryPrompt(prompt);
+  }, [id]);
+
+  const ensureFiscalPostingReady = React.useCallback(async () => {
+    if (!signAndPost) return true;
+    try {
+      const check = (await loadFiscalPostingPreflight()) ?? fiscalPostingPreflight;
+      if (check?.applies && !check.ready) {
+        setFiscalPostingPreflightOpen(true);
+        return false;
+      }
+      return true;
+    } catch {
+      return true;
+    }
+  }, [fiscalPostingPreflight, loadFiscalPostingPreflight, signAndPost]);
+
   const requestPost = React.useCallback(async () => {
     if (invoiceNeedsSettlement) {
       setSettleStep(document?.retailPaymentMethod ? "terms" : "payment");
       setSettleOpen(true);
       return;
     }
+    if (!(await ensureFiscalPostingReady())) return;
     setActionLoading(true);
     try {
       await runPost();
     } catch (error) {
-      toastDocumentActionError(error);
+      const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+      if (blocked) {
+        setFiscalPostingPreflight(blocked);
+        setFiscalPostingPreflightOpen(true);
+      } else {
+        reportActionError(error);
+      }
     } finally {
       setActionLoading(false);
     }
-  }, [document?.retailPaymentMethod, invoiceNeedsSettlement, runPost]);
+  }, [
+    document?.retailPaymentMethod,
+    ensureFiscalPostingReady,
+    invoiceNeedsSettlement,
+    reportActionError,
+    runPost,
+  ]);
+
+  const retryPostAfterFiscalSetup = React.useCallback(async () => {
+    setFiscalPostingPreflightChecking(true);
+    try {
+      const check = await loadFiscalPostingPreflight();
+      if (check?.applies && !check.ready) {
+        setFiscalPostingPreflight(check);
+        setFiscalPostingPreflightOpen(true);
+        return;
+      }
+      setFiscalPostingPreflightOpen(false);
+      setActionLoading(true);
+      try {
+        await runPost();
+      } catch (error) {
+        const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+        if (blocked) {
+          setFiscalPostingPreflight(blocked);
+          setFiscalPostingPreflightOpen(true);
+        } else {
+          reportActionError(error);
+        }
+      } finally {
+        setActionLoading(false);
+      }
+    } finally {
+      setFiscalPostingPreflightChecking(false);
+    }
+  }, [loadFiscalPostingPreflight, reportActionError, runPost]);
 
   /** Load attachments, comments, and audit after core document renders. */
   React.useEffect(() => {
@@ -1023,11 +1172,11 @@ export default function DocViewPage() {
       toast.success("Credit draft saved.");
       await refreshDocument(true);
     } catch (e) {
-      toastDocumentActionError(e);
+      reportActionError(e);
     } finally {
       setCreditQtySaving(false);
     }
-  }, [creditQtyDraft, creditPreview, creditEditable, creditEffect, creditEffectDirty, creditQtyDirty, creditWarehouse, document, id, refreshDocument, type]);
+  }, [creditQtyDraft, creditPreview, creditEditable, creditEffect, creditEffectDirty, creditQtyDirty, creditWarehouse, document, id, refreshDocument, reportActionError, type]);
 
   const creditDraftNeedsSave = draftCredit && (
     creditQtyDirty || creditEffectDirty || creditQtySaving ||
@@ -1175,20 +1324,37 @@ export default function DocViewPage() {
     };
   }, [odaflowApprovalOpen, needsRouteWarehouse]);
 
-  const [joyLoadNote, setJoyLoadNote] = React.useState<{ id: string; number: string; status: string } | null>(null);
+  const [joyLoadNote, setJoyLoadNote] = React.useState<{ id: string; number: string; status: string; awaitingDeparture?: boolean } | null>(null);
+  const yardDeliveryId =
+    type === "delivery-note" &&
+    document?.id &&
+    !["CANCELLED", "IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"].includes(String(document.status ?? "").toUpperCase())
+      ? document.id
+      : type === "invoice"
+        ? (document?.linkedDeliveries ?? []).find((row) => {
+            const st = String(row.status ?? "").toUpperCase();
+            return !["CANCELLED", "IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"].includes(st);
+          })?.id
+        : undefined;
   React.useEffect(() => {
     const status = String(document?.status ?? "").toUpperCase();
-    if (
-      type !== "sales-order" ||
-      !routeDispatch ||
-      !document?.id ||
-      !["APPROVED", "PARTIALLY_FULFILLED"].includes(status)
-    ) {
+    const salesOrderId =
+      type === "sales-order" && routeDispatch && document?.id && ["APPROVED", "PARTIALLY_FULFILLED"].includes(status)
+        ? document.id
+        : undefined;
+    if (!routeDispatch || (!yardDeliveryId && !salesOrderId)) {
       setJoyLoadNote(null);
       return;
     }
     let cancelled = false;
-    fetchJoyLoadNoteForOrder(document.id)
+    const request = yardDeliveryId
+      ? fetchJoyLoadNoteForDeliveryNote(yardDeliveryId).then(async (payload) => {
+          if (payload.note) return payload;
+          const sourceId = document?.sourceDocument?.typeKey === "sales-order" ? document.sourceDocument.id : "";
+          return sourceId ? fetchJoyLoadNoteForOrder(sourceId) : payload;
+        })
+      : fetchJoyLoadNoteForOrder(salesOrderId!);
+    request
       .then((payload) => {
         if (!cancelled) setJoyLoadNote(payload.note);
       })
@@ -1198,7 +1364,7 @@ export default function DocViewPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, document?.id, document?.status, routeDispatch]);
+  }, [type, document?.id, document?.status, document?.sourceDocument?.id, document?.sourceDocument?.typeKey, yardDeliveryId, routeDispatch]);
 
   const isUuidLike = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
@@ -1382,7 +1548,7 @@ export default function DocViewPage() {
           await documentActionApi(type as DocTypeKey, id, action as "approve" | "post" | "cancel");
           await refreshDocument(true);
           toast.success(`Document ${action}d.`);
-        } catch (e) { toastDocumentActionError(e); }
+        } catch (e) { reportActionError(e); }
         finally { setActionLoading(false); }
       }}
       onConvert={openConvertSheet}
@@ -1490,7 +1656,9 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
-                      Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery.
+                      {isRouteDispatchMode(document.salesFlow?.mode)
+                        ? "Upload the stamped delivery note here to confirm delivery. The invoice can be posted after this stamp."
+                        : "Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery."}
                     </p>
                   </div>
                 ) : null}
@@ -1513,10 +1681,16 @@ export default function DocViewPage() {
                       <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
                         {fmcgOrg ? (
+                          isRouteDispatchMode(document.salesFlow?.mode) ? (
+                            <>
+                              Shipped quantities are frozen from warehouse issue. Print the delivery note for the drop-off. The invoice is on standby and can be created whenever you are ready.
+                            </>
+                          ) : (
                           <>
                             Shipped quantities are frozen from warehouse issue. Print or download this delivery note (stamp / signature boxes included), get the customer copy signed, then{" "}
                             <strong>Upload signed DN</strong> here — or record POD from the mobile dispatch app. Invoice from this DN only after POD.
                           </>
+                          )
                         ) : (
                           <>
                             Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
@@ -1736,6 +1910,13 @@ export default function DocViewPage() {
             exchangeRate={document.exchangeRate}
           />
         ) : null}
+        {signAndPost && canPost && fiscalPostingPreflight && !loading && document ? (
+          <FiscalPostingPreflightBanner
+            preflight={fiscalPostingPreflight}
+            returnTo={fiscalReturnTo}
+            onOpenDetails={() => setFiscalPostingPreflightOpen(true)}
+          />
+        ) : null}
         {fmcgOrg && isIncotexSignableDocType(type) && !loading && document ? (
           <KraSigningPanel
             typeKey={type}
@@ -1904,8 +2085,13 @@ export default function DocViewPage() {
               Posted
             </Button>
           )}
-          {canWrite && (canApprove || canPost) && (
+          {canWrite && (canApprove || canPost || openFiscalAttempt(document)) && (
             <>
+              {openFiscalAttempt(document) ? (
+                <Button size="sm" asChild>
+                  <Link href={fiscalRecoveryHref(id)}>Open fiscal recovery</Link>
+                </Button>
+              ) : null}
               {canApprove && (
               <Button
                 variant="outline"
@@ -1934,10 +2120,11 @@ export default function DocViewPage() {
                 {type === "bill" ? "Approve bill" : "Approve"}
               </Button>
               )}
-              {canPost && (
+              {canPost && !openFiscalAttempt(document) && (
               <Button
                 size="sm"
-                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned)}
+                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned) || (type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)))}
+                title={type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)) ? "Upload the stamped delivery note before posting." : undefined}
                 onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
@@ -2307,6 +2494,31 @@ export default function DocViewPage() {
             ]}
           />
         ))}
+        {(openFiscalAttempt(document) || fiscalRecoveryPrompt || document?.fiscalState === "QUEUED") ? (
+          <div role="status" className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+            {document?.fiscalState === "QUEUED" || (fiscalRecoveryPrompt === "other" && !openFiscalAttempt(document)) ? (
+              <>
+                <p className="font-medium leading-snug">This invoice is waiting in the queue</p>
+                <p className="mt-1 leading-relaxed">
+                  It was not sent. Fiscal recovery lists it in yellow until the invoice ahead of it is finished. When that invoice is done, use Sign and post.
+                </p>
+                <Button size="sm" className="mt-3" asChild>
+                  <Link href="/finance/fiscal-recovery">Open fiscal recovery</Link>
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="font-medium leading-snug">This document was not sent to KRA again</p>
+                <p className="mt-1 leading-relaxed">
+                  A previous signing attempt is still open. Check what KRA received before you use Sign and post again.
+                </p>
+                <Button size="sm" className="mt-3" asChild>
+                  <Link href={fiscalRecoveryHref(id)}>Open fiscal recovery</Link>
+                </Button>
+              </>
+            )}
+          </div>
+        ) : null}
         {odaflowSource ? (
           <OdaflowSourceCard info={odaflowSource} showPdfPreview={false} pdfInAttachments />
         ) : null}
@@ -2345,6 +2557,23 @@ export default function DocViewPage() {
             fmcgOrg={fmcgOrg}
           />
         )}
+        {type === "delivery-note" && document?.status === "DRAFT" && isRouteDispatchMode(document.salesFlow?.mode) && !document.podConfirmation?.confirmedAt ? (
+          <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+            <p className="font-medium leading-snug">
+              Upload the stamped delivery note to confirm this delivery. The invoice stays unposted until the stamp is recorded.
+            </p>
+            {canRecordSignedPod ? (
+              <Button size="sm" className="mt-2 h-7 text-xs" onClick={() => {
+                setSignedPodFile(null);
+                setSignedPodReceiverName("");
+                setSignedPodNote("");
+                setSignedPodSheetOpen(true);
+              }}>
+                Upload stamped DN
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         <DocumentTabs
           key={`${type}-${id}`}
           compact={compactDocument}
@@ -2866,7 +3095,7 @@ export default function DocViewPage() {
                   if (/packing counts missing|pieces per/i.test(msg)) {
                     void refreshDocument(true);
                   }
-                  toastDocumentActionError(e);
+                  reportActionError(e);
                 } finally {
                   setActionLoading(false);
                 }
@@ -2996,7 +3225,9 @@ export default function DocViewPage() {
             <SheetDescription>
               {document?.salesFlow?.mode === "pick_pack_first"
                 ? "Upload the signed delivery note the driver brought back. The original delivery note stays on file. POD source is recorded as an internal upload."
-                : "Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as shipped quantities and unlocks Create Invoice from this DN."}
+                : isRouteDispatchMode(document?.salesFlow?.mode)
+                  ? "Upload the signed copy when it comes back. This records proof of delivery. The invoice can already be created from this note."
+                  : "Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as shipped quantities and unlocks Create Invoice from this DN."}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -3561,11 +3792,18 @@ export default function DocViewPage() {
                       setPartyNeedsTerms(false);
                     }
                     setSettleOpen(false);
+                    if (!(await ensureFiscalPostingReady())) return;
                     setActionLoading(true);
                     try {
                       await runPost();
                     } catch (error) {
-                      toastDocumentActionError(error);
+                      const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+                      if (blocked) {
+                        setFiscalPostingPreflight(blocked);
+                        setFiscalPostingPreflightOpen(true);
+                      } else {
+                        reportActionError(error);
+                      }
                     } finally {
                       setActionLoading(false);
                     }
@@ -3639,6 +3877,15 @@ export default function DocViewPage() {
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
+      <FiscalPostingPreflightDialog
+        open={fiscalPostingPreflightOpen}
+        onOpenChange={setFiscalPostingPreflightOpen}
+        preflight={fiscalPostingPreflight}
+        returnTo={fiscalReturnTo}
+        signAndPost={signAndPost}
+        retrying={fiscalPostingPreflightChecking || actionLoading}
+        onRetry={retryPostAfterFiscalSetup}
+      />
       <OdaflowApprovalConfirmDialog
         open={odaflowApprovalOpen}
         onOpenChange={setOdaflowApprovalOpen}
@@ -3671,6 +3918,15 @@ export default function DocViewPage() {
 }
 
 // ─── Dynamic Next Steps Panel ────────────────────────────────────────────────
+
+function routeLoadHref(noteId: string): string {
+  return `/warehouse/route-pick-lists/${encodeURIComponent(noteId)}`;
+}
+
+function deliveryStillAtYard(status: string | undefined): boolean {
+  const st = String(status ?? "").trim().toUpperCase();
+  return !["CANCELLED", "IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"].includes(st);
+}
 
 function trackLabel(value: string): string {
   return value
@@ -3744,7 +4000,7 @@ function DynamicNextStepsPanel({
   document: DocumentDetailRecord | null;
   convertTargets: DocTypeKey[];
   linkedDeliveryNote: LinkedDocSummary | null;
-  joyLoadNote?: { id: string; number: string; status: string } | null;
+  joyLoadNote?: { id: string; number: string; status: string; awaitingDeparture?: boolean } | null;
   canCreateDeliveryNote: boolean;
   packagingMissingLines: Array<{
     productId: string;
@@ -3792,14 +4048,18 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
       } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
       if (isRouteDispatchMode(document?.salesFlow?.mode) && joyLoadNote) {
+        const waitingToLeave = joyLoadNote.awaitingDeparture || joyLoadNote.status === "INVOICED";
         steps.push({
           icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
-          text:
-            joyLoadNote.status === "OPEN"
-              ? `On loading note ${joyLoadNote.number}. Record what went on the truck.`
-              : `On loading note ${joyLoadNote.number}. The truck was short, so finance chooses which orders to reduce.`,
-          href: `/warehouse/route-pick-lists?note=${encodeURIComponent(joyLoadNote.id)}`,
-          actionLabel: `Open ${joyLoadNote.number}`,
+          text: waitingToLeave
+            ? `On loader note ${joyLoadNote.number}. Mark the truck as left when it goes.`
+            : joyLoadNote.status === "OPEN"
+              ? `On loader note ${joyLoadNote.number}. Confirm the loader note after the truck is packed.`
+              : joyLoadNote.status === "CONFIRMED"
+                ? `Loader note ${joyLoadNote.number} is confirmed. Create this order's delivery note from the route.`
+                : `On loader note ${joyLoadNote.number}. Finance assigns the short across the orders.`,
+          href: routeLoadHref(joyLoadNote.id),
+          actionLabel: waitingToLeave ? "Mark truck left" : `Open ${joyLoadNote.number}`,
           variant: "default",
         });
       } else if (isRouteDispatchMode(document?.salesFlow?.mode)) {
@@ -3909,7 +4169,26 @@ function DynamicNextStepsPanel({
     const st = status.toUpperCase();
     const hasPod = !!document?.podConfirmation?.confirmedAt;
     const source = document?.sourceDocument;
-    if (status === "DRAFT") {
+    const routeInvoiceStandby = isRouteDispatchMode(document?.salesFlow?.mode);
+    const linkedInvoice = document?.salesFlow?.invoice;
+    if (routeInvoiceStandby && convertTargets.includes("invoice") && !linkedInvoice) {
+      steps.push({
+        icon: <Icons.FileText className="h-4 w-4 text-emerald-600" />,
+        text: "The invoice is on standby. Create it from this delivery note whenever you are ready.",
+        action: () => onConvert("invoice"),
+        actionLabel: "Create invoice",
+        variant: "default",
+      });
+    }
+    if (status === "DRAFT" && routeInvoiceStandby && !hasPod) {
+      steps.push({
+        icon: <Icons.Upload className="h-4 w-4 text-amber-600" />,
+        text: "Upload the stamped delivery note to confirm delivery. The invoice can be posted after this stamp.",
+        action: canRecordSignedPod ? onUploadSignedDn : undefined,
+        actionLabel: canRecordSignedPod ? "Upload stamped DN" : undefined,
+        variant: "default",
+      });
+    } else if (status === "DRAFT" && !routeInvoiceStandby) {
       if (warehouseTaskLink) {
         steps.push({
           icon: <Icons.Package className="h-4 w-4" />,
@@ -3943,7 +4222,9 @@ function DynamicNextStepsPanel({
             text:
               document?.salesFlow?.mode === "pick_pack_first"
                 ? "Upload the signed delivery note brought back by the driver. This records an internal proof of delivery and leaves the original delivery note unchanged."
-                : "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
+                : routeInvoiceStandby
+                  ? "Upload the signed copy when it comes back. That records proof of delivery. The invoice can already be created."
+                  : "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
             action: canRecordSignedPod ? onUploadSignedDn : undefined,
             actionLabel: canRecordSignedPod ? "Upload signed DN" : undefined,
             variant: "default",
@@ -3956,7 +4237,7 @@ function DynamicNextStepsPanel({
           });
         }
       }
-      if (hasPod && convertTargets.includes("invoice")) {
+      if (hasPod && convertTargets.includes("invoice") && !routeInvoiceStandby) {
         steps.push({
           icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />,
           text: fmcgOrg
@@ -3974,19 +4255,42 @@ function DynamicNextStepsPanel({
     if (warehouseTaskLink && dnNeedsFulfilment) {
       steps.push({ icon: <Icons.Warehouse className="h-4 w-4" />, text: warehouseTaskLink.label, href: warehouseTaskLink.href });
     }
+    if (hasPod && routeInvoiceStandby && linkedInvoice) {
+      const invoicePosted = String(linkedInvoice.status ?? "").toUpperCase() === "POSTED";
+      steps.unshift({
+        icon: <Icons.Send className="h-4 w-4" />,
+        text: invoicePosted
+          ? `Invoice ${linkedInvoice.number} is posted.`
+          : `Post invoice ${linkedInvoice.number}. This delivery note is stamped.`,
+        href: `/docs/invoice/${linkedInvoice.id}`,
+        actionLabel: `Open ${linkedInvoice.number}`,
+        variant: "default",
+      });
+    }
     steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this delivery note", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
   } else if (type === "invoice") {
-    if (status === "DRAFT") {
+    if (openFiscalAttempt(document)) {
+      steps.push({
+        icon: <Icons.ShieldAlert className="h-4 w-4 text-amber-600" />,
+        text: "A KRA signing attempt is already open. Check what KRA received before sending this invoice again.",
+        href: document?.id ? fiscalRecoveryHref(document.id) : "/finance/fiscal-recovery",
+        actionLabel: "Open fiscal recovery",
+        variant: "default",
+      });
+    } else if (status === "DRAFT") {
       const undelivered = (document?.linkedDeliveries ?? []).filter(
         (d) => !deliveryNoteSatisfiedForInvoicePost(d.status)
       );
       if (undelivered.length > 0) {
         for (const dn of undelivered) {
+          const needsStamp = isRouteDispatchMode(document?.salesFlow?.mode) && deliveryStillAtYard(dn.status);
           steps.push({
             icon: <Icons.Truck className="h-4 w-4 text-amber-500" />,
-            text: `${dn.number} — confirm POD / delivery completion before posting`,
+            text: needsStamp
+              ? `${dn.number} needs a stamped delivery note before this invoice can be posted.`
+              : `${dn.number} — confirm POD / delivery completion before posting`,
             href: `/docs/delivery-note/${dn.id}`,
-            actionLabel: `Go to ${dn.number}`,
+            actionLabel: needsStamp ? `Stamp ${dn.number}` : `Go to ${dn.number}`,
             variant: "default",
           });
         }

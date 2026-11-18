@@ -216,6 +216,8 @@ type BackendDocumentDetail = {
   deliveryCheckIn?: BackendDeliveryCheckIn;
   warehouseDrop?: BackendWarehouseDrop;
   dispatchAmendEligibility?: { allowed: boolean; reason?: string };
+  fiscalState?: string;
+  fiscalAttemptId?: string;
   kraSigning?: KraSigningRecord | null;
   salesFlow?: DocumentDetailRecord["salesFlow"];
   orderChannel?: string;
@@ -655,6 +657,8 @@ function mapDocumentDetail(
         }
       : undefined,
     dispatchAmendEligibility: payload.dispatchAmendEligibility,
+    fiscalState: payload.fiscalState,
+    fiscalAttemptId: payload.fiscalAttemptId,
     kraSigning: payload.kraSigning ?? undefined,
     ...(payload.salesFlow ? { salesFlow: payload.salesFlow } : {}),
     ...(payload.orderChannel ? { orderChannel: payload.orderChannel } : {}),
@@ -681,7 +685,12 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     id: item.id,
     number: item.number,
     date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
-    createdAt: item.createdAt,
+    createdAt:
+      typeof item.createdAt === "string"
+        ? item.createdAt
+        : item.createdAt != null
+          ? String(item.createdAt)
+          : undefined,
     party: item.party ?? item.partyId,
     partyId: item.partyId,
     total: item.total,
@@ -902,6 +911,29 @@ export async function previewDocumentPostingApi(
     body: payload,
   });
   return result.items ?? [];
+}
+
+export type FiscalPostingIssue = {
+  key: string;
+  label: string;
+  reason: "missing_mapping" | "invalid_account";
+  message: string;
+};
+
+export type FiscalPostingPreflight = {
+  applies: boolean;
+  ready: boolean;
+  issues: FiscalPostingIssue[];
+  settingsPath: string;
+  requiredKeys?: string[];
+};
+
+export async function fetchFiscalPostingPreflightApi(
+  type: DocTypeKey,
+  id: string
+): Promise<FiscalPostingPreflight> {
+  requireLiveApi("Fiscal posting preflight");
+  return apiRequest<FiscalPostingPreflight>(`/api/documents/${type}/${id}/fiscal-posting-preflight`);
 }
 
 export async function convertDocumentApi(

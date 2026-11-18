@@ -19,27 +19,27 @@ describe("fiscal recovery workspace", () => {
     mocks.permissions = ["finance.read"]; render(<Page/>);
     expect(screen.getByRole("alert")).toHaveTextContent("tax read permissions"); expect(mocks.fetch).not.toHaveBeenCalled();
   });
-  it("submits evidence as a proposal and never sends another fiscal request", async () => {
-    render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /credit Outcome uncertain/ }));
-    await screen.findByText("1. Verify with the provider");
-    fireEvent.change(screen.getByLabelText("Verified outcome"), { target: { value: "NOT_ACCEPTED" } });
-    fireEvent.change(screen.getByLabelText("Evidence reference"), { target: { value: "Provider case 42" } });
-    fireEvent.change(screen.getByLabelText("Review reason"), { target: { value: "Verified original register" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save for independent approval" }));
-    await waitFor(() => expect(mocks.propose).toHaveBeenCalledWith("org:credit", { outcome: "NOT_ACCEPTED", evidenceReference: "Provider case 42", reason: "Verified original register" }));
-    expect(mocks.approve).not.toHaveBeenCalled();
+  it("lets the same finance approver clear a failed send and never sends another fiscal request", async () => {
+    mocks.propose.mockResolvedValue({ ok: true, digest: "cleared-digest" });
+    render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /credit/ }));
+    await screen.findByRole("radio", { name: /KRA did not accept it/ });
+    fireEvent.change(screen.getByLabelText("What you checked"), { target: { value: "Looked on Incotex. This invoice is not there." } });
+    fireEvent.click(screen.getByRole("button", { name: "Clear this attempt" }));
+    await waitFor(() => expect(mocks.propose).toHaveBeenCalledWith("org:credit", { outcome: "NOT_ACCEPTED", evidenceReference: "Incotex check", reason: "Looked on Incotex. This invoice is not there." }));
+    await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("org:credit", "cleared-digest"));
   });
-  it("requires an independent actor for approval and hides mutation controls for a reader", async () => {
-    mocks.detail.mockResolvedValue({ ...attempt, review: { outcome: "NOT_ACCEPTED", reason: "Evidence checked", evidenceReference: "case", proposedBy: "maker" } });
-    render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /credit Outcome uncertain/ }));
-    await screen.findByText("Awaiting independent review");
-    expect(screen.queryByRole("button", { name: "Approve reviewed outcome" })).not.toBeInTheDocument();
+  it("asks a second person only when the saved choice claims KRA accepted the invoice", async () => {
+    mocks.detail.mockResolvedValue({ ...attempt, review: { outcome: "ACCEPTED", reason: "Evidence checked", evidenceReference: "case", proposedBy: "maker" } });
+    render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /credit/ }));
+    await screen.findByText("Waiting for a second person");
+    expect(screen.queryByRole("button", { name: "Confirm this decision" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear this attempt" })).not.toBeInTheDocument();
   });
   it("approves only the frozen evidence revision actually displayed", async () => {
     mocks.user = "checker"; mocks.approve.mockResolvedValue({ ok: true });
     mocks.detail.mockResolvedValue({ ...attempt, review: { digest: "reviewed-evidence-digest", outcome: "NOT_ACCEPTED", reason: "Evidence checked", evidenceReference: "case", proposedBy: "maker" } });
-    render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /credit Outcome uncertain/ }));
-    fireEvent.click(await screen.findByRole("button", { name: "Approve reviewed outcome" }));
+    render(<Page/>); fireEvent.click(await screen.findByRole("button", { name: /credit/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Clear this attempt" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("org:credit", "reviewed-evidence-digest"));
   });
 

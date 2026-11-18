@@ -52,7 +52,8 @@ vi.mock("@/lib/api/uom", () => ({ fetchProductUomsApi: vi.fn().mockResolvedValue
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]), fetchProductPricingApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/fmcg/operating-profile", () => ({
   useOperatingProfile: () => ({
-    ready: true, routeDispatch: state.orgId !== "org-other", routeCollectionsEnabled: state.orgId !== "org-other", fullCatalogueOrderSheet: !state.lineByLine,
+    ready: true, routeDispatch: state.orgId !== "org-other", routeCollectionsEnabled: state.orgId !== "org-other",
+    fullCatalogueOrderSheet: !state.lineByLine,
     lineItemLayout: state.lineByLine ? "line_by_line" : "catalogue",
     productionRecording: "record_output", packSizeFromName: true, vanSalesBook: true,
   }),
@@ -77,7 +78,7 @@ function doc(type: "sales-order" | "invoice"): DocumentDetailRecord {
     ...(type === "sales-order" ? { warehouseId: "wh-c4-friday" } : {}),
     lines: [{ id: "original-line", productId: "queen", productSku: "1", description: "Queen cakes", qty: 2, unit: "PCS", unitPrice: 43.1, amount: 86.2, tax: 11.89, taxCodeId: "vat" }] };
 }
-beforeEach(() => { vi.mocked(deleteDocumentDraftApi).mockClear(); vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); vi.mocked(previewDocumentPostingApi).mockClear(); state.lineByLine = false; state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; });
+beforeEach(() => { vi.mocked(deleteDocumentDraftApi).mockClear(); vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); vi.mocked(previewDocumentPostingApi).mockClear(); state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; state.lineByLine = false; });
 it.each(["sales-order", "invoice"] as const)("opens existing %s inline without autosaving and saves only positive lines explicitly", async (type) => {
   render(<DocumentCreateWizard type={type} mode="edit" existingDocument={doc(type)} />);
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());

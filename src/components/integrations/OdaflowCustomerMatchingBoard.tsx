@@ -34,6 +34,8 @@ import {
   type CustomerMatchSegment,
   type CustomerMatchStatus,
 } from "@/lib/api/odaflow-integration";
+import { approveSfaCustomerApi, type DuplicateCustomerMatch } from "@/lib/api/sfa-customer-approvals";
+import { SfaCustomerDuplicateDialog } from "@/components/customers/SfaCustomerDuplicateDialog";
 
 const PAGE_SIZE_OPTIONS = [20, 25, 30, 50];
 
@@ -125,6 +127,12 @@ export function OdaflowCustomerMatchingBoard({
   const [createRow, setCreateRow] = React.useState<CustomerMatchRow | null>(null);
   const [createDraft, setCreateDraft] = React.useState<CreateFromSfaDraft | null>(null);
   const [creating, setCreating] = React.useState(false);
+  const [duplicateReview, setDuplicateReview] = React.useState<{
+    approvalId: string;
+    name: string;
+    matches: DuplicateCustomerMatch[];
+  } | null>(null);
+  const [duplicateBusy, setDuplicateBusy] = React.useState(false);
   const hasDataRef = React.useRef(false);
 
   const loadPreview = React.useCallback(async (opts?: { soft?: boolean }) => {
@@ -333,6 +341,12 @@ export function OdaflowCustomerMatchingBoard({
         },
         approveNow: true,
       });
+      if (result.duplicates?.length && result.approvalId) {
+        setDuplicateReview({ approvalId: result.approvalId, name, matches: result.duplicates });
+        setCreateRow(null);
+        setCreateDraft(null);
+        return;
+      }
       if (result.action === "pending_approval") {
         toast.success("Saved for approval. Finish in Pending approval when ready.");
       } else {
@@ -799,6 +813,47 @@ export function OdaflowCustomerMatchingBoard({
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <SfaCustomerDuplicateDialog
+        customerName={duplicateReview?.name || "This customer"}
+        matches={duplicateReview?.matches ?? []}
+        open={duplicateReview != null}
+        busy={duplicateBusy}
+        onOpenChange={(next) => {
+          if (!next) setDuplicateReview(null);
+        }}
+        onMerge={(partyId, partyName) => {
+          if (!duplicateReview) return;
+          setDuplicateBusy(true);
+          void approveSfaCustomerApi(duplicateReview.approvalId, partyId)
+            .then(() => {
+              toast.success(`${partyName} is now the ERP customer for this outlet. They can take orders.`);
+              setDuplicateReview(null);
+              void loadPreview({ soft: true });
+              onChanged?.();
+            })
+            .catch((e) => {
+              toast.error(e instanceof Error ? e.message : "Could not merge this customer");
+            })
+            .finally(() => setDuplicateBusy(false));
+        }}
+        onCreateNew={() => {
+          if (!duplicateReview) return;
+          const customerName = duplicateReview.name;
+          setDuplicateBusy(true);
+          void approveSfaCustomerApi(duplicateReview.approvalId, undefined, { createNew: true })
+            .then(() => {
+              toast.success(`${customerName} is now on the customer list and can take orders.`);
+              setDuplicateReview(null);
+              void loadPreview({ soft: true });
+              onChanged?.();
+            })
+            .catch((e) => {
+              toast.error(e instanceof Error ? e.message : "Could not create this customer");
+            })
+            .finally(() => setDuplicateBusy(false));
+        }}
+      />
     </div>
   );
 }

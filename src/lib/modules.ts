@@ -117,6 +117,16 @@ export const STANDARD_MODULES: Module[] = [
         order: 7,
       },
       {
+        id: "inventory-opening-costs",
+        name: "opening-costs",
+        label: "Opening costs",
+        icon: "BadgeDollarSign",
+        path: "/inventory/opening-costs",
+        enabled: true,
+        orgTypes: ["MANUFACTURER", "DISTRIBUTOR", "SHOP"],
+        order: 8,
+      },
+      {
         id: "inventory-transfers",
         name: "transfers",
         label: "Transfers",

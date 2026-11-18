@@ -189,6 +189,26 @@ function getDefaultValues(baseCurrency: string): FormValues {
   };
 }
 
+const SHIP_TO_MAIN_ID = "__main__";
+const SHIP_TO_RESULT_LIMIT = 60;
+
+function shipToOption(site: PartySiteRow) {
+  const description = [site.address?.line1, site.address?.city, site.address?.region].filter(Boolean).join(", ");
+  return {
+    id: site.id,
+    label: site.code ? `${site.name} · ${site.code}` : site.name,
+    description: description || undefined,
+  };
+}
+
+function siteMatchesQuery(site: PartySiteRow, query: string) {
+  const haystack = [site.name, site.code, site.address?.line1, site.address?.line2, site.address?.city, site.address?.region]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return haystack.includes(query);
+}
+
 function fieldIdToKey(id: string): keyof FormValues {
   const map: Record<string, keyof FormValues> = {
     date: "date",
@@ -736,8 +756,30 @@ export function DocumentCreateWizard({
   const selectedDeliverySite = deliverySiteSelection?.partyId === selectedPartyId
     ? deliverySiteSelection?.id
     : existingDocument?.partyId === selectedPartyId ? existingDocument?.shipToSiteId : undefined;
+  const deliverySiteRows = React.useMemo(() => {
+    if (!deliverySites || deliverySites.partyId !== selectedPartyId) return [];
+    return deliverySites.rows;
+  }, [deliverySites, selectedPartyId]);
+  const shipToLoading = Boolean(selectedPartyId) && isApiConfigured() && deliverySites?.partyId !== selectedPartyId && !deliverySiteError;
+  const selectedShipToOption = React.useMemo(() => {
+    if (!selectedDeliverySite) return { id: SHIP_TO_MAIN_ID, label: "Customer’s main address" };
+    const site = deliverySiteRows.find((row) => row.id === selectedDeliverySite);
+    return site ? shipToOption(site) : { id: selectedDeliverySite, label: "Saved delivery location" };
+  }, [deliverySiteRows, selectedDeliverySite]);
+  const loadShipToOptions = React.useCallback(async (query: string, page?: { cursor: string | null }) => {
+    const q = query.trim().toLowerCase();
+    const matched = deliverySiteRows.filter((site) => !q || siteMatchesQuery(site, q));
+    const start = page?.cursor ? Number(page.cursor) : 0;
+    const options = matched.slice(start, start + SHIP_TO_RESULT_LIMIT).map(shipToOption);
+    const mainLabel = "Customer’s main address";
+    if (start === 0 && (!q || mainLabel.toLowerCase().includes(q))) {
+      options.unshift({ id: SHIP_TO_MAIN_ID, label: mainLabel, description: "Address on the customer record" });
+    }
+    const next = start + SHIP_TO_RESULT_LIMIT;
+    return { options, nextCursor: next < matched.length ? String(next) : null };
+  }, [deliverySiteRows]);
   const selectedSiteAddress = selectedDeliverySite
-    ? deliverySites?.rows.find((site) => site.id === selectedDeliverySite)?.address
+    ? deliverySiteRows.find((site) => site.id === selectedDeliverySite)?.address
     : selectedPartyDetail?.id === selectedPartyId ? selectedPartyDetail?.address : undefined;
   const shipToPreview = selectedSiteAddress && [
     selectedSiteAddress.line1, selectedSiteAddress.line2, selectedSiteAddress.city,
@@ -2804,17 +2846,23 @@ export function DocumentCreateWizard({
               {showShipTo && selectedPartyId && (
                 <div className="mt-3 max-w-xl space-y-1">
                   <Label htmlFor="ship-to-site">Ship to</Label>
-                  <select id="ship-to-site" className="block min-h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
-                    value={selectedDeliverySite ?? ""}
-                    onChange={(event) => setDeliverySiteSelection({ partyId: selectedPartyId, id: event.target.value || null })}>
-                    <option value="">Customer’s main address</option>
-                    {selectedDeliverySite && !deliverySites?.rows.some((site) => site.id === selectedDeliverySite) && (
-                      <option value={selectedDeliverySite}>Saved delivery location</option>
-                    )}
-                    {deliverySites?.partyId === selectedPartyId && deliverySites.rows.map((site) => (
-                      <option key={site.id} value={site.id}>{site.name}{site.code ? ` · ${site.code}` : ""}</option>
-                    ))}
-                  </select>
+                  <AsyncSearchableSelect
+                    id="ship-to-site"
+                    value={shipToLoading ? "" : (selectedDeliverySite ?? SHIP_TO_MAIN_ID)}
+                    onValueChange={(id) => setDeliverySiteSelection({
+                      partyId: selectedPartyId,
+                      id: !id || id === SHIP_TO_MAIN_ID ? null : id,
+                    })}
+                    loadOptions={loadShipToOptions}
+                    selectedOption={shipToLoading ? null : selectedShipToOption}
+                    placeholder={shipToLoading ? "Loading branches…" : "Customer’s main address"}
+                    searchPlaceholder="Search branch name, code, or town"
+                    emptyMessage="No branches match that search."
+                    disabled={shipToLoading}
+                    searchDebounceMs={0}
+                    reloadToken={`${selectedPartyId}:${deliverySiteRows.length}`}
+                    recentStorageKey={`lookup:recent-ship-to:${selectedPartyId}`}
+                  />
                   {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}
                   {deliverySiteError && <p className="text-xs text-destructive">{deliverySiteError}</p>}
                 </div>

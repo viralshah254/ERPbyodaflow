@@ -9,6 +9,7 @@ function nairobiParts(date: Date) {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
+    hourCycle: "h12",
   }).formatToParts(date);
 
   const get = (type: Intl.DateTimeFormatPartTypes) =>
@@ -109,7 +110,12 @@ export function formatDocumentCreatedLabel(
   createdAt?: string | null,
   dateFallback?: string | null
 ): string {
-  if (createdAt) {
+  if (createdAt?.trim()) {
+    const parsed = parseActivityInstant(createdAt);
+    if (parsed?.hasTime) {
+      const withClock = formatActivityWhenEat(createdAt);
+      if (withClock !== "—") return withClock;
+    }
     const label = formatNairobiRelativeTime(createdAt);
     if (label) return label;
   }
