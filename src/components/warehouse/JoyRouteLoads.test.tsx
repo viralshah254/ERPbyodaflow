@@ -1,9 +1,10 @@
 import React from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { JoyRouteLoads } from "./JoyRouteLoads";
 
 const location = vi.hoisted(() => ({ search: "" }));
+const navigation = vi.hoisted(() => ({ push: vi.fn() }));
 const access = vi.hoisted(() => ({ write: false }));
 const api = vi.hoisted(() => ({
   waiting: [] as Array<{
@@ -14,8 +15,12 @@ const api = vi.hoisted(() => ({
     products: Array<{ productId: string; sku?: string; name: string; orderedQty: number }>;
   }>,
   notes: [] as Array<Record<string, unknown>>,
+  allocate: vi.fn(),
 }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(location.search) }));
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => new URLSearchParams(location.search),
+  useRouter: () => ({ push: navigation.push }),
+}));
 vi.mock("@/lib/rbac/use-write-guard", () => ({ useHasPermission: () => access.write }));
 vi.mock("@/lib/api/joy-dispatch", () => ({
   fetchJoyLoadNotes: async () => ({
@@ -25,6 +30,7 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
     busyTrucks: [],
     dispatchWarehouseName: "DISPATCH - DISPATCH WAREHOUSE",
   }),
+  allocateJoyLoad: (...args: unknown[]) => api.allocate(...args),
 }));
 afterEach(() => {
   cleanup();
@@ -32,6 +38,8 @@ afterEach(() => {
   access.write = false;
   api.waiting = [];
   api.notes = [];
+  api.allocate.mockReset();
+  navigation.push.mockReset();
 });
 
 it("keeps dispatch steps out of the finance queue", async () => {
@@ -153,6 +161,73 @@ it("offers a delivery note only beside an invoice and delivery note on a full fi
   render(<JoyRouteLoads />);
   expect(await screen.findByRole("button", { name: "Invoice and delivery note" })).toBeEnabled();
   expect(screen.getByRole("button", { name: "Delivery note only" })).toBeEnabled();
+});
+
+const financeLoad = {
+  id: "n1",
+  number: "LDN-0004",
+  date: "2026-11-13T07:20:00.000Z",
+  status: "AWAITING_FINANCE",
+  truck: "KCT 981Q",
+  routeWarehouseId: "town",
+  routeWarehouseName: "TOWN",
+  fulfilmentWarehouseName: "DISPATCH",
+  salesOrderIds: ["so-811"],
+  lines: [{
+    productId: "p1",
+    sku: "1",
+    name: "JOY QUEEN CAKES 4PCS (135 GMS)",
+    unit: "PACK",
+    orderedQty: 50,
+    loadedQty: 50,
+    allocations: [{
+      salesOrderId: "so-811",
+      salesOrderNumber: "S00811",
+      customerName: "NAIVAS LIMITED",
+      branchName: "Headquarters",
+      lineId: "l1",
+      orderedQty: 50,
+      invoiceQty: 50,
+    }],
+  }],
+  results: [],
+};
+
+it("opens the delivery note after finance creates one", async () => {
+  access.write = true;
+  location.search = "step=finance";
+  api.notes = [financeLoad];
+  api.allocate.mockResolvedValue({
+    ...financeLoad,
+    status: "INVOICED",
+    documentPlan: "delivery_note",
+    results: [{ salesOrderId: "so-811", deliveryNoteId: "dn-1", deliveryNoteNumber: "DN1", stockIssued: true }],
+  });
+  render(<JoyRouteLoads />);
+  fireEvent.click(await screen.findByRole("button", { name: "Delivery note only" }));
+  await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/docs/delivery-note/dn-1"));
+});
+
+it("opens the invoice after finance creates the invoice and delivery note", async () => {
+  access.write = true;
+  location.search = "step=finance";
+  api.notes = [financeLoad];
+  api.allocate.mockResolvedValue({
+    ...financeLoad,
+    status: "INVOICED",
+    documentPlan: "both",
+    results: [{
+      salesOrderId: "so-811",
+      invoiceId: "inv-1",
+      invoiceNumber: "INV1",
+      deliveryNoteId: "dn-1",
+      deliveryNoteNumber: "DN1",
+      stockIssued: true,
+    }],
+  });
+  render(<JoyRouteLoads />);
+  fireEvent.click(await screen.findByRole("button", { name: "Invoice and delivery note" }));
+  await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/docs/invoice/inv-1"));
 });
 
 it("opens dispatch by default and links to Finance Review", async () => {

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +44,19 @@ function gapText(gap: number): string {
 function lockedDocumentPlan(note: JoyLoadNote): JoyLoadDocumentPlan | null {
   if (note.results.some((row) => row.invoiceId)) return "both";
   if (note.documentPlan === "delivery_note" && note.results.some((row) => row.deliveryNoteId)) return "delivery_note";
+  return null;
+}
+
+/** Same place a new invoice or delivery note opens: the document, or the list when a load made several. */
+function createdDocumentsHref(plan: JoyLoadDocumentPlan, note: JoyLoadNote): string | null {
+  const type = plan === "delivery_note" ? "delivery-note" : "invoice";
+  const ids = [...new Set(
+    note.results
+      .map((row) => (plan === "delivery_note" ? row.deliveryNoteId : row.invoiceId))
+      .filter((id): id is string => Boolean(id))
+  )];
+  if (ids.length === 1) return `/docs/${type}/${encodeURIComponent(ids[0])}`;
+  if (ids.length > 1) return `/docs/${type}?ids=${ids.join(",")}`;
   return null;
 }
 
@@ -502,6 +515,7 @@ function LoadingNoteCard({
   dispatchName: string;
   onChanged: () => Promise<void>;
 }) {
+  const router = useRouter();
   const [loaded, setLoaded] = React.useState<Record<string, string>>({});
   const [busyPlan, setBusyPlan] = React.useState<JoyLoadDocumentPlan | "cancel" | null>(null);
   const busy = busyPlan != null;
@@ -570,12 +584,17 @@ function LoadingNoteCard({
                     rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty })),
                     plan
                   )
-                    .then(async () => {
+                    .then(async (updated) => {
                       toast.success(
                         plan === "delivery_note"
                           ? `${note.number} loaded in full. Delivery notes are ready. Invoices are on standby.`
                           : `${note.number} loaded in full. Invoices and delivery notes are ready.`
                       );
+                      const href = createdDocumentsHref(plan, updated);
+                      if (href) {
+                        router.push(href);
+                        return;
+                      }
                       await onChanged();
                     })
                     .catch(async (error) => {
@@ -635,6 +654,7 @@ function LoadingNoteCard({
 }
 
 function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; canFinance: boolean; onChanged: () => Promise<void> }) {
+  const router = useRouter();
   const [qty, setQty] = React.useState<Record<string, string>>({});
   const [busyPlan, setBusyPlan] = React.useState<JoyLoadDocumentPlan | null>(null);
   const [recheckBusy, setRecheckBusy] = React.useState(false);
@@ -896,12 +916,17 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 ),
                 plan
               )
-                .then(async () => {
+                .then(async (updated) => {
                   toast.success(
                     plan === "delivery_note"
                       ? `${note.number} has delivery notes. Invoices are on standby.`
                       : `${note.number} invoiced. Ready for the truck to leave.`
                   );
+                  const href = createdDocumentsHref(plan, updated);
+                  if (href) {
+                    router.push(href);
+                    return;
+                  }
                   await onChanged();
                 })
                 .catch(async (error) => {
