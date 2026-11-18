@@ -82,14 +82,14 @@ function formatWhen(value?: string): string {
   return when.toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
-function formatWhenParts(value?: string): { date: string; time: string } | null {
+function formatWhenParts(value?: string): { date: string; time: string; compact: string } | null {
   if (!value) return null;
   const when = new Date(value);
   if (!Number.isFinite(when.getTime())) return null;
-  return {
-    date: when.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short" }),
-    time: when.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" }),
-  };
+  const date = when.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  const time = when.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
+  const day = when.toLocaleString(undefined, { day: "numeric", month: "short" });
+  return { date, time, compact: `${day} · ${time}` };
 }
 
 type LoadMilestone = {
@@ -122,7 +122,7 @@ function LoadNoteHeader({
 }) {
   const milestones = loadMilestones(note);
   return (
-    <CardHeader className={headerClassName ?? "space-y-3"}>
+    <CardHeader className={headerClassName ?? "space-y-2"}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <CardTitle className={titleClassName}>{note.number}</CardTitle>
@@ -132,41 +132,44 @@ function LoadNoteHeader({
         </div>
         {status}
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-md border border-border/80 bg-muted/15 px-2.5 py-1 text-sm font-medium">
-          <MapPin className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          {placeLabel(note.routeWarehouseName)}
-        </span>
-        {routeHint ? <span className="text-xs text-muted-foreground">{routeHint}</span> : null}
+      <div
+        className="flex items-stretch overflow-x-auto rounded-md border border-border/80 bg-muted/10 text-xs"
+        aria-label={milestones.length ? "Load route and timeline" : "Load route"}
+      >
+        <div className="flex shrink-0 items-center gap-1.5 border-r border-border/60 px-2.5 py-1.5 font-medium">
+          <MapPin className="size-3 shrink-0 text-muted-foreground" aria-hidden />
+          <span>{placeLabel(note.routeWarehouseName)}</span>
+          {routeHint ? (
+            <span className="hidden font-normal text-muted-foreground sm:inline">
+              <span className="px-1" aria-hidden>·</span>
+              {routeHint}
+            </span>
+          ) : null}
+        </div>
+        {milestones.length ? (
+          <ol className="flex min-w-0 flex-1 items-stretch">
+            {milestones.map((step, index) => {
+              const parts = formatWhenParts(step.at);
+              const Icon = step.icon;
+              const current = index === milestones.length - 1;
+              return (
+                <li
+                  key={step.key}
+                  className={`flex min-w-0 flex-1 items-center gap-1.5 whitespace-nowrap px-2.5 py-1.5 ${
+                    index > 0 ? "border-l border-border/60" : ""
+                  } ${current ? "bg-primary/10 text-foreground" : "text-muted-foreground"}`}
+                >
+                  <Icon className="size-3 shrink-0 opacity-80" aria-hidden />
+                  <span className="shrink-0 font-medium uppercase tracking-wide">{step.label}</span>
+                  {parts ? <span className="tabular-nums text-foreground/90">{parts.compact}</span> : null}
+                </li>
+              );
+            })}
+          </ol>
+        ) : routeHint ? (
+          <span className="px-2.5 py-1.5 text-muted-foreground sm:hidden">{routeHint}</span>
+        ) : null}
       </div>
-      {milestones.length ? (
-        <ol className="grid gap-2 sm:grid-cols-3" aria-label="Load timeline">
-          {milestones.map((step, index) => {
-            const parts = formatWhenParts(step.at);
-            const Icon = step.icon;
-            const current = index === milestones.length - 1;
-            return (
-              <li
-                key={step.key}
-                className={`rounded-lg border px-2.5 py-2 ${
-                  current ? "border-primary/35 bg-primary/5" : "border-border/80 bg-muted/10"
-                }`}
-              >
-                <span className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  <Icon className="size-3.5 shrink-0" aria-hidden />
-                  {step.label}
-                </span>
-                {parts ? (
-                  <div className="mt-1">
-                    <span className="block text-sm font-medium leading-tight tabular-nums">{parts.date}</span>
-                    <span className="mt-0.5 block text-xs tabular-nums text-muted-foreground">{parts.time}</span>
-                  </div>
-                ) : null}
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
     </CardHeader>
   );
 }
@@ -869,7 +872,7 @@ function ReadyToLeaveCard({ note, canLoad, onChanged }: { note: JoyLoadNote; can
 function LeftTodayCard({ note }: { note: JoyLoadNote }) {
   return (
     <Card id={`note-${note.id}`}>
-      <LoadNoteHeader note={note} routeHint="Left today" titleClassName="text-base" headerClassName="space-y-3 py-4" />
+      <LoadNoteHeader note={note} routeHint="Left today" titleClassName="text-base" headerClassName="space-y-2 py-4" />
       <CardContent className="space-y-3 pb-4 text-sm">
         <OrderRoster orders={ordersOnNote(note)} />
         {note.results.map((row) => (

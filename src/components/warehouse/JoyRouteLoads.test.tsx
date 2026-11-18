@@ -106,7 +106,7 @@ it("shows the load time, order, and customer on a finance card", async () => {
   expect(screen.queryByText(/× 12 EA/)).toBeNull();
   expect(screen.getByText("MERU - EMBU")).toBeVisible();
   expect(screen.getByText("KBT 749H")).toBeVisible();
-  const timeline = screen.getByLabelText("Load timeline");
+  const timeline = screen.getByLabelText("Load route and timeline");
   expect(timeline).toBeVisible();
   expect(screen.getByRole("heading", { name: "LDN-0006" })).toBeVisible();
   const createdTime = new Date("2026-11-17T13:12:00.000Z").toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
