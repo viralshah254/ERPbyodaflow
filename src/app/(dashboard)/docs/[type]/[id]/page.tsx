@@ -1658,10 +1658,16 @@ export default function DocViewPage() {
                       <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
                         {fmcgOrg ? (
+                          isRouteDispatchMode(document.salesFlow?.mode) ? (
+                            <>
+                              Shipped quantities are frozen from warehouse issue. Print the delivery note for the drop-off. The invoice is on standby and can be created whenever you are ready.
+                            </>
+                          ) : (
                           <>
                             Shipped quantities are frozen from warehouse issue. Print or download this delivery note (stamp / signature boxes included), get the customer copy signed, then{" "}
                             <strong>Upload signed DN</strong> here — or record POD from the mobile dispatch app. Invoice from this DN only after POD.
                           </>
+                          )
                         ) : (
                           <>
                             Shipped quantities are frozen from warehouse issue. POD (received quantities / signatures) is captured in the Odaflow mobile app; invoices follow POD once recorded.
@@ -3178,7 +3184,9 @@ export default function DocViewPage() {
             <SheetDescription>
               {document?.salesFlow?.mode === "pick_pack_first"
                 ? "Upload the signed delivery note the driver brought back. The original delivery note stays on file. POD source is recorded as an internal upload."
-                : "Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as shipped quantities and unlocks Create Invoice from this DN."}
+                : isRouteDispatchMode(document?.salesFlow?.mode)
+                  ? "Upload the signed copy when it comes back. This records proof of delivery. The invoice can already be created from this note."
+                  : "Upload the customer-signed (and stamped) delivery note scan or photo. This confirms proof of delivery as shipped quantities and unlocks Create Invoice from this DN."}
             </SheetDescription>
           </SheetHeader>
           <div className="mt-6 space-y-4">
@@ -4107,7 +4115,17 @@ function DynamicNextStepsPanel({
     const st = status.toUpperCase();
     const hasPod = !!document?.podConfirmation?.confirmedAt;
     const source = document?.sourceDocument;
-    if (status === "DRAFT") {
+    const routeInvoiceStandby = isRouteDispatchMode(document?.salesFlow?.mode);
+    if (routeInvoiceStandby && convertTargets.includes("invoice")) {
+      steps.push({
+        icon: <Icons.FileText className="h-4 w-4 text-emerald-600" />,
+        text: "The invoice is on standby. Create it from this delivery note whenever you are ready.",
+        action: () => onConvert("invoice"),
+        actionLabel: "Create invoice",
+        variant: "default",
+      });
+    }
+    if (status === "DRAFT" && !routeInvoiceStandby) {
       if (warehouseTaskLink) {
         steps.push({
           icon: <Icons.Package className="h-4 w-4" />,
@@ -4141,8 +4159,8 @@ function DynamicNextStepsPanel({
             text:
               document?.salesFlow?.mode === "pick_pack_first"
                 ? "Upload the signed delivery note brought back by the driver. This records an internal proof of delivery and leaves the original delivery note unchanged."
-                : isRouteDispatchMode(document?.salesFlow?.mode)
-                  ? "The customer clears this note before the invoice. Upload the signed copy, then create the invoice from the quantities they accepted."
+                : routeInvoiceStandby
+                  ? "Upload the signed copy when it comes back. That records proof of delivery. The invoice can already be created."
                   : "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
             action: canRecordSignedPod ? onUploadSignedDn : undefined,
             actionLabel: canRecordSignedPod ? "Upload signed DN" : undefined,
@@ -4156,12 +4174,10 @@ function DynamicNextStepsPanel({
           });
         }
       }
-      if (hasPod && convertTargets.includes("invoice")) {
+      if (hasPod && convertTargets.includes("invoice") && !routeInvoiceStandby) {
         steps.push({
           icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />,
-          text: isRouteDispatchMode(document?.salesFlow?.mode)
-            ? "The note is cleared. Create the invoice from the quantities the customer accepted."
-            : fmcgOrg
+          text: fmcgOrg
             ? "POD recorded — create the invoice from acknowledged (delivered) quantities. Blank Create Invoice is for pickup / ad-hoc only."
             : "Create invoice from quantities acknowledged at delivery.",
           action: () => onConvert("invoice"),

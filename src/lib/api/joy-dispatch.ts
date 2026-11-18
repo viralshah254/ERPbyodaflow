@@ -155,7 +155,7 @@ export type JoyWaitingRoute = {
 };
 
 export type JoyLoadNoteStatus = "OPEN" | "AWAITING_FINANCE" | "INVOICING" | "INVOICED" | "CANCELLED";
-/** "both" sends the invoice with the delivery note. "delivery_note" waits until the customer clears the note. */
+/** "both" sends the invoice with the delivery note. "delivery_note" leaves the invoice on standby. */
 export type JoyLoadDocumentPlan = "both" | "delivery_note";
 export type JoyLoadAllocation = {
   salesOrderId: string;

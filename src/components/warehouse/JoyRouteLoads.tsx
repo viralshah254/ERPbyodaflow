@@ -75,7 +75,7 @@ function LoadDocumentActions({
             disabled={disabled || busyPlan != null}
             onClick={() => onChoose("delivery_note")}
           >
-            {busyPlan === "delivery_note" ? "Working…" : resumeDeliveryNote ? "Continue delivery notes" : "Delivery note now"}
+            {busyPlan === "delivery_note" ? "Working…" : resumeDeliveryNote ? "Continue delivery note" : "Delivery note only"}
           </Button>
         ) : null}
         {showInvoice ? (
@@ -85,17 +85,17 @@ function LoadDocumentActions({
             disabled={disabled || busyPlan != null}
             onClick={() => onChoose("both")}
           >
-            {busyPlan === "both" ? "Working…" : resumeInvoice ? "Continue invoices" : "Create invoices"}
+            {busyPlan === "both" ? "Working…" : resumeInvoice ? "Continue invoice and delivery note" : "Invoice and delivery note"}
           </Button>
         ) : null}
       </div>
-      <p className="max-w-xl text-sm text-muted-foreground">
-        {locked === "delivery_note"
-          ? "The invoice waits until the customer stamps this delivery note."
-          : locked === "both"
-            ? "This load already started an invoice. Continue sends it with the delivery note."
-            : "Delivery note now waits until the customer stamps the note. Create invoices sends the invoice with the goods."}
-      </p>
+      {locked ? (
+        <p className="max-w-xl text-sm text-muted-foreground">
+          {locked === "delivery_note"
+            ? "The delivery note is ready. Open it when you want the invoice."
+            : "This load already started. Continue finishes the invoice and the delivery note."}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -573,7 +573,7 @@ function LoadingNoteCard({
                     .then(async () => {
                       toast.success(
                         plan === "delivery_note"
-                          ? `${note.number} loaded in full. Delivery notes are ready. Invoice after the customer stamps the note.`
+                          ? `${note.number} loaded in full. Delivery notes are ready. Invoices are on standby.`
                           : `${note.number} loaded in full. Invoices and delivery notes are ready.`
                       );
                       await onChanged();
@@ -595,7 +595,7 @@ function LoadingNoteCard({
                     rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
                   )
                     .then(async () => {
-                      toast.success(`${note.number} is short. Finance chooses a delivery note now, or invoices with it.`);
+                      toast.success(`${note.number} is short. Finance chooses a delivery note only, or an invoice and a delivery note.`);
                       await onChanged();
                     })
                     .catch(async (error) => {
@@ -899,7 +899,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 .then(async () => {
                   toast.success(
                     plan === "delivery_note"
-                      ? `${note.number} has delivery notes. Invoice each one after the customer stamps the note.`
+                      ? `${note.number} has delivery notes. Invoices are on standby.`
                       : `${note.number} invoiced. Ready for the truck to leave.`
                   );
                   await onChanged();
@@ -912,7 +912,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
             }}
           />
         ) : (
-          <p className="text-sm text-muted-foreground">Finance can send a delivery note now, or create the invoices with it.</p>
+          <p className="text-sm text-muted-foreground">Finance chooses a delivery note only, or an invoice and a delivery note.</p>
         )}
       </CardContent>
     </Card>
@@ -944,7 +944,7 @@ function ReadyToLeaveCard({ note, canLoad, onChanged }: { note: JoyLoadNote; can
         </div>
         <p className="text-sm text-muted-foreground">
           {note.documentPlan === "delivery_note"
-            ? "Delivery notes go with the truck. Create each invoice after the customer clears the note. Sales orders keep the ordered quantities."
+            ? "Delivery notes go with the truck. Invoices are on standby and can be raised from each note whenever you are ready."
             : "Sales orders keep the ordered quantities. Invoices show what was loaded."}
         </p>
         {canLoad ? (
@@ -978,7 +978,7 @@ function LeftTodayCard({ note }: { note: JoyLoadNote }) {
       <CardContent className="space-y-3 pb-4 text-sm">
         <OrderRoster orders={ordersOnNote(note)} />
         {note.documentPlan === "delivery_note" ? (
-          <p className="text-muted-foreground">Create each invoice after the customer clears the delivery note.</p>
+          <p className="text-muted-foreground">Invoices are on standby. Open a delivery note and create the invoice whenever you are ready.</p>
         ) : null}
         {note.results.map((row) => (
           <div key={row.salesOrderId} className="flex flex-wrap gap-3">

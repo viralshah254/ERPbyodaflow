@@ -119,7 +119,7 @@ it("shows the load time, order, and customer on a finance card", async () => {
   expect(timeline).toHaveTextContent(loadedTime);
 });
 
-it("offers delivery note now beside create invoices on a full finance load", async () => {
+it("offers a delivery note only beside an invoice and delivery note on a full finance load", async () => {
   access.write = true;
   location.search = "step=finance";
   api.notes = [{
@@ -151,9 +151,8 @@ it("offers delivery note now beside create invoices on a full finance load", asy
     results: [],
   }];
   render(<JoyRouteLoads />);
-  expect(await screen.findByRole("button", { name: "Create invoices" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "Delivery note now" })).toBeEnabled();
-  expect(screen.getByText(/waits until the customer stamps the note/)).toBeVisible();
+  expect(await screen.findByRole("button", { name: "Invoice and delivery note" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Delivery note only" })).toBeEnabled();
 });
 
 it("opens dispatch by default and links to Finance Review", async () => {
