@@ -50,6 +50,13 @@ describe("formatActivityWhenEat", () => {
     expect(formatActivityWhenEat("2026-10-07T20:00:00.000Z")).toBe("8 days ago, 11:00 pm");
   });
 
+  it("shows 12 on the clock at noon and midnight in Nairobi", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-25T10:00:00.000Z"));
+    expect(formatActivityWhenEat("2026-04-23T09:03:00.000Z")).toBe("2 days ago, 12:03 pm");
+    expect(formatActivityWhenEat("2026-04-22T21:00:00.000Z")).toBe("2 days ago, 12:00 am");
+  });
+
   it("leaves a date-only value without a clock", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-10-15T08:00:00.000Z"));
