@@ -337,7 +337,7 @@ export default function SalesDocumentFlowPage() {
                   [
                     ["classic", "Current flow", "Delivery note first, then pick & pack, then invoice after the signed note."],
                     ["pick_pack_first", "Pick & pack first", "Pick from the sales order, then invoice and delivery note, then proof of delivery."],
-                    ["route_dispatch", "Route dispatch", "Group orders by delivery route and load one truck from the dispatch store. Create a delivery note only, or create the invoice and the delivery note. Then mark the truck as left. Driver returns draft a credit note."],
+                    ["route_dispatch", "Route dispatch", "Group orders by delivery route and pack one truck from the dispatch store. Confirm one loader note, then create a delivery note for each order. A short pack gets a credit note. Stamp the delivery note before posting its invoice."],
                   ] as Array<[SalesDocumentFlowMode, string, string]>
                 )
                   .map(([mode, label, hint]) => (

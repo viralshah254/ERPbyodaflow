@@ -122,7 +122,7 @@ import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/channel-labels";
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { isRouteDispatchMode } from "@/lib/api/sales-document-flow";
-import { fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
+import { fetchJoyLoadNoteForDeliveryNote, fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
 import {
   FmcgPackagingConversionBlocker,
   packagingMissingLineLabel,
@@ -608,7 +608,11 @@ export default function DocViewPage() {
     if (type !== "delivery-note" || !document) return false;
     if (document.podConfirmation?.confirmedAt) return false;
     const st = String(document.status ?? "").toUpperCase();
-    if (!["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) return false;
+    const routeStamp = isRouteDispatchMode(document.salesFlow?.mode);
+    const stampable = routeStamp
+      ? ["DRAFT", "APPROVED", "IN_TRANSIT", "DELIVERED", "POSTED"]
+      : ["IN_TRANSIT", "DELIVERED", "POSTED"];
+    if (!stampable.includes(st)) return false;
     return (
       can(authUser, Permissions.SALES_DELIVERIES_POD) ||
       can(authUser, Permissions.SALES_WRITE)
@@ -1320,20 +1324,37 @@ export default function DocViewPage() {
     };
   }, [odaflowApprovalOpen, needsRouteWarehouse]);
 
-  const [joyLoadNote, setJoyLoadNote] = React.useState<{ id: string; number: string; status: string } | null>(null);
+  const [joyLoadNote, setJoyLoadNote] = React.useState<{ id: string; number: string; status: string; awaitingDeparture?: boolean } | null>(null);
+  const yardDeliveryId =
+    type === "delivery-note" &&
+    document?.id &&
+    !["CANCELLED", "IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"].includes(String(document.status ?? "").toUpperCase())
+      ? document.id
+      : type === "invoice"
+        ? (document?.linkedDeliveries ?? []).find((row) => {
+            const st = String(row.status ?? "").toUpperCase();
+            return !["CANCELLED", "IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"].includes(st);
+          })?.id
+        : undefined;
   React.useEffect(() => {
     const status = String(document?.status ?? "").toUpperCase();
-    if (
-      type !== "sales-order" ||
-      !routeDispatch ||
-      !document?.id ||
-      !["APPROVED", "PARTIALLY_FULFILLED"].includes(status)
-    ) {
+    const salesOrderId =
+      type === "sales-order" && routeDispatch && document?.id && ["APPROVED", "PARTIALLY_FULFILLED"].includes(status)
+        ? document.id
+        : undefined;
+    if (!routeDispatch || (!yardDeliveryId && !salesOrderId)) {
       setJoyLoadNote(null);
       return;
     }
     let cancelled = false;
-    fetchJoyLoadNoteForOrder(document.id)
+    const request = yardDeliveryId
+      ? fetchJoyLoadNoteForDeliveryNote(yardDeliveryId).then(async (payload) => {
+          if (payload.note) return payload;
+          const sourceId = document?.sourceDocument?.typeKey === "sales-order" ? document.sourceDocument.id : "";
+          return sourceId ? fetchJoyLoadNoteForOrder(sourceId) : payload;
+        })
+      : fetchJoyLoadNoteForOrder(salesOrderId!);
+    request
       .then((payload) => {
         if (!cancelled) setJoyLoadNote(payload.note);
       })
@@ -1343,7 +1364,7 @@ export default function DocViewPage() {
     return () => {
       cancelled = true;
     };
-  }, [type, document?.id, document?.status, routeDispatch]);
+  }, [type, document?.id, document?.status, document?.sourceDocument?.id, document?.sourceDocument?.typeKey, yardDeliveryId, routeDispatch]);
 
   const isUuidLike = (s: string) =>
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
@@ -1635,7 +1656,9 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
-                      Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery.
+                      {isRouteDispatchMode(document.salesFlow?.mode)
+                        ? "Upload the stamped delivery note here to confirm delivery. The invoice can be posted after this stamp."
+                        : "Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery."}
                     </p>
                   </div>
                 ) : null}
@@ -2100,7 +2123,8 @@ export default function DocViewPage() {
               {canPost && !openFiscalAttempt(document) && (
               <Button
                 size="sm"
-                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned)}
+                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned) || (type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)))}
+                title={type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)) ? "Upload the stamped delivery note before posting." : undefined}
                 onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
@@ -2533,6 +2557,23 @@ export default function DocViewPage() {
             fmcgOrg={fmcgOrg}
           />
         )}
+        {type === "delivery-note" && document?.status === "DRAFT" && isRouteDispatchMode(document.salesFlow?.mode) && !document.podConfirmation?.confirmedAt ? (
+          <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
+            <p className="font-medium leading-snug">
+              Upload the stamped delivery note to confirm this delivery. The invoice stays unposted until the stamp is recorded.
+            </p>
+            {canRecordSignedPod ? (
+              <Button size="sm" className="mt-2 h-7 text-xs" onClick={() => {
+                setSignedPodFile(null);
+                setSignedPodReceiverName("");
+                setSignedPodNote("");
+                setSignedPodSheetOpen(true);
+              }}>
+                Upload stamped DN
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         <DocumentTabs
           key={`${type}-${id}`}
           compact={compactDocument}
@@ -3878,6 +3919,15 @@ export default function DocViewPage() {
 
 // ─── Dynamic Next Steps Panel ────────────────────────────────────────────────
 
+function routeLoadHref(noteId: string): string {
+  return `/warehouse/route-pick-lists?note=${encodeURIComponent(noteId)}`;
+}
+
+function deliveryStillAtYard(status: string | undefined): boolean {
+  const st = String(status ?? "").trim().toUpperCase();
+  return !["CANCELLED", "IN_TRANSIT", "DELIVERED", "POSTED", "CONVERTED"].includes(st);
+}
+
 function trackLabel(value: string): string {
   return value
     .toLowerCase()
@@ -3950,7 +4000,7 @@ function DynamicNextStepsPanel({
   document: DocumentDetailRecord | null;
   convertTargets: DocTypeKey[];
   linkedDeliveryNote: LinkedDocSummary | null;
-  joyLoadNote?: { id: string; number: string; status: string } | null;
+  joyLoadNote?: { id: string; number: string; status: string; awaitingDeparture?: boolean } | null;
   canCreateDeliveryNote: boolean;
   packagingMissingLines: Array<{
     productId: string;
@@ -3998,14 +4048,18 @@ function DynamicNextStepsPanel({
       steps.push({ icon: <Icons.Clock className="h-4 w-4 text-amber-500" />, text: "Awaiting manager approval" });
       } else if (status === "APPROVED" || status === "PARTIALLY_FULFILLED") {
       if (isRouteDispatchMode(document?.salesFlow?.mode) && joyLoadNote) {
+        const waitingToLeave = joyLoadNote.awaitingDeparture || joyLoadNote.status === "INVOICED";
         steps.push({
           icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
-          text:
-            joyLoadNote.status === "OPEN"
-              ? `On loading note ${joyLoadNote.number}. Record what went on the truck.`
-              : `On loading note ${joyLoadNote.number}. The truck was short, so finance chooses which orders to reduce.`,
-          href: `/warehouse/route-pick-lists?note=${encodeURIComponent(joyLoadNote.id)}`,
-          actionLabel: `Open ${joyLoadNote.number}`,
+          text: waitingToLeave
+            ? `On loader note ${joyLoadNote.number}. Mark the truck as left when it goes.`
+            : joyLoadNote.status === "OPEN"
+              ? `On loader note ${joyLoadNote.number}. Confirm the loader note after the truck is packed.`
+              : joyLoadNote.status === "CONFIRMED"
+                ? `Loader note ${joyLoadNote.number} is confirmed. Create this order's delivery note from the route.`
+                : `On loader note ${joyLoadNote.number}. Finance assigns the short across the orders.`,
+          href: routeLoadHref(joyLoadNote.id),
+          actionLabel: waitingToLeave ? "Mark truck left" : `Open ${joyLoadNote.number}`,
           variant: "default",
         });
       } else if (isRouteDispatchMode(document?.salesFlow?.mode)) {
@@ -4125,7 +4179,15 @@ function DynamicNextStepsPanel({
         variant: "default",
       });
     }
-    if (status === "DRAFT" && !routeInvoiceStandby) {
+    if (status === "DRAFT" && routeInvoiceStandby && !hasPod) {
+      steps.push({
+        icon: <Icons.Upload className="h-4 w-4 text-amber-600" />,
+        text: "Upload the stamped delivery note to confirm delivery. The invoice can be posted after this stamp.",
+        action: canRecordSignedPod ? onUploadSignedDn : undefined,
+        actionLabel: canRecordSignedPod ? "Upload stamped DN" : undefined,
+        variant: "default",
+      });
+    } else if (status === "DRAFT" && !routeInvoiceStandby) {
       if (warehouseTaskLink) {
         steps.push({
           icon: <Icons.Package className="h-4 w-4" />,
@@ -4208,11 +4270,14 @@ function DynamicNextStepsPanel({
       );
       if (undelivered.length > 0) {
         for (const dn of undelivered) {
+          const needsStamp = isRouteDispatchMode(document?.salesFlow?.mode) && deliveryStillAtYard(dn.status);
           steps.push({
             icon: <Icons.Truck className="h-4 w-4 text-amber-500" />,
-            text: `${dn.number} — confirm POD / delivery completion before posting`,
+            text: needsStamp
+              ? `${dn.number} needs a stamped delivery note before this invoice can be posted.`
+              : `${dn.number} — confirm POD / delivery completion before posting`,
             href: `/docs/delivery-note/${dn.id}`,
-            actionLabel: `Go to ${dn.number}`,
+            actionLabel: needsStamp ? `Stamp ${dn.number}` : `Go to ${dn.number}`,
             variant: "default",
           });
         }

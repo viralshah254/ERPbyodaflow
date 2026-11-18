@@ -154,7 +154,7 @@ export type JoyWaitingRoute = {
   products: JoyRouteProduct[];
 };
 
-export type JoyLoadNoteStatus = "OPEN" | "AWAITING_FINANCE" | "INVOICING" | "INVOICED" | "CANCELLED";
+export type JoyLoadNoteStatus = "OPEN" | "AWAITING_FINANCE" | "CONFIRMED" | "INVOICING" | "INVOICED" | "CANCELLED";
 /** "both" sends the invoice with the delivery note. "delivery_note" leaves the invoice on standby. */
 export type JoyLoadDocumentPlan = "both" | "delivery_note";
 export type JoyLoadAllocation = {
@@ -193,6 +193,8 @@ export type JoyLoadNote = {
     invoiceNumber?: string;
     deliveryNoteId?: string;
     deliveryNoteNumber?: string;
+    creditNoteId?: string;
+    creditNoteNumber?: string;
     stockIssued?: boolean;
   }>;
   documentPlan?: JoyLoadDocumentPlan;
@@ -225,11 +227,27 @@ export async function fetchJoyLoadNotes(): Promise<JoyLoadNotes> {
   return apiRequest("/api/joy-dispatch/load-notes");
 }
 
+export type JoyHandoffLoadNote = {
+  id: string;
+  number: string;
+  status: JoyLoadNoteStatus;
+  routeWarehouseId: string;
+  /** Documents exist and the truck has not been marked as left. */
+  awaitingDeparture?: boolean;
+};
+
 export async function fetchJoyLoadNoteForOrder(
   salesOrderId: string
-): Promise<{ note: { id: string; number: string; status: JoyLoadNoteStatus; routeWarehouseId: string } | null }> {
+): Promise<{ note: JoyHandoffLoadNote | null }> {
   requireLiveApi(LOADS);
   return apiRequest(`/api/joy-dispatch/load-notes/by-order/${encodeURIComponent(salesOrderId)}`);
+}
+
+export async function fetchJoyLoadNoteForDeliveryNote(
+  deliveryNoteId: string
+): Promise<{ note: JoyHandoffLoadNote | null }> {
+  requireLiveApi(LOADS);
+  return apiRequest(`/api/joy-dispatch/load-notes/by-delivery-note/${encodeURIComponent(deliveryNoteId)}`);
 }
 
 export async function createJoyLoadNote(input: { warehouseId: string; truck: string }): Promise<JoyLoadNote> {
@@ -253,6 +271,22 @@ export async function allocateJoyLoad(
 ): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
   return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/allocate`, { method: "POST", body: { allocations, documents } });
+}
+
+export async function createJoyDeliveryNotes(id: string, salesOrderId?: string): Promise<JoyLoadNote> {
+  requireLiveApi(LOADS);
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/delivery-notes`, {
+    method: "POST",
+    body: salesOrderId ? { salesOrderId } : {},
+  });
+}
+
+export async function generateJoyInvoices(id: string, salesOrderId?: string): Promise<JoyLoadNote> {
+  requireLiveApi(LOADS);
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/invoices`, {
+    method: "POST",
+    body: salesOrderId ? { salesOrderId } : {},
+  });
 }
 
 export async function cancelJoyLoadNote(id: string): Promise<JoyLoadNote> {

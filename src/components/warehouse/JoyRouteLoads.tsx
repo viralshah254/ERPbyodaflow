@@ -13,9 +13,11 @@ import { useHasPermission } from "@/lib/rbac/use-write-guard";
 import {
   allocateJoyLoad,
   cancelJoyLoadNote,
+  createJoyDeliveryNotes,
   createJoyLoadNote,
   downloadJoyLoadNotePdf,
   fetchJoyLoadNotes,
+  generateJoyInvoices,
   markJoyLoadDeparted,
   recordJoyLoaded,
   type JoyLoadDocumentPlan,
@@ -534,7 +536,7 @@ function LoadingNoteCard({
       <CardContent className="space-y-4">
         <OrderRoster orders={ordersOnNote(note)} />
         <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
-          Print loading note
+          Print loader note
         </Button>
         <div className="overflow-x-auto">
         <table className="w-full table-fixed text-sm">
@@ -573,6 +575,7 @@ function LoadingNoteCard({
         {canLoad ? (
           <div className="space-y-3">
             {full ? (
+              note.results.some((row) => row.deliveryNoteId || row.invoiceId) ? (
               <LoadDocumentActions
                 busyPlan={busyPlan === "cancel" ? null : busyPlan}
                 disabled={invalid}
@@ -604,6 +607,29 @@ function LoadingNoteCard({
                     .finally(() => setBusyPlan(null));
                 }}
               />
+              ) : (
+              <Button
+                disabled={invalid || busy}
+                onClick={() => {
+                  setBusyPlan("delivery_note");
+                  void recordJoyLoaded(
+                    note.id,
+                    rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
+                  )
+                    .then(async () => {
+                      toast.success(`${note.number} confirmed. Create a delivery note for each order.`);
+                      await onChanged();
+                    })
+                    .catch(async (error) => {
+                      toast.error(errorMessage(error, "Could not confirm the loader note"));
+                      await onChanged();
+                    })
+                    .finally(() => setBusyPlan(null));
+                }}
+              >
+                {busy ? "Working…" : "Confirm loader note"}
+              </Button>
+              )
             ) : (
               <Button
                 disabled={invalid || busy}
@@ -614,7 +640,7 @@ function LoadingNoteCard({
                     rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
                   )
                     .then(async () => {
-                      toast.success(`${note.number} is short. Finance chooses a delivery note only, or an invoice and a delivery note.`);
+                      toast.success(`${note.number} is short. Finance assigns the short across the orders.`);
                       await onChanged();
                     })
                     .catch(async (error) => {
@@ -900,7 +926,7 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
             </div>
           );
         })}
-        {canFinance ? (
+        {canFinance && note.results.some((row) => row.deliveryNoteId || row.invoiceId) ? (
           <LoadDocumentActions
             busyPlan={busyPlan}
             disabled={!canSubmit || note.status !== "AWAITING_FINANCE"}
@@ -936,9 +962,154 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                 .finally(() => setBusyPlan(null));
             }}
           />
+        ) : canFinance ? (
+          <Button
+            disabled={!canSubmit || note.status !== "AWAITING_FINANCE" || busy}
+            onClick={() => {
+              setBusyPlan("delivery_note");
+              void allocateJoyLoad(
+                note.id,
+                lines.flatMap((line) =>
+                  line.allocations.map((a) => ({ salesOrderId: a.row.salesOrderId, lineId: a.row.lineId, quantity: a.value }))
+                )
+              )
+                .then(async () => {
+                  toast.success(`${note.number} confirmed. Create a delivery note for each order.`);
+                  await onChanged();
+                })
+                .catch(async (error) => {
+                  toast.error(errorMessage(error, "Could not confirm the loader note"));
+                  await onChanged();
+                })
+                .finally(() => setBusyPlan(null));
+            }}
+          >
+            {busy ? "Working…" : "Confirm loader note"}
+          </Button>
         ) : (
-          <p className="text-sm text-muted-foreground">Finance chooses a delivery note only, or an invoice and a delivery note.</p>
+          <p className="text-sm text-muted-foreground">Finance assigns the short across the orders, then the loader note can be confirmed.</p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ConfirmedNoteCard({
+  note,
+  canLoad,
+  canFinance,
+  onChanged,
+}: {
+  note: JoyLoadNote;
+  canLoad: boolean;
+  canFinance: boolean;
+  onChanged: () => Promise<void>;
+}) {
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const orders = ordersOnNote(note);
+  const resultByOrder = new Map(note.results.map((row) => [row.salesOrderId, row]));
+  const packed = (orderId: string) =>
+    note.lines.some((line) => line.allocations.some((row) => row.salesOrderId === orderId && row.invoiceQty > 0.0001));
+  const pendingNotes = orders.filter((order) => packed(order.id) && !resultByOrder.get(order.id)?.deliveryNoteId);
+  const pendingInvoices = orders.filter((order) => {
+    const row = resultByOrder.get(order.id);
+    return Boolean(row?.deliveryNoteId && !row.invoiceId);
+  });
+  const run = (key: string, work: () => Promise<void>, failure: string) => {
+    setBusy(key);
+    void work()
+      .catch((error) => toast.error(errorMessage(error, failure)))
+      .finally(() => setBusy(null));
+  };
+  return (
+    <Card id={`note-${note.id}`} className="min-w-0">
+      <LoadNoteHeader note={note} routeHint="Loader note confirmed" />
+      <CardContent className="space-y-3">
+        <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
+          Print loader note
+        </Button>
+        <div className="space-y-2 text-sm">
+          {orders.map((order) => {
+            const row = resultByOrder.get(order.id);
+            return (
+              <div key={order.id} className="flex flex-wrap items-center gap-2 border-t py-2">
+                <span className="min-w-0 flex-1">
+                  <span className="font-medium">{order.number}</span>
+                  <span className="text-muted-foreground"> · {order.customer}</span>
+                </span>
+                {row?.deliveryNoteId ? (
+                  <Link className="text-primary hover:underline" href={`/docs/delivery-note/${row.deliveryNoteId}`}>
+                    {row.deliveryNoteNumber ?? "Delivery note"}
+                  </Link>
+                ) : canLoad && packed(order.id) ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy != null}
+                    onClick={() => run(`dn:${order.id}`, async () => {
+                      await createJoyDeliveryNotes(note.id, order.id);
+                      toast.success(`Delivery note created for ${order.number}.`);
+                      await onChanged();
+                    }, "Could not create the delivery note")}
+                  >
+                    {busy === `dn:${order.id}` ? "Working…" : "Create delivery note"}
+                  </Button>
+                ) : (
+                  <span className="text-muted-foreground">Nothing packed</span>
+                )}
+                {row?.creditNoteId ? (
+                  <Link className="text-primary hover:underline" href={`/docs/credit-note/${row.creditNoteId}`}>
+                    {row.creditNoteNumber ?? "Credit note"}
+                  </Link>
+                ) : null}
+                {row?.invoiceId ? (
+                  <Link className="text-primary hover:underline" href={`/docs/invoice/${row.invoiceId}`}>
+                    {row.invoiceNumber ?? "Invoice"}
+                  </Link>
+                ) : row?.deliveryNoteId && canFinance ? (
+                  <Button
+                    size="sm"
+                    disabled={busy != null}
+                    onClick={() => run(`inv:${order.id}`, async () => {
+                      await generateJoyInvoices(note.id, order.id);
+                      toast.success(`Invoice created for ${order.number}.`);
+                      await onChanged();
+                    }, "Could not create the invoice")}
+                  >
+                    {busy === `inv:${order.id}` ? "Working…" : "Generate invoice"}
+                  </Button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canLoad && pendingNotes.length > 0 ? (
+            <Button
+              variant="outline"
+              disabled={busy != null}
+              onClick={() => run("dns", async () => {
+                await createJoyDeliveryNotes(note.id);
+                toast.success(`Delivery notes created for ${note.number}.`);
+                await onChanged();
+              }, "Could not create the delivery notes")}
+            >
+              {busy === "dns" ? "Working…" : "Create delivery notes"}
+            </Button>
+          ) : null}
+          {canFinance && pendingInvoices.length > 0 ? (
+            <Button
+              disabled={busy != null}
+              onClick={() => run("invs", async () => {
+                await generateJoyInvoices(note.id);
+                toast.success(`Invoices created for ${note.number}.`);
+                await onChanged();
+              }, "Could not create the invoices")}
+            >
+              {busy === "invs" ? "Working…" : "Generate invoices"}
+            </Button>
+          ) : null}
+        </div>
       </CardContent>
     </Card>
   );
@@ -1094,6 +1265,7 @@ function JoyRouteLoadsInner() {
     : data.waiting;
   const openedRoute = focusWarehouse ? waiting.find((route) => route.warehouseId === focusWarehouse) : undefined;
   const loading = data.notes.filter((note) => note.status === "OPEN");
+  const confirmed = data.notes.filter((note) => note.status === "CONFIRMED");
   const finance = data.notes.filter((note) => note.status === "AWAITING_FINANCE" || note.status === "INVOICING");
   const ready = data.notes.filter((note) => note.status === "INVOICED" && !note.departedAt);
   const left = data.notes.filter((note) => note.status === "INVOICED" && note.departedAt);
@@ -1124,6 +1296,17 @@ function JoyRouteLoadsInner() {
                 note={note}
                 canLoad={canLoad}
                 dispatchName={data.dispatchWarehouseName}
+                onChanged={reload}
+              />
+            ))}
+          </Section>,
+          <Section key="confirmed" id="step-notes" title="Delivery notes" empty="No loader note is confirmed yet.">
+            {confirmed.map((note) => (
+              <ConfirmedNoteCard
+                key={note.id}
+                note={note}
+                canLoad={canLoad}
+                canFinance={canFinance}
                 onChanged={reload}
               />
             ))}
