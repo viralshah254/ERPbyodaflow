@@ -5,6 +5,7 @@ type BackendPurchaseOrder = {
   id: string;
   number: string;
   date?: string;
+  createdAt?: string;
   partyId?: string;
   party?: string;
   total?: number;
@@ -32,6 +33,12 @@ function mapPurchaseOrderRow(item: BackendPurchaseOrder): PurchasingDocRow {
     id: item.id,
     number: item.number,
     date: item.date?.slice(0, 10) ?? "",
+    createdAt:
+      typeof item.createdAt === "string"
+        ? item.createdAt
+        : item.createdAt != null
+          ? String(item.createdAt)
+          : undefined,
     party: item.party ?? "—",
     total: item.total ?? 0,
     currency: item.currency ?? "KES",

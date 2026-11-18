@@ -2,6 +2,8 @@ export type PurchasingDocRow = {
   id: string;
   number: string;
   date: string;
+  /** Document creation instant (for relative “Created” labels in lists). */
+  createdAt?: string;
   party?: string;
   total?: number;
   currency?: string;
