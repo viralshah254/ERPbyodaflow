@@ -58,14 +58,39 @@ export async function fetchSfaCustomerApprovalsApi(
   );
 }
 
+export type DuplicateMatchReason = "kra_pin" | "phone" | "code" | "email" | "exact_name" | "similar_name";
+
+export type DuplicateCustomerMatch = {
+  partyId: string;
+  name?: string;
+  tradingName?: string;
+  code?: string;
+  phone?: string;
+  taxId?: string;
+  email?: string;
+  reasons: DuplicateMatchReason[];
+};
+
+export async function fetchSfaCustomerDuplicatesApi(id: string): Promise<DuplicateCustomerMatch[]> {
+  requireLiveApi("SFA customer approvals");
+  const result = await apiRequest<{ success: boolean; matches: DuplicateCustomerMatch[] }>(
+    `/api/integrations/odaflow/customer-approvals/${encodeURIComponent(id)}/duplicates`
+  );
+  return result.matches ?? [];
+}
+
 export async function approveSfaCustomerApi(
   id: string,
-  mergeIntoPartyId?: string
+  mergeIntoPartyId?: string,
+  options?: { createNew?: boolean }
 ): Promise<{ partyId: string; merged?: boolean; partyName?: string }> {
   requireLiveApi("SFA customer approvals");
+  const body: { mergeIntoPartyId?: string; createNew?: boolean } = {};
+  if (mergeIntoPartyId) body.mergeIntoPartyId = mergeIntoPartyId;
+  if (options?.createNew) body.createNew = true;
   return apiRequest<{ partyId: string; merged?: boolean; partyName?: string }>(
     `/api/integrations/odaflow/customer-approvals/${encodeURIComponent(id)}/approve`,
-    { method: "POST", body: mergeIntoPartyId ? { mergeIntoPartyId } : {} }
+    { method: "POST", body }
   );
 }
 
