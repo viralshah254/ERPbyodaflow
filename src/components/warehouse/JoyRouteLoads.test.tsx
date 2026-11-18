@@ -104,9 +104,17 @@ it("shows the load time, order, and customer on a finance card", async () => {
   expect(await screen.findByRole("link", { name: "500013" })).toHaveAttribute("href", "/docs/sales-order/so-2");
   expect(screen.getByText("Naivas Embu")).toBeVisible();
   expect(screen.queryByText(/× 12 EA/)).toBeNull();
-  const created = new Date("2026-11-17T13:12:00.000Z").toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-  const loaded = new Date("2026-11-17T13:18:00.000Z").toLocaleString(undefined, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
-  expect(screen.getByText(`MERU - EMBU · Created ${created} · Loaded ${loaded}`)).toBeVisible();
+  expect(screen.getByText("MERU - EMBU")).toBeVisible();
+  expect(screen.getByText("KBT 749H")).toBeVisible();
+  const timeline = screen.getByLabelText("Load timeline");
+  expect(timeline).toBeVisible();
+  expect(screen.getByRole("heading", { name: "LDN-0006" })).toBeVisible();
+  const createdTime = new Date("2026-11-17T13:12:00.000Z").toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
+  const loadedTime = new Date("2026-11-17T13:18:00.000Z").toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
+  expect(timeline).toHaveTextContent("Created");
+  expect(timeline).toHaveTextContent("Loaded");
+  expect(timeline).toHaveTextContent(createdTime);
+  expect(timeline).toHaveTextContent(loadedTime);
 });
 
 it("opens dispatch by default and links to Finance Review", async () => {
