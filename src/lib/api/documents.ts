@@ -685,7 +685,12 @@ function mapDocumentListItem(item: BackendDocumentListItem): DocListRow {
     id: item.id,
     number: item.number,
     date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
-    createdAt: item.createdAt,
+    createdAt:
+      typeof item.createdAt === "string"
+        ? item.createdAt
+        : item.createdAt != null
+          ? String(item.createdAt)
+          : undefined,
     party: item.party ?? item.partyId,
     partyId: item.partyId,
     total: item.total,

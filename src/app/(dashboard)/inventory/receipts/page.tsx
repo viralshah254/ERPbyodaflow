@@ -28,7 +28,7 @@ import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
-import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
+import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -235,11 +235,16 @@ export default function InventoryReceiptsPage() {
       {
         id: "date",
         header: "Created",
-        accessor: (r: PurchasingDocRow) => (
-          <span className="whitespace-nowrap text-muted-foreground">
-            {formatDocumentCreatedLabel(r.createdAt, r.date) || "—"}
-          </span>
-        ),
+        accessor: (r: PurchasingDocRow) => {
+          const when = r.createdAt ?? r.date;
+          const label = formatDocumentCreatedLabel(r.createdAt, r.date) || "—";
+          const exact = formatActivityExact(when);
+          return (
+            <span className="whitespace-nowrap text-muted-foreground" title={exact || undefined}>
+              {label}
+            </span>
+          );
+        },
       },
       { id: "party", header: "Supplier", accessor: (r: PurchasingDocRow) => r.party || "—" },
       { id: "poRef", header: "PO Reference", accessor: "poRef" as keyof PurchasingDocRow },

@@ -29,7 +29,9 @@ describe("formatNairobiRelativeTime", () => {
   it("prefers createdAt over date-only fallback", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-04-23T09:05:00.000Z"));
-    expect(formatDocumentCreatedLabel("2026-04-23T09:03:00.000Z", "2026-04-23")).toBe("2 minutes ago");
+    expect(formatDocumentCreatedLabel("2026-04-23T09:03:00.000Z", "2026-04-23")).toBe(
+      "2 minutes ago, 12:03 pm",
+    );
   });
 
   it("formats date-only fallback without time", () => {

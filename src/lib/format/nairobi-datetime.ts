@@ -109,7 +109,12 @@ export function formatDocumentCreatedLabel(
   createdAt?: string | null,
   dateFallback?: string | null
 ): string {
-  if (createdAt) {
+  if (createdAt?.trim()) {
+    const parsed = parseActivityInstant(createdAt);
+    if (parsed?.hasTime) {
+      const withClock = formatActivityWhenEat(createdAt);
+      if (withClock !== "—") return withClock;
+    }
     const label = formatNairobiRelativeTime(createdAt);
     if (label) return label;
   }
