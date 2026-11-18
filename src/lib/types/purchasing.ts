@@ -88,6 +88,9 @@ export type GrnDetailRow = PurchasingDocRow & {
   linesAreTaxInclusive?: boolean;
   tax?: number;
   taxConfigId?: string;
+  /** Products on this receipt that already have stock and still need an opening cost. */
+  openingCostGaps?: Array<{ productId: string; code: string; name: string }>;
+  openingCostMessage?: string;
   // Work order link (inherited via PurchasingDocRow but repeated here for clarity)
 };
 

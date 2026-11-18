@@ -12,11 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { fetchGRNs, postGRN, type GrnPostError } from "@/lib/api/grn";
+import { fetchGRNs, isOpeningCostPostError, openingCostPostMessage, openingCostsHref, postGRN, type GrnPostError } from "@/lib/api/grn";
 import type { PurchasingDocRow } from "@/lib/types/purchasing";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { useCanWritePurchasing } from "@/lib/rbac/use-write-guard";
+import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 
 const GRN_STATUS_OPTIONS = [
   { label: "All", value: "" },
@@ -59,7 +60,15 @@ export default function GoodsReceiptPage() {
   const columns = React.useMemo(
     () => [
       { id: "number", header: "Number", accessor: (row: PurchasingDocRow) => <span className="font-medium">{row.number}</span> },
-      { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
+      {
+        id: "date",
+        header: "Created",
+        accessor: (row: PurchasingDocRow) => (
+          <span className="whitespace-nowrap text-muted-foreground">
+            {formatDocumentCreatedLabel(row.createdAt, row.date) || "—"}
+          </span>
+        ),
+      },
       { id: "party", header: "Supplier", accessor: (row: PurchasingDocRow) => row.party || "—" },
       { id: "poRef", header: "PO reference", accessor: (row: PurchasingDocRow) => row.poRef || "—" },
       { id: "warehouse", header: "Warehouse", accessor: (row: PurchasingDocRow) => row.warehouse || "—" },
@@ -96,6 +105,14 @@ export default function GoodsReceiptPage() {
                   const msg = e.message ?? "Failed to post GRN.";
                   if (e.code === "GRN_MISSING_WEIGHT") {
                     toast.error(msg, { description: "Enter received weight (kg) on the GRN lines before posting." });
+                  } else if (isOpeningCostPostError(e)) {
+                    toast.error(openingCostPostMessage(e), {
+                      action: {
+                        label: "Enter opening cost",
+                        onClick: () => { window.location.href = openingCostsHref(e.products); },
+                      },
+                      duration: 12000,
+                    });
                   } else if (e.code === "GRN_OPEN_VARIANCE") {
                     const url = e.poId
                       ? `/purchasing/cash-weight-audit?poId=${encodeURIComponent(e.poId)}`

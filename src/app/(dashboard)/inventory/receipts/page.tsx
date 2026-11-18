@@ -15,6 +15,9 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import {
   exportGRNsCsv,
   fetchInventoryReceiptsPageApi,
+  isOpeningCostPostError,
+  openingCostPostMessage,
+  openingCostsHref,
   postGRN,
   type GrnPostError,
 } from "@/lib/api/grn";
@@ -25,6 +28,7 @@ import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -202,6 +206,14 @@ export default function InventoryReceiptsPage() {
             },
             duration: 8000,
           });
+        } else if (isOpeningCostPostError(err)) {
+          toast.error(openingCostPostMessage(err), {
+            action: {
+              label: "Enter opening cost",
+              onClick: () => { window.location.href = openingCostsHref(err.products); },
+            },
+            duration: 12000,
+          });
         } else {
           toast.error(msg);
         }
@@ -220,7 +232,15 @@ export default function InventoryReceiptsPage() {
         accessor: (r: PurchasingDocRow) => <span className="font-medium">{r.number}</span>,
         sticky: true,
       },
-      { id: "date", header: "Date", accessor: "date" as keyof PurchasingDocRow },
+      {
+        id: "date",
+        header: "Created",
+        accessor: (r: PurchasingDocRow) => (
+          <span className="whitespace-nowrap text-muted-foreground">
+            {formatDocumentCreatedLabel(r.createdAt, r.date) || "—"}
+          </span>
+        ),
+      },
       { id: "party", header: "Supplier", accessor: (r: PurchasingDocRow) => r.party || "—" },
       { id: "poRef", header: "PO Reference", accessor: "poRef" as keyof PurchasingDocRow },
       { id: "warehouse", header: "Warehouse", accessor: "warehouse" as keyof PurchasingDocRow },
@@ -471,6 +491,14 @@ export default function InventoryReceiptsPage() {
                             },
                           },
                           duration: 8000,
+                        });
+                      } else if (isOpeningCostPostError(reason)) {
+                        toast.error(openingCostPostMessage(reason), {
+                          action: {
+                            label: "Enter opening cost",
+                            onClick: () => { window.location.href = openingCostsHref(reason.products); },
+                          },
+                          duration: 12000,
                         });
                       } else {
                         toast.error(parts.join(" "), {

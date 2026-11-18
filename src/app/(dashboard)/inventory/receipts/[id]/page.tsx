@@ -21,7 +21,7 @@ import { OwnershipLocationBadge } from "@/components/operational/OwnershipLocati
 import { ProcurementVariancePanel } from "@/components/operational/ProcurementVariancePanel";
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
-import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, recordGRNLineQc, recordGRNBulkQc, exportGRNDetailCsv, exportGRNPdf, type GrnDetailRow, type GrnPostError } from "@/lib/api/grn";
+import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, recordGRNLineQc, recordGRNBulkQc, exportGRNDetailCsv, exportGRNPdf, isOpeningCostPostError, openingCostPostMessage, openingCostsHref, type GrnDetailRow, type GrnPostError, type OpeningCostGap } from "@/lib/api/grn";
 import { Badge } from "@/components/ui/badge";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
@@ -109,6 +109,18 @@ function toastGrnActionError(raw: unknown, fallback = "Failed to post GRN.") {
     });
     return;
   }
+  if (isOpeningCostPostError(e)) {
+    toast.error(openingCostPostMessage(e), {
+      action: {
+        label: "Enter opening cost",
+        onClick: () => {
+          window.location.href = openingCostsHref(e.products);
+        },
+      },
+      duration: 12000,
+    });
+    return;
+  }
   toast.error(msg);
 }
 
@@ -141,6 +153,7 @@ export default function ReceiptDetailPage() {
   const [editingLot, setEditingLot] = React.useState<Record<number, string>>({});
   const [editingExpiry, setEditingExpiry] = React.useState<Record<number, string>>({});
   const [supplierInvoiceNo, setSupplierInvoiceNo] = React.useState("");
+  const [postOpeningCost, setPostOpeningCost] = React.useState<{ message: string; products: OpeningCostGap[] } | null>(null);
   const [linkedBillIdDraft, setLinkedBillIdDraft] = React.useState("");
 
   // GRN header edit dialog
@@ -312,6 +325,7 @@ export default function ReceiptDetailPage() {
   const postReceipt = React.useCallback(async () => {
     if (!grn) return;
     setPosting(true);
+    setPostOpeningCost(null);
     try {
       if (fmcgOrg) await saveSupplierInvoice();
       else await flushPendingReceivedWeights();
@@ -327,6 +341,10 @@ export default function ReceiptDetailPage() {
         toast.success(refreshed?.linkedBill ? `GRN posted. Supplier invoice ${refreshed.linkedBill.number} is ready.` : "GRN posted.");
       }
     } catch (raw) {
+      const failed = raw as GrnPostError;
+      if (isOpeningCostPostError(failed)) {
+        setPostOpeningCost({ message: openingCostPostMessage(failed), products: failed.products ?? [] });
+      }
       toastGrnActionError(raw);
     } finally {
       setPosting(false);
@@ -755,6 +773,22 @@ export default function ReceiptDetailPage() {
             actions={[
               { label: "Open audit", onClick: () => { window.location.href = "/purchasing/cash-weight-audit"; } },
             ]}
+          />
+        ) : null}
+
+        {(postOpeningCost?.message || grn.openingCostMessage) && grn.status !== "POSTED" && grn.status !== "RECEIVED" && grn.status !== "CONVERTED" ? (
+          <ExceptionBanner
+            type="error"
+            title="This receipt cannot be posted yet"
+            description={postOpeningCost?.message || grn.openingCostMessage || ""}
+            actions={[{
+              label: "Enter opening cost",
+              variant: "default",
+              onClick: () => {
+                const products = postOpeningCost?.products?.length ? postOpeningCost.products : grn.openingCostGaps;
+                window.location.href = openingCostsHref(products);
+              },
+            }]}
           />
         ) : null}
 
