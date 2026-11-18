@@ -58,11 +58,14 @@ export async function fetchSfaCustomerApprovalsApi(
   );
 }
 
-export async function approveSfaCustomerApi(id: string): Promise<{ partyId: string }> {
+export async function approveSfaCustomerApi(
+  id: string,
+  mergeIntoPartyId?: string
+): Promise<{ partyId: string; merged?: boolean; partyName?: string }> {
   requireLiveApi("SFA customer approvals");
-  return apiRequest<{ partyId: string }>(
+  return apiRequest<{ partyId: string; merged?: boolean; partyName?: string }>(
     `/api/integrations/odaflow/customer-approvals/${encodeURIComponent(id)}/approve`,
-    { method: "POST", body: {} }
+    { method: "POST", body: mergeIntoPartyId ? { mergeIntoPartyId } : {} }
   );
 }
 

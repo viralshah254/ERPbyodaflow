@@ -121,11 +121,15 @@ export function SfaCustomerApprovalPanel({
     setReloadToken((token) => token + 1);
   }
 
-  async function approve(row: SfaCustomerApproval): Promise<boolean> {
+  async function approve(row: SfaCustomerApproval, mergeIntoPartyId?: string): Promise<boolean> {
     setBusyId(row._id);
     try {
-      await approveSfaCustomerApi(row._id);
-      toast.success(`${row.name} is now on the customer list.`);
+      const result = await approveSfaCustomerApi(row._id, mergeIntoPartyId);
+      toast.success(
+        mergeIntoPartyId
+          ? `${result.partyName || "The existing customer"} is now the ERP customer for this outlet. They can take orders.`
+          : `${row.name} is now on the customer list and can take orders.`
+      );
       onApproved?.();
       if (items.length <= 1 && pageOffset > 0) {
         setPageOffset(Math.max(0, pageOffset - pageSize));
@@ -197,7 +201,8 @@ export function SfaCustomerApprovalPanel({
           <h2 className="text-sm font-semibold">Pending approval</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             Direct customers created in Odaflow SFA stay here until you approve them. Open a row to
-            correct the phone, KRA PIN, or address, then approve them onto the customer list.
+            correct the details, approve them as a new customer, or merge them into a customer
+            already on the list. They cannot take orders until then.
           </p>
         </div>
         {loading ? (
@@ -299,8 +304,8 @@ export function SfaCustomerApprovalPanel({
           setItems((current) => current.map((item) => (item._id === updated._id ? { ...item, ...updated } : item)));
           setSelected(updated);
         }}
-        onApprove={(row) => {
-          void approve(row).then((ok) => {
+        onApprove={(row, mergeIntoPartyId) => {
+          void approve(row, mergeIntoPartyId).then((ok) => {
             if (ok) setSelected(null);
           });
         }}

@@ -9,7 +9,7 @@ export default function CustomerApprovalsPage() {
     <PageShell>
       <PageHeader
         title="Pending approval"
-        description="Direct customers sent from SFA. Approve them before they join the customer list."
+        description="Direct customers sent from SFA. Approve them as new customers, or merge them into a customer already on the list. They cannot take orders until you do."
         breadcrumbs={[
           { label: "Sales", href: "/sales/overview" },
           { label: "Customers", href: "/sales/customers" },
