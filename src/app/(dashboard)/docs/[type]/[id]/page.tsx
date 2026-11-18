@@ -4170,7 +4170,8 @@ function DynamicNextStepsPanel({
     const hasPod = !!document?.podConfirmation?.confirmedAt;
     const source = document?.sourceDocument;
     const routeInvoiceStandby = isRouteDispatchMode(document?.salesFlow?.mode);
-    if (routeInvoiceStandby && convertTargets.includes("invoice")) {
+    const linkedInvoice = document?.salesFlow?.invoice;
+    if (routeInvoiceStandby && convertTargets.includes("invoice") && !linkedInvoice) {
       steps.push({
         icon: <Icons.FileText className="h-4 w-4 text-emerald-600" />,
         text: "The invoice is on standby. Create it from this delivery note whenever you are ready.",
@@ -4253,6 +4254,18 @@ function DynamicNextStepsPanel({
     const dnNeedsFulfilment = ["DRAFT", "APPROVED"].includes(st);
     if (warehouseTaskLink && dnNeedsFulfilment) {
       steps.push({ icon: <Icons.Warehouse className="h-4 w-4" />, text: warehouseTaskLink.label, href: warehouseTaskLink.href });
+    }
+    if (hasPod && routeInvoiceStandby && linkedInvoice) {
+      const invoicePosted = String(linkedInvoice.status ?? "").toUpperCase() === "POSTED";
+      steps.unshift({
+        icon: <Icons.Send className="h-4 w-4" />,
+        text: invoicePosted
+          ? `Invoice ${linkedInvoice.number} is posted.`
+          : `Post invoice ${linkedInvoice.number}. This delivery note is stamped.`,
+        href: `/docs/invoice/${linkedInvoice.id}`,
+        actionLabel: `Open ${linkedInvoice.number}`,
+        variant: "default",
+      });
     }
     steps.push({ icon: <Icons.Mail className="h-4 w-4" />, text: "Email this delivery note", action: onSendEmail, actionLabel: "Send email", variant: "outline" });
   } else if (type === "invoice") {
