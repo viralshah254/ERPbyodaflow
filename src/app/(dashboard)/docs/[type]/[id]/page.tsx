@@ -3920,7 +3920,7 @@ export default function DocViewPage() {
 // ─── Dynamic Next Steps Panel ────────────────────────────────────────────────
 
 function routeLoadHref(noteId: string): string {
-  return `/warehouse/route-pick-lists?note=${encodeURIComponent(noteId)}`;
+  return `/warehouse/route-pick-lists/${encodeURIComponent(noteId)}`;
 }
 
 function deliveryStillAtYard(status: string | undefined): boolean {

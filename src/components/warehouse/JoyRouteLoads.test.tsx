@@ -1,7 +1,7 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { JoyRouteLoads } from "./JoyRouteLoads";
+import { JoyLoaderNote, JoyRouteLoads } from "./JoyRouteLoads";
 
 const location = vi.hoisted(() => ({ search: "" }));
 const navigation = vi.hoisted(() => ({ push: vi.fn() }));
@@ -77,7 +77,7 @@ it("puts the sales-order route first without scrolling the app shell", async () 
   expect(scroll).not.toHaveBeenCalled();
 });
 
-it("shows the load time, order, and customer on a finance card", async () => {
+it("lists a finance truck with its note, plate, route, and created time", async () => {
   location.search = "step=finance";
   api.notes = [{
     id: "n1",
@@ -111,20 +111,52 @@ it("shows the load time, order, and customer on a finance card", async () => {
     results: [],
   }];
   render(<JoyRouteLoads />);
+  expect(await screen.findByText("LDN-0006")).toBeVisible();
+  expect(screen.getByText("KBT 749H")).toBeVisible();
+  expect(screen.getByText("MERU - EMBU")).toBeVisible();
+  const created = new Date("2026-11-17T13:12:00.000Z");
+  const createdLabel = `${created.toLocaleString(undefined, { day: "numeric", month: "short" })} · ${created.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+  expect(screen.getByText(createdLabel)).toBeVisible();
+  expect(screen.getByRole("link", { name: "Open loader note" })).toHaveAttribute("href", "/warehouse/route-pick-lists/n1");
+  expect(screen.queryByRole("button", { name: "Confirm loader note" })).toBeNull();
+});
+
+it("shows the order and customer on the loader note page", async () => {
+  api.notes = [{
+    id: "n1",
+    number: "LDN-0006",
+    date: "2026-11-17T13:12:00.000Z",
+    createdAt: "2026-11-17T13:12:00.000Z",
+    loadedAt: "2026-11-17T13:18:00.000Z",
+    status: "AWAITING_FINANCE",
+    truck: "KBT 749H",
+    routeWarehouseId: "meru",
+    routeWarehouseName: "MERU - EMBU",
+    fulfilmentWarehouseName: "DISPATCH",
+    salesOrderIds: ["so-2"],
+    lines: [{
+      productId: "p2",
+      sku: "1",
+      name: "JOY QUEEN CAKES 4PCS (135 GMS)",
+      unit: "EA",
+      orderedQty: 12,
+      loadedQty: 12,
+      allocations: [{
+        salesOrderId: "so-2",
+        salesOrderNumber: "500013",
+        customerName: "Naivas Embu",
+        branchName: "Embu",
+        lineId: "l1",
+        orderedQty: 12,
+        invoiceQty: 12,
+      }],
+    }],
+    results: [],
+  }];
+  render(<JoyLoaderNote noteId="n1" />);
   expect(await screen.findByRole("link", { name: "500013" })).toHaveAttribute("href", "/docs/sales-order/so-2");
   expect(screen.getByText("Naivas Embu")).toBeVisible();
-  expect(screen.queryByText(/× 12 EA/)).toBeNull();
-  expect(screen.getByText("MERU - EMBU")).toBeVisible();
-  expect(screen.getByText("KBT 749H")).toBeVisible();
-  const timeline = screen.getByLabelText("Load route and timeline");
-  expect(timeline).toBeVisible();
-  expect(screen.getByRole("heading", { name: "LDN-0006" })).toBeVisible();
-  const createdTime = new Date("2026-11-17T13:12:00.000Z").toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
-  const loadedTime = new Date("2026-11-17T13:18:00.000Z").toLocaleString(undefined, { hour: "numeric", minute: "2-digit" });
-  expect(timeline).toHaveTextContent("Created");
-  expect(timeline).toHaveTextContent("Loaded");
-  expect(timeline).toHaveTextContent(createdTime);
-  expect(timeline).toHaveTextContent(loadedTime);
+  expect(screen.getByRole("heading", { name: "KBT 749H" })).toBeVisible();
 });
 
 it("offers a delivery note only beside an invoice and delivery note on a full finance load", async () => {
@@ -158,9 +190,10 @@ it("offers a delivery note only beside an invoice and delivery note on a full fi
     }],
     results: [],
   }];
-  render(<JoyRouteLoads />);
+  api.notes[0].results = [{ salesOrderId: "so-12", deliveryNoteId: "dn-9", deliveryNoteNumber: "DN9" }];
+  render(<JoyLoaderNote noteId="n1" />);
   expect(await screen.findByRole("button", { name: "Invoice and delivery note" })).toBeEnabled();
-  expect(screen.getByRole("button", { name: "Delivery note only" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Continue delivery note" })).toBeEnabled();
 });
 
 const financeLoad = {
@@ -203,15 +236,19 @@ it("opens the delivery note after finance creates one", async () => {
     documentPlan: "delivery_note",
     results: [{ salesOrderId: "so-811", deliveryNoteId: "dn-1", deliveryNoteNumber: "DN1", stockIssued: true }],
   });
-  render(<JoyRouteLoads />);
-  fireEvent.click(await screen.findByRole("button", { name: "Delivery note only" }));
-  await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/docs/delivery-note/dn-1"));
+  render(<JoyLoaderNote noteId="n1" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Confirm loader note" }));
+  await waitFor(() => expect(api.allocate).toHaveBeenCalled());
+  expect(navigation.push).not.toHaveBeenCalled();
 });
 
 it("opens the invoice after finance creates the invoice and delivery note", async () => {
   access.write = true;
   location.search = "step=finance";
-  api.notes = [financeLoad];
+  api.notes = [{
+    ...financeLoad,
+    results: [{ salesOrderId: "so-811", invoiceId: "inv-old", invoiceNumber: "INV0" }],
+  }];
   api.allocate.mockResolvedValue({
     ...financeLoad,
     status: "INVOICED",
@@ -225,8 +262,8 @@ it("opens the invoice after finance creates the invoice and delivery note", asyn
       stockIssued: true,
     }],
   });
-  render(<JoyRouteLoads />);
-  fireEvent.click(await screen.findByRole("button", { name: "Invoice and delivery note" }));
+  render(<JoyLoaderNote noteId="n1" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Continue invoice and delivery note" }));
   await waitFor(() => expect(navigation.push).toHaveBeenCalledWith("/docs/invoice/inv-1"));
 });
 

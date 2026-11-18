@@ -115,22 +115,6 @@ function LoadDocumentActions({
   );
 }
 
-/** Scroll a card inside the page, never the locked app shell. scrollIntoView shifts the whole window. */
-function revealInPage(id: string) {
-  const node = document.getElementById(id);
-  const scroller = node?.closest("[data-guide-scroll]");
-  if (!node || !(scroller instanceof HTMLElement)) return;
-  const sticky = scroller.querySelector<HTMLElement>(":scope > .sticky");
-  const headerHeight = sticky?.getBoundingClientRect().height ?? 0;
-  const top =
-    node.getBoundingClientRect().top -
-    scroller.getBoundingClientRect().top +
-    scroller.scrollTop -
-    headerHeight -
-    12;
-  scroller.scrollTo({ top: Math.max(0, top) });
-}
-
 function resetShellScroll() {
   document.documentElement.scrollTop = 0;
   document.body.scrollTop = 0;
@@ -142,6 +126,19 @@ function errorMessage(error: unknown, fallback: string) {
 }
 
 /** Older notes saved "C4 FRIDAY - C4 FRIDAY" when a warehouse code equals its name. */
+export function loaderNotePath(id: string): string {
+  return `/warehouse/route-pick-lists/${encodeURIComponent(id)}`;
+}
+
+function truckStage(note: JoyLoadNote): string {
+  if (note.departedAt) return "Left";
+  if (note.status === "OPEN") return "Confirm load";
+  if (note.status === "AWAITING_FINANCE" || note.status === "INVOICING") return "Finance review";
+  if (note.status === "CONFIRMED") return "Delivery notes";
+  if (note.status === "INVOICED") return "Ready to leave";
+  return note.status;
+}
+
 function placeLabel(label: string): string {
   const [code, ...rest] = label.split(" - ");
   const name = rest.join(" - ");
@@ -412,7 +409,6 @@ function WaitingRouteCard({
   busyTrucks,
   canLoad,
   dispatchName,
-  onCreated,
   activeNote,
   focused,
 }: {
@@ -421,10 +417,10 @@ function WaitingRouteCard({
   busyTrucks: string[];
   canLoad: boolean;
   dispatchName: string;
-  onCreated: () => Promise<void>;
   activeNote?: JoyLoadNote;
   focused?: boolean;
 }) {
+  const router = useRouter();
   const [truck, setTruck] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   return (
@@ -460,8 +456,8 @@ function WaitingRouteCard({
         {activeNote ? (
           <p className="rounded-md border bg-muted/50 p-3 text-sm">
             Waiting for {activeNote.number} to clear.{" "}
-            <Link className="text-primary underline" href={`/warehouse/route-pick-lists?note=${encodeURIComponent(activeNote.id)}`}>
-              Open loading note
+            <Link className="text-primary underline" href={loaderNotePath(activeNote.id)}>
+              Open loader note
             </Link>
           </p>
         ) : canLoad ? (
@@ -487,9 +483,9 @@ function WaitingRouteCard({
               onClick={() => {
                 setBusy(true);
                 void createJoyLoadNote({ warehouseId: route.warehouseId, truck })
-                  .then(async (note) => {
-                    toast.success(`Loading note ${note.number} created for ${note.truck}.`);
-                    await onCreated();
+                  .then((note) => {
+                    toast.success(`Loader note ${note.number} created for ${note.truck}.`);
+                    router.push(loaderNotePath(note.id));
                   })
                   .catch((error) => toast.error(errorMessage(error, "Could not create the loading note")))
                   .finally(() => setBusy(false));
@@ -511,11 +507,13 @@ function LoadingNoteCard({
   canLoad,
   dispatchName,
   onChanged,
+  onCancelled,
 }: {
   note: JoyLoadNote;
   canLoad: boolean;
   dispatchName: string;
   onChanged: () => Promise<void>;
+  onCancelled?: () => void;
 }) {
   const router = useRouter();
   const [loaded, setLoaded] = React.useState<Record<string, string>>({});
@@ -662,7 +660,8 @@ function LoadingNoteCard({
                 void cancelJoyLoadNote(note.id)
                   .then(async () => {
                     toast.success(`${note.number} cancelled. Its orders are waiting again.`);
-                    await onChanged();
+                    if (onCancelled) onCancelled();
+                    else await onChanged();
                   })
                   .catch((error) => toast.error(errorMessage(error, "Could not cancel")))
                   .finally(() => setBusyPlan(null));
@@ -1204,9 +1203,10 @@ function Section({
   id: string;
   title: string;
   empty: string;
-  children: React.ReactNode[];
+  children: React.ReactNode;
 }) {
-  if (!children.length) {
+  const items = React.Children.toArray(children);
+  if (!items.length) {
     return (
       <section id={id} className="space-y-2">
         <h2 className="text-lg font-semibold">{title}</h2>
@@ -1217,18 +1217,56 @@ function Section({
   return (
     <section id={id} className="space-y-3">
       <h2 className="text-lg font-semibold">{title}</h2>
-      {children}
+      {items}
     </section>
   );
 }
 
+function TruckLoadTable({ notes }: { notes: JoyLoadNote[] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full min-w-[40rem] text-sm">
+        <thead className="text-left text-xs text-muted-foreground">
+          <tr>
+            <th className="px-3 py-2 font-medium">Loader note</th>
+            <th className="px-3 py-2 font-medium">Truck</th>
+            <th className="px-3 py-2 font-medium">Route</th>
+            <th className="px-3 py-2 font-medium">Created</th>
+            <th className="px-3 py-2 font-medium">Stage</th>
+            <th className="px-3 py-2" />
+          </tr>
+        </thead>
+        <tbody>
+          {notes.map((note) => {
+            const created = formatWhenParts(note.createdAt || note.date);
+            return (
+              <tr key={note.id} className="border-t">
+                <td className="px-3 py-2.5 font-medium">{note.number}</td>
+                <td className="px-3 py-2.5 font-mono tracking-wide">{note.truck}</td>
+                <td className="px-3 py-2.5">{placeLabel(note.routeWarehouseName)}</td>
+                <td className="px-3 py-2.5 tabular-nums text-muted-foreground">{created?.compact ?? ""}</td>
+                <td className="px-3 py-2.5 text-muted-foreground">{truckStage(note)}</td>
+                <td className="px-3 py-2.5 text-right">
+                  <Link className="font-medium text-primary hover:underline" href={loaderNotePath(note.id)}>
+                    Open loader note
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function JoyRouteLoadsInner() {
+  const router = useRouter();
   const params = useSearchParams();
   const focusWarehouse = params.get("warehouse") ?? "";
   const focusNote = params.get("note") ?? "";
   const step = params.get("step");
   const canLoad = useHasPermission("inventory.write");
-  const canFinance = useHasPermission("finance.write");
   const [data, setData] = React.useState<JoyLoadNotes | null>(null);
 
   const reload = React.useCallback(async () => {
@@ -1253,10 +1291,13 @@ function JoyRouteLoadsInner() {
   const queueHref = (queue: "dispatch" | "finance") => `?step=${queue}`;
 
   React.useEffect(() => {
+    if (focusNote) router.replace(loaderNotePath(focusNote));
+  }, [focusNote, router]);
+
+  React.useEffect(() => {
     if (!data) return;
     resetShellScroll();
-    if (focusNote) revealInPage(`note-${focusNote}`);
-  }, [data, focusNote]);
+  }, [data]);
 
   if (!data) return <p className="p-3 text-sm text-muted-foreground">Loading routes…</p>;
 
@@ -1264,10 +1305,8 @@ function JoyRouteLoadsInner() {
     ? [...data.waiting].sort((a, b) => Number(b.warehouseId === focusWarehouse) - Number(a.warehouseId === focusWarehouse))
     : data.waiting;
   const openedRoute = focusWarehouse ? waiting.find((route) => route.warehouseId === focusWarehouse) : undefined;
-  const loading = data.notes.filter((note) => note.status === "OPEN");
-  const confirmed = data.notes.filter((note) => note.status === "CONFIRMED");
   const finance = data.notes.filter((note) => note.status === "AWAITING_FINANCE" || note.status === "INVOICING");
-  const ready = data.notes.filter((note) => note.status === "INVOICED" && !note.departedAt);
+  const onTheRoad = data.notes.filter((note) => !note.departedAt);
   const left = data.notes.filter((note) => note.status === "INVOICED" && note.departedAt);
 
   const loadBlocks =
@@ -1285,31 +1324,11 @@ function JoyRouteLoadsInner() {
                 focused={route.warehouseId === focusWarehouse}
                 activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
                   (note.status === "OPEN" || note.status === "AWAITING_FINANCE" || note.status === "INVOICING"))}
-                onCreated={reload}
               />
             ))}
           </Section>,
-          <Section key="loading" id="step-loading" title="Confirm load" empty="No truck is being loaded.">
-            {loading.map((note) => (
-              <LoadingNoteCard
-                key={note.id}
-                note={note}
-                canLoad={canLoad}
-                dispatchName={data.dispatchWarehouseName}
-                onChanged={reload}
-              />
-            ))}
-          </Section>,
-          <Section key="confirmed" id="step-notes" title="Delivery notes" empty="No loader note is confirmed yet.">
-            {confirmed.map((note) => (
-              <ConfirmedNoteCard
-                key={note.id}
-                note={note}
-                canLoad={canLoad}
-                canFinance={canFinance}
-                onChanged={reload}
-              />
-            ))}
+          <Section key="trucks" id="step-trucks" title="Trucks" empty="No truck is on a loader note.">
+            {onTheRoad.length ? <TruckLoadTable notes={onTheRoad} /> : null}
           </Section>,
         ]
       : [];
@@ -1317,24 +1336,15 @@ function JoyRouteLoadsInner() {
     financeView
       ? [
           <Section key="finance" id="step-finance" title="Loads awaiting finance" empty="No loads need finance review.">
-            {finance.map((note) => (
-              <FinanceNoteCard key={`${note.id}:${note.status}`} note={note} canFinance={canFinance} onChanged={reload} />
-            ))}
+            {finance.length ? <TruckLoadTable notes={finance} /> : null}
           </Section>,
         ]
       : [];
   const leaveBlocks =
     !financeView
       ? [
-          <Section key="ready" id="step-leave" title="Ready to leave" empty="No loads are waiting to leave.">
-            {ready.map((note) => (
-              <ReadyToLeaveCard key={note.id} note={note} canLoad={canLoad} onChanged={reload} />
-            ))}
-          </Section>,
           <Section key="left" id="step-left" title="Left today" empty="No trucks have left yet today.">
-            {left.map((note) => (
-              <LeftTodayCard key={note.id} note={note} />
-            ))}
+            {left.length ? <TruckLoadTable notes={left} /> : null}
           </Section>,
         ]
       : [];
@@ -1353,7 +1363,7 @@ function JoyRouteLoadsInner() {
         <p className="text-sm text-muted-foreground">
           {openedRoute
             ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order. Pick stock from ${placeLabel(data.dispatchWarehouseName)}.`
-            : `Pick stock from ${placeLabel(data.dispatchWarehouseName)}. Short loads go to Finance Review.`}
+            : `Choose a route and a truck. Open the loader note to confirm what was picked against what was ordered.`}
         </p>
       )}
       {financeView ? financeBlock : step === "leave" ? [...leaveBlocks, ...loadBlocks] : [...loadBlocks, ...leaveBlocks]}
@@ -1366,5 +1376,84 @@ export function JoyRouteLoads() {
     <React.Suspense fallback={<p className="text-sm text-muted-foreground">Loading routes…</p>}>
       <JoyRouteLoadsInner />
     </React.Suspense>
+  );
+}
+
+export function JoyLoaderNote({ noteId }: { noteId: string }) {
+  const router = useRouter();
+  const canLoad = useHasPermission("inventory.write");
+  const canFinance = useHasPermission("finance.write");
+  const [data, setData] = React.useState<JoyLoadNotes | null>(null);
+
+  const reload = React.useCallback(async () => {
+    try {
+      setData(await fetchJoyLoadNotes());
+    } catch (error) {
+      toast.error(errorMessage(error, "Could not load the loader note"));
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void reload();
+  }, [reload]);
+
+  const note = data?.notes.find((item) => item.id === noteId);
+  const back = (
+    <Link className="text-sm text-muted-foreground hover:text-foreground hover:underline" href="/warehouse/route-pick-lists">
+      Route loads
+    </Link>
+  );
+
+  if (!data) return <p className="p-3 text-sm text-muted-foreground">Loading the loader note…</p>;
+  if (!note) {
+    return (
+      <div className="space-y-3 p-3 sm:px-5">
+        {back}
+        <p className="text-sm text-muted-foreground">This loader note is no longer on the board.</p>
+      </div>
+    );
+  }
+
+  const created = formatWhen(note.createdAt || note.date);
+  return (
+    <div className="min-w-0 space-y-4 p-3 sm:px-5">
+      <div className="flex flex-wrap items-end justify-between gap-3 border-b pb-4">
+        <div className="min-w-0 space-y-1">
+          {back}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h1 className="font-mono text-2xl font-semibold tracking-wide">{note.truck}</h1>
+            <p className="text-sm text-muted-foreground">
+              {note.number}
+              <span aria-hidden> · </span>
+              {placeLabel(note.routeWarehouseName)}
+              {created ? (
+                <>
+                  <span aria-hidden> · </span>
+                  Created {created}
+                </>
+              ) : null}
+            </p>
+          </div>
+        </div>
+        <p className="text-sm text-muted-foreground">{truckStage(note)}</p>
+      </div>
+      {note.status === "OPEN" ? (
+        <LoadingNoteCard
+          note={note}
+          canLoad={canLoad}
+          dispatchName={data.dispatchWarehouseName}
+          onChanged={reload}
+          onCancelled={() => router.push("/warehouse/route-pick-lists")}
+        />
+      ) : note.status === "AWAITING_FINANCE" || note.status === "INVOICING" ? (
+        <FinanceNoteCard note={note} canFinance={canFinance} onChanged={reload} />
+      ) : note.status === "CONFIRMED" ? (
+        <ConfirmedNoteCard note={note} canLoad={canLoad} canFinance={canFinance} onChanged={reload} />
+      ) : note.status === "INVOICED" && !note.departedAt ? (
+        <ReadyToLeaveCard note={note} canLoad={canLoad} onChanged={reload} />
+      ) : (
+        <LeftTodayCard note={note} />
+      )}
+    </div>
   );
 }
