@@ -50,7 +50,7 @@ const ROUTE_DISPATCH_STEPS = [
   "Loading note on one truck",
   "Confirm load from DISPATCH",
   "Finance settles shorts if needed",
-  "Invoice and delivery note for the loaded quantity",
+  "Delivery note now, or invoice and delivery note together",
   "Truck left",
 ];
 
@@ -337,7 +337,7 @@ export default function SalesDocumentFlowPage() {
                   [
                     ["classic", "Current flow", "Delivery note first, then pick & pack, then invoice after the signed note."],
                     ["pick_pack_first", "Pick & pack first", "Pick from the sales order, then invoice and delivery note, then proof of delivery."],
-                    ["route_dispatch", "Route dispatch", "Group orders by delivery route, load one truck from the dispatch store, invoice the loaded quantity, then mark the truck as left. Driver returns draft a credit note."],
+                    ["route_dispatch", "Route dispatch", "Group orders by delivery route and load one truck from the dispatch store. Send the delivery note now, or send it with the invoice. Then mark the truck as left. Driver returns draft a credit note."],
                   ] as Array<[SalesDocumentFlowMode, string, string]>
                 )
                   .map(([mode, label, hint]) => (

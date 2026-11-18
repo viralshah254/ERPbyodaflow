@@ -4141,7 +4141,9 @@ function DynamicNextStepsPanel({
             text:
               document?.salesFlow?.mode === "pick_pack_first"
                 ? "Upload the signed delivery note brought back by the driver. This records an internal proof of delivery and leaves the original delivery note unchanged."
-                : "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
+                : isRouteDispatchMode(document?.salesFlow?.mode)
+                  ? "The customer clears this note before the invoice. Upload the signed copy, then create the invoice from the quantities they accepted."
+                  : "Upload the signed delivery note here to confirm POD (as shipped), or record POD from the mobile dispatch app. Invoice unlocks after POD.",
             action: canRecordSignedPod ? onUploadSignedDn : undefined,
             actionLabel: canRecordSignedPod ? "Upload signed DN" : undefined,
             variant: "default",
@@ -4157,7 +4159,9 @@ function DynamicNextStepsPanel({
       if (hasPod && convertTargets.includes("invoice")) {
         steps.push({
           icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />,
-          text: fmcgOrg
+          text: isRouteDispatchMode(document?.salesFlow?.mode)
+            ? "The note is cleared. Create the invoice from the quantities the customer accepted."
+            : fmcgOrg
             ? "POD recorded — create the invoice from acknowledged (delivered) quantities. Blank Create Invoice is for pickup / ad-hoc only."
             : "Create invoice from quantities acknowledged at delivery.",
           action: () => onConvert("invoice"),
