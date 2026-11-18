@@ -60,8 +60,10 @@ const MONTH_NAMES = [
 ];
 
 function formatClock(parts: ReturnType<typeof nairobiParts>): string {
+  const hourNum = Number(parts.hour);
+  const hour = Number.isFinite(hourNum) && hourNum % 12 === 0 ? "12" : parts.hour;
   const minute = parts.minute.padStart(2, "0");
-  return `${parts.hour}:${minute} ${parts.dayPeriod}`;
+  return `${hour}:${minute} ${parts.dayPeriod}`;
 }
 
 /**
