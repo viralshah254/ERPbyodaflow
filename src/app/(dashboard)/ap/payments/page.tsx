@@ -38,6 +38,7 @@ import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ReceiptCollectionGrid } from "@/components/finance/ReceiptCollectionGrid";
 import { ApChequeBoxSheet } from "@/components/finance/ApChequeBoxSheet";
@@ -55,6 +56,8 @@ function supplierLabelForBill(
 }
 
 export default function APPaymentsPage() {
+  const searchParams = useSearchParams();
+  const openedFromQuery = React.useRef(false);
   const [search, setSearch] = React.useState("");
   const [allRows, setAllRows] = React.useState<APPaymentRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -74,6 +77,13 @@ export default function APPaymentsPage() {
   const refreshPayments = React.useCallback(async () => {
     setAllRows(await fetchApPaymentsApi());
   }, []);
+
+  React.useEffect(() => {
+    if (openedFromQuery.current) return;
+    if (searchParams.get("record") !== "1") return;
+    openedFromQuery.current = true;
+    setWizardOpen(true);
+  }, [searchParams]);
 
   React.useEffect(() => {
     setLoading(true);

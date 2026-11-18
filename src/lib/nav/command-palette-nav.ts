@@ -167,6 +167,55 @@ export function recordRecentRoute(route: Omit<RecentRoute, "visitedAt">): void {
   }
 }
 
+const PAYMENT_QUERY_WORDS = new Set([
+  "record",
+  "receive",
+  "payment",
+  "payments",
+  "receipt",
+  "receipts",
+  "customer",
+  "buyer",
+  "supplier",
+  "paid",
+  "from",
+  "to",
+]);
+
+/** Customer receipt first, then a payment out to a supplier. */
+export const PAYMENT_RECORD_COMMANDS: (CommandItemNav & { _breadcrumb?: string; _section?: string })[] = [
+  {
+    id: "record-customer-payment",
+    group: "nav",
+    href: "/ar/payments?receive=1",
+    label: "Record payment from customer",
+    icon: "ArrowDownCircle",
+    keywords: ["receive payment", "payment receipt", "payments", "paid", "buyer"],
+    _breadcrumb: "Customer has paid",
+    _section: "Record a payment",
+  },
+  {
+    id: "record-supplier-payment",
+    group: "nav",
+    href: "/ap/payments?record=1",
+    label: "Record payment to supplier",
+    icon: "ArrowUpCircle",
+    keywords: ["pay supplier", "payments", "receipt"],
+    _breadcrumb: "Pay a supplier",
+    _section: "Record a payment",
+  },
+];
+
+/** True for record/receive payment, payment receipt, and payments. Not payment matching or payment runs. */
+export function paymentRecordingCommands(query: string): typeof PAYMENT_RECORD_COMMANDS {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!tokens.length || !tokens.every((token) => PAYMENT_QUERY_WORDS.has(token))) return [];
+  const aboutPayment = tokens.some((token) =>
+    token === "payment" || token === "payments" || token === "receipt" || token === "receipts" || token === "receive"
+  );
+  return aboutPayment ? PAYMENT_RECORD_COMMANDS : [];
+}
+
 /** Score a nav item for relevance against query tokens (higher = better match). */
 export function scoreNavItem(item: CommandItemNav, tokens: string[]): number {
   const label = item.label.toLowerCase();
