@@ -41,7 +41,7 @@ export const PACK_UOM_ALIAS_GROUPS: string[][] = [
   ["PK", "PACK", "PACKS"],
   ["BOX", "BOXES"],
   ["DOZEN", "DOZ"],
-  ["PCS", "PC", "EA", "EACH", "PIECE", "UNIT", "RRP"],
+  ["PCS", "PC", "EA", "EACH", "PIECE", "UNIT", "RRP", "RETAIL"],
   ["INNER", "INNERS"],
 ];
 
@@ -55,7 +55,7 @@ export function uomAliasGroup(uom: string): string[] {
 
 export function isPieceUomCode(uom: string | undefined | null): boolean {
   const u = normalizeUomCode(uom);
-  return ["EA", "PC", "PCS", "PIECE", "RRP", "UNIT", "WHOLESALE"].includes(u);
+  return ["EA", "PC", "PCS", "PIECE", "RRP", "RETAIL", "UNIT", "WHOLESALE"].includes(u);
 }
 
 function uomsMatch(a: string, b: string): boolean {
