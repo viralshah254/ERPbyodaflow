@@ -46,6 +46,23 @@ type PaymentMethod = "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
 
 const today = () => todayNairobiYmd();
 
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function shortDate(value?: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? "");
+  if (!match) return "";
+  const month = SHORT_MONTHS[Number(match[2]) - 1];
+  if (!month) return "";
+  return `${Number(match[3])} ${month} ${match[1]}`;
+}
+
+function invoiceWhen(invoice: { date?: string; dueDate?: string }): string {
+  const issued = shortDate(invoice.date);
+  const due = shortDate(invoice.dueDate);
+  if (issued && due && due !== issued) return `${issued} · due ${due}`;
+  return issued || (due ? `Due ${due}` : "");
+}
+
 export function ArSettlementSheet({
   open,
   sessionKey,
@@ -178,6 +195,13 @@ export function ArSettlementSheet({
   const cashApplied = sumAmounts(Object.values(invoiceAmounts));
   const creditsApplied = sumAmounts(creditApplications.map((line) => line.amount));
   const unapplied = Number.isFinite(parsedAmount) ? roundMoney(parsedAmount - cashApplied) : 0;
+  const recordedBalance = (customer as { outstandingBalance?: number } | null)?.outstandingBalance;
+  const accountOwing =
+    typeof recordedBalance === "number"
+      ? recordedBalance
+      : sumAmounts(invoices.map((invoice) => invoice.outstanding));
+  const receiptTowardBalance = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+  const stillOwing = roundMoney(Math.max(0, accountOwing - receiptTowardBalance));
   const problem =
     !customerId
       ? "Select a customer."
@@ -365,6 +389,12 @@ export function ArSettlementSheet({
               Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}
               {unapplied > 0.009 ? " — stays on the customer and pays the next sale" : ""}
             </span>
+            {customerId ? (
+              <span className="font-medium">
+                Still owing {formatMoney(stillOwing, "KES")}
+                {receiptTowardBalance > 0 ? " after this receipt" : ""}
+              </span>
+            ) : null}
             {loadingItems ? <span className="text-muted-foreground">Loading open items…</span> : null}
           </div>
           {problem && customerId && parseReceiptMoney(amount) > 0 ? (
@@ -380,11 +410,13 @@ export function ArSettlementSheet({
                 ) : (
                   invoices.map((invoice) => {
                     const credited = creditsOnInvoice(creditApplications, invoice.id);
+                    const when = invoiceWhen(invoice);
                     return (
                       <div key={invoice.id} className="flex items-center justify-between gap-2 p-2 text-sm">
                         <div className="min-w-0">
                           <div className="truncate font-medium">{invoice.number}</div>
                           <div className="text-xs text-muted-foreground">
+                            {when ? `${when} · ` : ""}
                             Open {formatMoney(invoice.outstanding, invoice.currency || "KES")}
                             {credited > 0 ? ` · credit ${formatMoney(credited, invoice.currency || "KES")}` : ""}
                           </div>
