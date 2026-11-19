@@ -18,6 +18,7 @@ import {
 import type { PartyLookupOption } from "@/lib/api/parties";
 import {
   applyPreview,
+  spreadReceipt,
   creditUsed,
   creditsOnInvoice,
   explainSettlement,
@@ -151,11 +152,7 @@ export function ArSettlementSheet({
         .then((next) => {
           if (cancelled) return;
           setPreview(next);
-          if (!dirty) {
-            const applied = applyPreview(next);
-            setInvoiceAmounts(applied.invoiceAmounts);
-            setCreditApplications(applied.creditApplications);
-          }
+          if (!dirty) setCreditApplications(applyPreview(next).creditApplications);
         })
         .catch((error) => {
           if (!cancelled) toast.error((error as Error).message || "Could not suggest a match.");
@@ -166,6 +163,16 @@ export function ArSettlementSheet({
       window.clearTimeout(handle);
     };
   }, [open, customerId, amount, reference, pinnedInvoice, dirty]);
+
+  React.useEffect(() => {
+    if (!open || dirty) return;
+    const parsed = parseReceiptMoney(amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setInvoiceAmounts({});
+      return;
+    }
+    setInvoiceAmounts(spreadReceipt(parsed, invoices));
+  }, [open, dirty, amount, invoices]);
 
   const parsedAmount = parseReceiptMoney(amount);
   const cashApplied = sumAmounts(Object.values(invoiceAmounts));
@@ -280,7 +287,10 @@ export function ArSettlementSheet({
               <Input
                 inputMode="decimal"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setDirty(false);
+                }}
                 onBlur={() => setAmount(groupReceiptMoney(amount))}
               />
             </div>
@@ -431,15 +441,11 @@ export function ArSettlementSheet({
             </div>
           </div>
 
-          {preview?.invoiceLines.length || preview?.creditNoteApplications.length ? (
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              {preview.creditNoteApplications.map((line) => (
-                <li key={`${line.creditNoteId}-${line.invoiceId}`}>{line.reason}</li>
-              ))}
-              {preview.invoiceLines.map((line) => (
-                <li key={line.invoiceId}>{line.reason}</li>
-              ))}
-            </ul>
+          {invoices.length > 0 && Number.isFinite(parsedAmount) && parsedAmount > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {formatMoney(cashApplied, "KES")} is shared across these posted invoices until the money ends.
+              {unapplied > 0.009 ? ` ${formatMoney(Math.max(unapplied, 0), "KES")} stays on the customer.` : ""}
+            </p>
           ) : null}
 
           <SheetFooter className="gap-2 sm:justify-between">
