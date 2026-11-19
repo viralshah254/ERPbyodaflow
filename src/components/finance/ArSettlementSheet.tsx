@@ -475,7 +475,7 @@ export function ArSettlementSheet({
 
           {invoices.length > 0 && Number.isFinite(parsedAmount) && parsedAmount > 0 ? (
             <p className="text-xs text-muted-foreground">
-              {formatMoney(cashApplied, "KES")} is shared across these posted invoices until the money ends.
+              {formatMoney(cashApplied, "KES")} is shared across these open invoices until the money ends.
               {unapplied > 0.009 ? ` ${formatMoney(Math.max(unapplied, 0), "KES")} stays on the customer.` : ""}
             </p>
           ) : null}
