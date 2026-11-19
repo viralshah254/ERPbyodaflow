@@ -184,7 +184,8 @@ export function ArSettlementSheet({
   React.useEffect(() => {
     if (!open || dirty) return;
     const parsed = parseReceiptMoney(amount);
-    if (!Number.isFinite(parsed) || parsed <= 0) {
+    if (!Number.isFinite(parsed)) return;
+    if (parsed <= 0) {
       setInvoiceAmounts({});
       return;
     }
@@ -200,7 +201,8 @@ export function ArSettlementSheet({
     typeof recordedBalance === "number"
       ? recordedBalance
       : sumAmounts(invoices.map((invoice) => invoice.outstanding));
-  const receiptTowardBalance = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+  const receiptTowardBalance =
+    Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : cashApplied > 0 ? cashApplied : 0;
   const stillOwing = roundMoney(Math.max(0, accountOwing - receiptTowardBalance));
   const problem =
     !customerId
