@@ -16,6 +16,8 @@ export type AsyncSearchableSelectOption = {
   /** Extra classes for the label. Use `capsOnProduct` so product names draw in capitals when the organisation setting is on. */
   labelClassName?: string;
   description?: string;
+  /** Short value between the name and the badges, such as an unpaid balance. */
+  aside?: string;
   badges?: Array<{
     label: string;
     variant?: "default" | "secondary" | "destructive" | "outline";
@@ -77,6 +79,8 @@ interface AsyncSearchableSelectProps {
   portalContainer?: HTMLElement | null;
   recentStorageKey?: string;
   recentItemsLabel?: string;
+  /** Heading for the idle list when there are no recent picks, for example "Unpaid". */
+  browseLabel?: string;
   /**
    * When provided, a sticky "＋ [createNewLabel]" button appears at the bottom of the dropdown.
    * Called with the current search query so the caller can pre-fill a creation form.
@@ -122,6 +126,7 @@ export function AsyncSearchableSelect({
   portalContainer = null,
   recentStorageKey,
   recentItemsLabel = "Recent",
+  browseLabel,
   onCreateNew,
   createNewLabel = "Add new",
   listHeader,
@@ -458,6 +463,11 @@ export function AsyncSearchableSelect({
   };
 
   const showRecentHeading = !query.trim() && recentOptions.length > 0;
+  const listHeading = !query.trim()
+    ? showRecentHeading
+      ? recentItemsLabel
+      : browseLabel
+    : undefined;
 
   const listMaxPx = dragOrigin
     ? Math.max(220, Math.min(384, window.innerHeight - dragOrigin.top - 96))
@@ -585,21 +595,38 @@ export function AsyncSearchableSelect({
               }}
             >
               <div className="min-w-0 flex-1">
-                {showRecentHeading && index === 0 ? (
+                {listHeading && index === 0 ? (
                   <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                    {recentItemsLabel}
+                    {listHeading}
                   </span>
                 ) : null}
-                <div className="flex items-start justify-between gap-2">
-                  <span
-                    className={cn(
-                      "block flex-1 min-w-0",
-                      wrapLabels ? "whitespace-normal break-words" : "truncate",
-                      option.labelClassName
-                    )}
-                  >
-                    {option.label}
-                  </span>
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <span
+                      className={cn(
+                        "block",
+                        wrapLabels ? "whitespace-normal break-words" : "truncate",
+                        option.labelClassName
+                      )}
+                    >
+                      {option.label}
+                    </span>
+                    {option.description ? (
+                      <span
+                        className={cn(
+                          "mt-1 block text-[13px] leading-5 text-muted-foreground",
+                          option.description.includes("\n") || wrapLabels
+                            ? "whitespace-pre-line break-words"
+                            : "truncate"
+                        )}
+                      >
+                        {option.description}
+                      </span>
+                    ) : null}
+                  </div>
+                  {option.aside ? (
+                    <span className="shrink-0 text-right tabular-nums">{option.aside}</span>
+                  ) : null}
                   {option.badges?.length ? (
                     <div className="flex shrink-0 flex-wrap justify-end gap-1 max-w-[42%]">
                       {option.badges.map((badge: { label: string; variant?: "default" | "secondary" | "destructive" | "outline" }) => (
@@ -610,18 +637,6 @@ export function AsyncSearchableSelect({
                     </div>
                   ) : null}
                 </div>
-                {option.description ? (
-                  <span
-                    className={cn(
-                      "mt-1 block text-[13px] leading-5 text-muted-foreground",
-                      option.description.includes("\n") || wrapLabels
-                        ? "whitespace-pre-line break-words"
-                        : "truncate"
-                    )}
-                  >
-                    {option.description}
-                  </span>
-                ) : null}
               </div>
               {option.id === value ? <Icons.Check className="mt-0.5 h-4 w-4 shrink-0" /> : null}
             </button>
@@ -703,10 +718,36 @@ export function AsyncSearchableSelect({
           className={cn(
             "text-left relative",
             clipLabels ? "flex-1 min-w-0" : "whitespace-nowrap",
-            effectiveSelected?.badges?.length ? "pr-1" : ""
+            effectiveSelected?.badges?.length && !effectiveSelected?.aside ? "pr-1" : ""
           )}
         >
-          {effectiveSelected?.badges?.length ? (
+          {effectiveSelected?.aside ? (
+            <span className="flex min-w-0 items-center gap-3">
+              <span
+                className={cn(
+                  "block min-w-0 flex-1",
+                  wrapLabels ? "whitespace-normal break-words line-clamp-2" : clipLabels ? "truncate" : "whitespace-nowrap",
+                  effectiveSelected.labelClassName
+                )}
+              >
+                {effectiveSelected.label}
+              </span>
+              <span className="shrink-0 tabular-nums">{effectiveSelected.aside}</span>
+              {effectiveSelected.badges?.length ? (
+                <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                  {effectiveSelected.badges.map((badge) => (
+                    <Badge
+                      key={`${effectiveSelected.id}-${badge.label}`}
+                      variant={badge.variant ?? "outline"}
+                      className="px-1.5 py-0 text-[10px] font-normal"
+                    >
+                      {badge.label}
+                    </Badge>
+                  ))}
+                </span>
+              ) : null}
+            </span>
+          ) : effectiveSelected?.badges?.length ? (
             <span className="absolute right-0 top-0 flex flex-wrap justify-end gap-1 max-w-[45%]">
               {effectiveSelected.badges.map((badge) => (
                 <Badge
@@ -719,6 +760,7 @@ export function AsyncSearchableSelect({
               ))}
             </span>
           ) : null}
+          {effectiveSelected?.aside ? null : (
           <span
             className={cn(
               "block",
@@ -730,6 +772,7 @@ export function AsyncSearchableSelect({
           >
             {effectiveSelected?.label ?? placeholder}
           </span>
+          )}
           {showSelectedDescription && effectiveSelected?.description ? (
             <span className="mt-0.5 block whitespace-pre-line text-xs font-normal text-muted-foreground">
               {effectiveSelected.description}

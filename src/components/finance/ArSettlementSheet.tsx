@@ -13,7 +13,7 @@ import {
   createArPaymentApi,
   fetchArOpenItemsApi,
   previewArSettlementApi,
-  searchArCustomerOptionsApi,
+  searchReceiptCustomerOptionsApi,
 } from "@/lib/api/payments";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import {
@@ -250,7 +250,7 @@ export function ArSettlementSheet({
         <SheetHeader>
           <SheetTitle>Receive payment</SheetTitle>
           <SheetDescription>
-            One amount can clear several invoices. Credit notes are netted first. Nothing posts until you confirm.
+            Open balances are paid first, soonest due date first. Anything left stays on the customer and pays the next sale. Nothing posts until you confirm.
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4">
@@ -267,12 +267,12 @@ export function ArSettlementSheet({
                   setCreditApplications([]);
                 }}
                 onOptionSelect={(option) => setCustomer(option)}
-                loadOptions={searchArCustomerOptionsApi}
+                loadOptions={searchReceiptCustomerOptionsApi}
                 selectedOption={customer}
                 placeholder="Select customer"
                 searchPlaceholder="Type name, code, phone, or email"
                 emptyMessage="No customers found."
-                recentStorageKey="lookup:recent-customers"
+                browseLabel="Unpaid"
               />
             </div>
             <div className="space-y-2">
@@ -351,7 +351,10 @@ export function ArSettlementSheet({
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span>Credits {formatMoney(creditsApplied, "KES")}</span>
             <span>Cash {formatMoney(cashApplied, "KES")}</span>
-            <span>Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}</span>
+            <span>
+              Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}
+              {unapplied > 0.009 ? " — stays on the customer and pays the next sale" : ""}
+            </span>
             {loadingItems ? <span className="text-muted-foreground">Loading open items…</span> : null}
           </div>
           {problem && customerId && parseReceiptMoney(amount) > 0 ? (
