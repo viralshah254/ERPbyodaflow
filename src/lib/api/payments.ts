@@ -1,6 +1,8 @@
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { apiRequest, downloadFile, requireLiveApi } from "@/lib/api/client";
 import { sortPartyLookupOptions, toPartyLookupOption, type PartyLookupOption } from "@/lib/api/parties";
+import { orderReceiptCustomers } from "@/lib/ar/receipt-customers";
+import { formatMoney } from "@/lib/money";
 import type { APBillRow, APPaymentRow } from "@/lib/types/ap";
 import type { ArOpenItem, OpenInvoiceRow, PaymentRow, SettlementPreview } from "@/lib/types/ar";
 
@@ -135,6 +137,8 @@ type BackendPartyOption = {
   creditLimit?: number;
   creditLimitAmount?: number;
   outstandingBalance?: number;
+  nextDueDate?: string | null;
+  currency?: string;
 };
 
 export type ArCustomerSummary = {
@@ -368,6 +372,29 @@ export async function fetchArCustomersApi(search?: string): Promise<Array<{ id: 
   if (search?.trim()) params.set("search", search.trim());
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ar/customers", { params });
   return payload.items.map((item) => ({ id: item.id ?? item.partyId ?? "", name: item.name }));
+}
+
+/** Receive payment: unpaid customers first, soonest due day, then the larger balance. */
+export async function searchReceiptCustomerOptionsApi(search?: string): Promise<PartyLookupOption[]> {
+  requireLiveApi("AR customer lookup");
+  const params = new URLSearchParams();
+  if (search?.trim()) params.set("search", search.trim());
+  const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ar/customers", { params });
+  const rows = payload.items.map((item) => {
+    const balance = item.outstandingBalance ?? 0;
+    return {
+      ...toPartyLookupOption({
+        ...item,
+        creditLimitAmount: item.creditLimitAmount,
+        creditLimit: item.creditLimit,
+        outstandingBalance: balance,
+      }),
+      outstandingBalance: balance,
+      nextDueDate: item.nextDueDate ?? null,
+      aside: balance > 0.009 ? formatMoney(balance, item.currency || "KES") : undefined,
+    };
+  });
+  return orderReceiptCustomers(rows, search ?? "");
 }
 
 export async function searchArCustomerOptionsApi(search?: string): Promise<PartyLookupOption[]> {

@@ -168,6 +168,8 @@ export type PartyLookupOption = {
   id: string;
   label: string;
   description?: string;
+  /** Amount shown between the name and the badges, for example an unpaid balance. */
+  aside?: string;
   code?: string;
   email?: string;
   phone?: string;
@@ -188,7 +190,7 @@ function buildPartyLookupDescription(item: {
   return parts.length ? parts.join(" · ") : undefined;
 }
 
-function scorePartyLookupOption(option: PartyLookupOption, query: string) {
+export function scorePartyLookupOption(option: PartyLookupOption, query: string) {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return 0;
   const label = option.label.toLowerCase();

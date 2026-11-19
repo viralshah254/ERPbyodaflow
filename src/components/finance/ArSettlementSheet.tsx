@@ -13,11 +13,12 @@ import {
   createArPaymentApi,
   fetchArOpenItemsApi,
   previewArSettlementApi,
-  searchArCustomerOptionsApi,
+  searchReceiptCustomerOptionsApi,
 } from "@/lib/api/payments";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import {
   applyPreview,
+  spreadReceipt,
   creditUsed,
   creditsOnInvoice,
   explainSettlement,
@@ -44,6 +45,23 @@ export type ReceivePrefill = {
 type PaymentMethod = "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
 
 const today = () => todayNairobiYmd();
+
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function shortDate(value?: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? "");
+  if (!match) return "";
+  const month = SHORT_MONTHS[Number(match[2]) - 1];
+  if (!month) return "";
+  return `${Number(match[3])} ${month} ${match[1]}`;
+}
+
+function invoiceWhen(invoice: { date?: string; dueDate?: string }): string {
+  const issued = shortDate(invoice.date);
+  const due = shortDate(invoice.dueDate);
+  if (issued && due && due !== issued) return `${issued} · due ${due}`;
+  return issued || (due ? `Due ${due}` : "");
+}
 
 export function ArSettlementSheet({
   open,
@@ -151,11 +169,7 @@ export function ArSettlementSheet({
         .then((next) => {
           if (cancelled) return;
           setPreview(next);
-          if (!dirty) {
-            const applied = applyPreview(next);
-            setInvoiceAmounts(applied.invoiceAmounts);
-            setCreditApplications(applied.creditApplications);
-          }
+          if (!dirty) setCreditApplications(applyPreview(next).creditApplications);
         })
         .catch((error) => {
           if (!cancelled) toast.error((error as Error).message || "Could not suggest a match.");
@@ -167,10 +181,27 @@ export function ArSettlementSheet({
     };
   }, [open, customerId, amount, reference, pinnedInvoice, dirty]);
 
+  React.useEffect(() => {
+    if (!open || dirty) return;
+    const parsed = parseReceiptMoney(amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setInvoiceAmounts({});
+      return;
+    }
+    setInvoiceAmounts(spreadReceipt(parsed, invoices));
+  }, [open, dirty, amount, invoices]);
+
   const parsedAmount = parseReceiptMoney(amount);
   const cashApplied = sumAmounts(Object.values(invoiceAmounts));
   const creditsApplied = sumAmounts(creditApplications.map((line) => line.amount));
   const unapplied = Number.isFinite(parsedAmount) ? roundMoney(parsedAmount - cashApplied) : 0;
+  const recordedBalance = (customer as { outstandingBalance?: number } | null)?.outstandingBalance;
+  const accountOwing =
+    typeof recordedBalance === "number"
+      ? recordedBalance
+      : sumAmounts(invoices.map((invoice) => invoice.outstanding));
+  const receiptTowardBalance = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+  const stillOwing = roundMoney(Math.max(0, accountOwing - receiptTowardBalance));
   const problem =
     !customerId
       ? "Select a customer."
@@ -250,7 +281,7 @@ export function ArSettlementSheet({
         <SheetHeader>
           <SheetTitle>Receive payment</SheetTitle>
           <SheetDescription>
-            One amount can clear several invoices. Credit notes are netted first. Nothing posts until you confirm.
+            Open balances are paid first, soonest due date first. Anything left stays on the customer and pays the next sale. Nothing posts until you confirm.
           </SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-4">
@@ -267,12 +298,12 @@ export function ArSettlementSheet({
                   setCreditApplications([]);
                 }}
                 onOptionSelect={(option) => setCustomer(option)}
-                loadOptions={searchArCustomerOptionsApi}
+                loadOptions={searchReceiptCustomerOptionsApi}
                 selectedOption={customer}
                 placeholder="Select customer"
                 searchPlaceholder="Type name, code, phone, or email"
                 emptyMessage="No customers found."
-                recentStorageKey="lookup:recent-customers"
+                browseLabel="Unpaid"
               />
             </div>
             <div className="space-y-2">
@@ -280,7 +311,10 @@ export function ArSettlementSheet({
               <Input
                 inputMode="decimal"
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setDirty(false);
+                }}
                 onBlur={() => setAmount(groupReceiptMoney(amount))}
               />
             </div>
@@ -351,7 +385,16 @@ export function ArSettlementSheet({
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span>Credits {formatMoney(creditsApplied, "KES")}</span>
             <span>Cash {formatMoney(cashApplied, "KES")}</span>
-            <span>Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}</span>
+            <span>
+              Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}
+              {unapplied > 0.009 ? " — stays on the customer and pays the next sale" : ""}
+            </span>
+            {customerId ? (
+              <span className="font-medium">
+                Still owing {formatMoney(stillOwing, "KES")}
+                {receiptTowardBalance > 0 ? " after this receipt" : ""}
+              </span>
+            ) : null}
             {loadingItems ? <span className="text-muted-foreground">Loading open items…</span> : null}
           </div>
           {problem && customerId && parseReceiptMoney(amount) > 0 ? (
@@ -367,11 +410,13 @@ export function ArSettlementSheet({
                 ) : (
                   invoices.map((invoice) => {
                     const credited = creditsOnInvoice(creditApplications, invoice.id);
+                    const when = invoiceWhen(invoice);
                     return (
                       <div key={invoice.id} className="flex items-center justify-between gap-2 p-2 text-sm">
                         <div className="min-w-0">
                           <div className="truncate font-medium">{invoice.number}</div>
                           <div className="text-xs text-muted-foreground">
+                            {when ? `${when} · ` : ""}
                             Open {formatMoney(invoice.outstanding, invoice.currency || "KES")}
                             {credited > 0 ? ` · credit ${formatMoney(credited, invoice.currency || "KES")}` : ""}
                           </div>
@@ -428,15 +473,11 @@ export function ArSettlementSheet({
             </div>
           </div>
 
-          {preview?.invoiceLines.length || preview?.creditNoteApplications.length ? (
-            <ul className="space-y-1 text-xs text-muted-foreground">
-              {preview.creditNoteApplications.map((line) => (
-                <li key={`${line.creditNoteId}-${line.invoiceId}`}>{line.reason}</li>
-              ))}
-              {preview.invoiceLines.map((line) => (
-                <li key={line.invoiceId}>{line.reason}</li>
-              ))}
-            </ul>
+          {invoices.length > 0 && Number.isFinite(parsedAmount) && parsedAmount > 0 ? (
+            <p className="text-xs text-muted-foreground">
+              {formatMoney(cashApplied, "KES")} is shared across these open invoices until the money ends.
+              {unapplied > 0.009 ? ` ${formatMoney(Math.max(unapplied, 0), "KES")} stays on the customer.` : ""}
+            </p>
           ) : null}
 
           <SheetFooter className="gap-2 sm:justify-between">

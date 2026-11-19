@@ -103,4 +103,26 @@ describe("AsyncSearchableSelect", () => {
     expect(await screen.findByText("Retailer")).toBeInTheDocument();
     expect(screen.getByText("Over credit")).toBeInTheDocument();
   });
+
+  it("places an unpaid balance between the name and the badge", async () => {
+    const user = userEvent.setup();
+    const options: AsyncSearchableSelectOption[] = [
+      {
+        id: "cust-1",
+        label: "Naivas Limited",
+        description: "JSB2900",
+        aside: "KES 10,000.00",
+        badges: [{ label: "Supermarket", variant: "secondary" }],
+      },
+    ];
+
+    render(<Harness loadOptions={async () => options} />);
+    await user.click(screen.getByRole("button", { name: /select customer/i }));
+
+    const name = await screen.findByText("Naivas Limited");
+    const balance = screen.getByText("KES 10,000.00");
+    const badge = screen.getByText("Supermarket");
+    expect(name.compareDocumentPosition(balance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(balance.compareDocumentPosition(badge) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });

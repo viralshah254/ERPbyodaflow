@@ -32,6 +32,25 @@ export function scaleCreditNote(
   });
 }
 
+/** Put the receipt onto invoices in list order. Each takes its full open amount until the money ends. */
+export function spreadReceipt(
+  amount: number,
+  invoices: Array<{ id: string; outstanding: number }>,
+): Record<string, number> {
+  let left = roundMoney(amount);
+  const amounts: Record<string, number> = {};
+  if (!(left > 0)) return amounts;
+  for (const invoice of invoices) {
+    if (left <= 0.009) break;
+    const open = roundMoney(invoice.outstanding);
+    if (open <= 0.009) continue;
+    const take = roundMoney(Math.min(open, left));
+    amounts[invoice.id] = take;
+    left = roundMoney(left - take);
+  }
+  return amounts;
+}
+
 export function applyPreview(preview: SettlementPreview): {
   invoiceAmounts: Record<string, number>;
   creditApplications: CreditNoteApplicationLine[];
