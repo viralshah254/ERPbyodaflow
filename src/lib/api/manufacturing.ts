@@ -728,6 +728,20 @@ export type WorkOrderPreparationPreview = {
   previewToken: string;
   prepared: Pick<ManufacturingWorkOrder, "materialLines" | "outputLines" | "bomSnapshot" | "routingSnapshot">;
 };
+export type InputStoreRecommendation = {
+  warehouseId: string;
+  code?: string;
+  name?: string;
+  linesNeeded: number;
+  linesCovered: number;
+  lines: Array<{ productId: string; productName?: string; requiredQty: number; uom?: string; onHandQty: number; covered: boolean }>;
+};
+
+export async function fetchInputStoreRecommendation(id: string): Promise<InputStoreRecommendation | null> {
+  const payload = await apiRequest<{ recommendation: InputStoreRecommendation | null }>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/input-store`);
+  return payload.recommendation;
+}
+
 export async function previewWorkOrderPreparation(id: string, stores: { inputWarehouseIds: string[]; outputWarehouseId: string }) {
   await requireManufacturingCapability("preparation", "work-order-preparation-v1");
   return apiRequest<WorkOrderPreparationPreview>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/prepare`, { method: "POST", body: stores });
