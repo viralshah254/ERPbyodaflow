@@ -54,6 +54,12 @@ function stepIndex(status: string): number {
   return i >= 0 ? i : 0;
 }
 
+function canChangeStores(order: { status: string; producedQuantity: number; materialLines: Array<{ issuedQuantity: number; returnedQuantity: number; consumedQuantity: number }> }): boolean {
+  if (order.status !== "RELEASED" && order.status !== "IN_PROGRESS") return false;
+  if (order.producedQuantity > 1e-9) return false;
+  return !order.materialLines.some((line) => line.issuedQuantity > 1e-9 || line.returnedQuantity > 1e-9 || line.consumedQuantity > 1e-9);
+}
+
 export default function WorkOrderDetailPage() {
   const params = useParams();
   const rawId = params.id as string;
@@ -167,7 +173,7 @@ export default function WorkOrderDetailPage() {
   const blockingShortages = actionShortages.length ? actionShortages : issueShortages;
   const currentStep = order ? stepIndex(order.status) : 0;
 
-  async function runAction(action: "release" | "start" | "complete" | "cancel") {
+  async function runAction(action: "release" | "start" | "complete" | "cancel" | "reopen") {
     if (!order) return;
     setActing(true);
     setActionShortages([]);
@@ -212,9 +218,12 @@ export default function WorkOrderDetailPage() {
             ? "Marked in progress."
             : action === "complete"
               ? (next.status === "COMPLETED" ? "Production completed. Finished goods received; check QC before dispatch." : "Partial production posted. Remaining quantities updated; check received goods in QC.")
-              : "Cancelled."
+              : action === "reopen"
+                ? "Back to draft. Change the output store, save, then release again."
+                : "Cancelled."
       );
       if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
+      if (action === "reopen") window.setTimeout(() => document.getElementById("prepare-batch")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
       const shortages = materialShortagesFromError(error);
@@ -438,6 +447,14 @@ export default function WorkOrderDetailPage() {
                         Start production
                       </Button>
                     )}
+                    {canChangeStores(order) && (
+                      <Button size="sm" variant="outline" disabled={acting} onClick={() => {
+                        if (!window.confirm("This returns the batch to draft and releases the reserved ingredients. You can then change the output store.")) return;
+                        void runAction("reopen");
+                      }}>
+                        Change stores
+                      </Button>
+                    )}
                     {order.status === "IN_PROGRESS" && (
                       <Button
                         size="sm"
@@ -449,7 +466,7 @@ export default function WorkOrderDetailPage() {
                     )}
                     {(order.status === "DRAFT" || order.status === "RELEASED") && (
                       <Button size="sm" variant="ghost" disabled={acting || order.producedQuantity > 0 || order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9)} onClick={() => {
-                        if (!window.confirm("Cancel closes this batch. It does not change the stores. To pick different stores, use Restart input and output stores.")) return;
+                        if (!window.confirm("Cancel closes this batch. To change the output store, use Change stores.")) return;
                         void runAction("cancel");
                       }}>
                         Cancel batch
