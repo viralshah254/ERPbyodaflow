@@ -1,4 +1,5 @@
 import { buildVisibleNav, NAV_SECTIONS_CONFIG } from "@/config/navigation";
+import { productionPlanIsOutputFirst } from "@/lib/manufacturing/production-language";
 import type { ResolvedNavSection } from "@/config/navigation";
 import type {
   FeatureFlagKey,
@@ -103,7 +104,7 @@ export function computeDashboardSidebarSections(params: ComputeDashboardSidebarS
     templateId: templateId ?? template?.id ?? null,
   });
 
-  if (params.productionRecording === "record_output") {
+  if (productionPlanIsOutputFirst(params.templateId, params.productionRecording)) {
     for (const section of sections) {
       section.items = section.items.map((item) => item.key === "manufacturing-production-plan" ? { ...item, label: "Record production" } : item);
     }

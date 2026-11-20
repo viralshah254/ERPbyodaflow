@@ -18,7 +18,7 @@ import { TablePagination } from "@/components/ui/table-pagination";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { manufacturingAreaLabel } from "@/lib/terminology";
-import { productionTerms, productionVoice } from "@/lib/manufacturing/production-language";
+import { productionPlanIsOutputFirst, productionTerms, productionVoice } from "@/lib/manufacturing/production-language";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -133,12 +133,13 @@ function plannedNameList(rowsById: Record<string, ProductionPlanRow>, qtyById: R
   return `${names.slice(0, 3).join(", ")} + ${names.length - 3} more`;
 }
 
-/** Settings → Sales document flow → Production recording decides which screen the floor uses. */
+/** Settings → Sales document flow → Production recording decides which screen the floor uses. A bakery always works backwards through each product’s recipe. */
 export default function ProductionPlanPage() {
   const orgId = useAuthStore((s) => s.org?.orgId);
+  const templateId = useOrgContextStore((s) => s.templateId);
   const profile = useOperatingProfile(orgId);
   if (!profile.ready) return null;
-  return profile.productionRecording === "record_output" ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
+  return productionPlanIsOutputFirst(templateId, profile.productionRecording) ? <ProductionOutputEntry key={orgId} /> : <PlannedProductionPage />;
 }
 
 function PlannedProductionPage() {

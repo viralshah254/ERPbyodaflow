@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { productKeepsOwnRecipe } from "./item-role";
 import { defaultPickerTypeFilter, matchesPickerTypeFilter, pickerListQuery } from "./picker-type-filter";
 
 describe("document product picker type filter", () => {
@@ -21,6 +22,10 @@ describe("document product picker type filter", () => {
     expect(matchesPickerTypeFilter({ itemRole: undefined, productType: undefined }, "FINISHED", true)).toBe(
       false
     );
+    expect(productKeepsOwnRecipe({ itemRole: "FINISHED", productType: "BOTH" })).toBe(true);
+    expect(productKeepsOwnRecipe({ itemRole: undefined, productType: "BOTH" })).toBe(true);
+    expect(productKeepsOwnRecipe({ itemRole: "SEMI", productType: "BOTH" })).toBe(true);
+    expect(productKeepsOwnRecipe({ itemRole: "RAW", productType: "RAW" })).toBe(false);
   });
 
   it("splits raw materials and packaging on a plant purchase list", () => {

@@ -99,7 +99,9 @@ import { useCanWriteCatalog } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isPlantCatalogueTemplate, isSeafoodOrg } from "@/config/industry";
-import { isItemRole, itemRoleLabel, type ItemRole } from "@/lib/products/item-role";
+import { isItemRole, itemRoleLabel, productKeepsOwnRecipe, type ItemRole } from "@/lib/products/item-role";
+import { ProductRecipesPanel } from "@/components/manufacturing/ProductRecipesPanel";
+import { productionTerms } from "@/lib/manufacturing/production-language";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { useErpSfaEnrollment } from "@/lib/integrations/use-erp-sfa-enrollment";
 import { SfaProductConnectionCard } from "@/components/integrations/SfaProductConnectSheet";
@@ -161,7 +163,9 @@ export default function ProductDetailPage() {
           ? "variants"
           : tabParam === "history"
             ? "history"
-            : "overview";
+            : tabParam === "recipes"
+              ? "recipes"
+              : "overview";
   const [activeTab, setActiveTab] = React.useState(initialTab);
   React.useEffect(() => {
     setActiveTab(initialTab);
@@ -177,6 +181,7 @@ export default function ProductDetailPage() {
   const fmcgOrg = isFmcgOrg(templateId) || industryCategory === "FMCG";
   const plantCatalogue = isPlantCatalogueTemplate(templateId);
   const catalogueLabel = plantCatalogue ? "Products" : t("product", terminology) + "s";
+  const canReadRecipes = permissions.includes("*") || permissions.includes("manufacturing.bom.read") || permissions.includes("manufacturing.read");
   const copilotEnabled = useCopilotFeatureEnabled();
   const openWithPrompt = useCopilotStore((s) => s.openDrawerWithPrompt);
 
@@ -921,6 +926,12 @@ export default function ProductDetailPage() {
               <Icons.Package className="mr-2 h-4 w-4" />
               {fmcgOrg ? "Alternate Units" : "Packaging / UOM"}
             </TabsTrigger>
+            {product && plantCatalogue && canReadRecipes && productKeepsOwnRecipe(product) ? (
+              <TabsTrigger value="recipes">
+                <Icons.GitBranch className="mr-2 h-4 w-4" />
+                {productionTerms(templateId).formulasTitle}
+              </TabsTrigger>
+            ) : null}
             {!fmcgOrg ? (
               <TabsTrigger value="variants">
                 <Icons.Layers className="mr-2 h-4 w-4" />
@@ -937,6 +948,16 @@ export default function ProductDetailPage() {
               History
             </TabsTrigger>
           </TabsList>
+
+          {product && plantCatalogue && canReadRecipes && productKeepsOwnRecipe(product) ? (
+            <TabsContent value="recipes">
+              <ProductRecipesPanel
+                productId={product.id}
+                productName={product.name}
+                canWrite={permissions.includes("*") || permissions.includes("manufacturing.write")}
+              />
+            </TabsContent>
+          ) : null}
 
           {/* ── Overview Tab ──────────────────────────────────────────────── */}
           <TabsContent value="overview" className="space-y-6">
