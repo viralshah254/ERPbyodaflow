@@ -378,7 +378,9 @@ export async function fetchArCustomersApi(search?: string): Promise<Array<{ id: 
 export async function searchReceiptCustomerOptionsApi(search?: string): Promise<PartyLookupOption[]> {
   requireLiveApi("AR customer lookup");
   const params = new URLSearchParams();
-  if (search?.trim()) params.set("search", search.trim());
+  const trimmed = search?.trim() ?? "";
+  if (trimmed) params.set("search", trimmed);
+  else params.set("owing", "1");
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ar/customers", { params });
   const rows = payload.items.map((item) => {
     const balance = item.outstandingBalance ?? 0;

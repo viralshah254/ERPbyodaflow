@@ -97,6 +97,8 @@ export function ArSettlementSheet({
   const [creditApplications, setCreditApplications] = React.useState<CreditNoteApplicationLine[]>([]);
   const [preview, setPreview] = React.useState<SettlementPreview | null>(null);
   const [dirty, setDirty] = React.useState(false);
+  const requestKey = React.useRef("");
+  const requestFingerprint = React.useRef("");
   const [loadingItems, setLoadingItems] = React.useState(false);
   const [posting, setPosting] = React.useState(false);
 
@@ -245,9 +247,16 @@ export function ArSettlementSheet({
       toast.error(problem || "Check the receipt before posting.");
       return;
     }
+    const mark = [customerId, amount, date, method, bankAccountId, chequeNumber, chequeDate, mpesaTransactionNo, reference].join("|");
+    if (requestFingerprint.current !== mark || !requestKey.current) {
+      requestFingerprint.current = mark;
+      requestKey.current = crypto.randomUUID();
+    }
+    const clientRequestId = requestKey.current;
     setPosting(true);
     try {
       const payment = await createArPaymentApi({
+        clientRequestId,
         customerId,
         amount: parsedAmount,
         date,
@@ -269,6 +278,8 @@ export function ArSettlementSheet({
           })),
       });
       toast.success(`Receipt ${payment.number} posted.`);
+      requestKey.current = "";
+      requestFingerprint.current = "";
       onOpenChange(false);
       onPosted();
     } catch (error) {
