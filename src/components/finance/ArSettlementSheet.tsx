@@ -195,15 +195,16 @@ export function ArSettlementSheet({
   const parsedAmount = parseReceiptMoney(amount);
   const cashApplied = sumAmounts(Object.values(invoiceAmounts));
   const creditsApplied = sumAmounts(creditApplications.map((line) => line.amount));
-  const unapplied = Number.isFinite(parsedAmount) ? roundMoney(parsedAmount - cashApplied) : 0;
   const recordedBalance = (customer as { outstandingBalance?: number } | null)?.outstandingBalance;
   const accountOwing =
     typeof recordedBalance === "number"
       ? recordedBalance
       : sumAmounts(invoices.map((invoice) => invoice.outstanding));
-  const receiptTowardBalance =
-    Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : cashApplied > 0 ? cashApplied : 0;
-  const stillOwing = roundMoney(Math.max(0, accountOwing - receiptTowardBalance));
+  const receipt = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+  const appliedToBalance = roundMoney(Math.min(receipt, Math.max(accountOwing, 0)));
+  const unapplied = roundMoney(Math.max(0, receipt - Math.max(accountOwing, 0)));
+  const paysLaterInvoices = roundMoney(Math.max(0, appliedToBalance - cashApplied));
+  const stillOwing = roundMoney(Math.max(0, accountOwing - receipt));
   const problem =
     !customerId
       ? "Select a customer."
@@ -386,15 +387,19 @@ export function ArSettlementSheet({
 
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span>Credits {formatMoney(creditsApplied, "KES")}</span>
-            <span>Cash {formatMoney(cashApplied, "KES")}</span>
-            <span>
-              Unapplied {formatMoney(Math.max(unapplied, 0), "KES")}
-              {unapplied > 0.009 ? " — stays on the customer and pays the next sale" : ""}
-            </span>
+            <span>Cash {formatMoney(cashApplied, "KES")} on these invoices</span>
+            {paysLaterInvoices > 0.009 ? (
+              <span>{formatMoney(paysLaterInvoices, "KES")} pays the next open invoices</span>
+            ) : null}
+            {unapplied > 0.009 ? (
+              <span>
+                Unapplied {formatMoney(unapplied, "KES")} — the balance is cleared, this stays on the customer
+              </span>
+            ) : null}
             {customerId ? (
               <span className="font-medium">
                 Still owing {formatMoney(stillOwing, "KES")}
-                {receiptTowardBalance > 0 ? " after this receipt" : ""}
+                {receipt > 0 ? " after this receipt" : ""}
               </span>
             ) : null}
             {loadingItems ? <span className="text-muted-foreground">Loading open items…</span> : null}
@@ -477,8 +482,11 @@ export function ArSettlementSheet({
 
           {invoices.length > 0 && Number.isFinite(parsedAmount) && parsedAmount > 0 ? (
             <p className="text-xs text-muted-foreground">
-              {formatMoney(cashApplied, "KES")} is shared across these open invoices until the money ends.
-              {unapplied > 0.009 ? ` ${formatMoney(Math.max(unapplied, 0), "KES")} stays on the customer.` : ""}
+              {formatMoney(cashApplied, "KES")} is on these invoices.
+              {paysLaterInvoices > 0.009
+                ? ` ${formatMoney(paysLaterInvoices, "KES")} pays the next open invoices.`
+                : ""}
+              {unapplied > 0.009 ? ` ${formatMoney(unapplied, "KES")} is left after the balance is cleared.` : ""}
             </p>
           ) : null}
 
