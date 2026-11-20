@@ -21,6 +21,8 @@ import {
   type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
 import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
+import { MaterialShortageNotice } from "@/components/manufacturing/material-shortage-notice";
+import { materialShortagesFromError, readableProductName, type MaterialShortageRow } from "@/lib/manufacturing/material-shortage";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
 import { productionTerms } from "@/lib/manufacturing/production-language";
 import { storeDisplayName } from "@/lib/warehouse/store-label";
@@ -90,6 +92,7 @@ export default function WorkOrderDetailPage() {
   }, [availLines]);
   const [availLoading, setAvailLoading] = React.useState(false);
   const [availError, setAvailError] = React.useState<string | null>(null);
+  const [actionShortages, setActionShortages] = React.useState<MaterialShortageRow[]>([]);
   const [completionQuantity, setCompletionQuantity] = React.useState("");
   const [measuredWeight, setMeasuredWeight] = React.useState("");
   const [deviceReadingId, setDeviceReadingId] = React.useState("");
@@ -149,11 +152,25 @@ export default function WorkOrderDetailPage() {
 
   const shortfalls = availLines.filter((line) => line.shortfall > 0);
   const issueShortages = order ? completionIssueShortages(order, actualInputs, availLines) : [];
+  const recipeShortages: MaterialShortageRow[] = shortfalls.map((line) => ({
+    productId: line.productId,
+    productName: line.productName,
+    productSku: line.productSku,
+    barcode: line.barcode,
+    warehouseId: line.warehouseId,
+    warehouseName: line.warehouseName,
+    needed: line.requiredQty,
+    onHand: line.onHandQty,
+    short: line.shortfall,
+    uom: line.uom,
+  }));
+  const blockingShortages = actionShortages.length ? actionShortages : issueShortages;
   const currentStep = order ? stepIndex(order.status) : 0;
 
   async function runAction(action: "release" | "start" | "complete" | "cancel") {
     if (!order) return;
     setActing(true);
+    setActionShortages([]);
     const fingerprint = JSON.stringify({ completionQuantity, actualInputs, measuredWeight, deviceReadingId, varianceReason });
     if (completionRetry.current?.fingerprint !== fingerprint) completionRetry.current = { fingerprint, key: crypto.randomUUID() };
     try {
@@ -200,11 +217,17 @@ export default function WorkOrderDetailPage() {
       if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
-      const posting = postingAccountNotice(error);
-      if (posting) {
-        toast.error(posting.message, { action: { label: "Open posting accounts", onClick: () => { window.location.href = posting.href; } }, duration: 12000 });
+      const shortages = materialShortagesFromError(error);
+      if (shortages?.length) {
+        setActionShortages(shortages);
+        toast.error("Not enough stock in the store on this batch.");
       } else {
-        toastStockMoveError(error, [...(order?.materialLines ?? []), ...(order?.outputLines ?? [])], "Action failed.");
+        const posting = postingAccountNotice(error);
+        if (posting) {
+          toast.error(posting.message, { action: { label: "Open posting accounts", onClick: () => { window.location.href = posting.href; } }, duration: 12000 });
+        } else {
+          toastStockMoveError(error, [...(order?.materialLines ?? []), ...(order?.outputLines ?? [])], "Action failed.");
+        }
       }
     } finally {
       setActing(false);
@@ -363,7 +386,7 @@ export default function WorkOrderDetailPage() {
                                 {order.materialLines.map((line) => (
                                   <tr key={line.lineId} className="border-b last:border-0">
                                     <td className="py-2 pr-2">
-                                      <span className="block font-medium">{line.productName ?? line.productId}</span>
+                                      <span className="block font-medium">{readableProductName(line.productName || line.sku)}</span>
                                       {line.barcode?.trim() ? (
                                         <span className="block font-mono text-[11px] text-muted-foreground">
                                           {line.barcode.trim()}
@@ -395,6 +418,10 @@ export default function WorkOrderDetailPage() {
                       </div>
                     )}
                     {canApprove && ["RELEASED", "IN_PROGRESS"].includes(order.status) && <label className="block text-sm">Supervisor yield-variance approval reason (tolerance {order.bomSnapshot?.yieldTolerancePercent ?? 0}%)<Input value={varianceReason} onChange={(event) => setVarianceReason(event.target.value)} /></label>}
+                    <MaterialShortageNotice
+                      title={actionShortages.length ? "Receiving needs these ingredients in the store first." : "These ingredients are short for this receive."}
+                      items={blockingShortages}
+                    />
                     <div className="flex flex-wrap gap-2">
                     {order.status === "DRAFT" && (
                       <Button size="sm" disabled={acting || !order.materialLines.length || !order.outputLines.length || Boolean(availError) || availLoading || shortfalls.length > 0} onClick={() => void runAction("release")}>
@@ -457,13 +484,12 @@ export default function WorkOrderDetailPage() {
                     <p className="text-sm text-muted-foreground">No BOM components to issue.</p>
                   ) : (
                     <>
-                      {shortfalls.length > 0 ? (
-                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-                          <p>
-                            {order.status === "DRAFT"
-                              ? `Short on ${shortfalls.length} component${shortfalls.length === 1 ? "" : "s"} in the stores on this batch. Restart the input and output stores and pick stores that hold the ingredients. The batch stays open.`
-                              : `Short on ${shortfalls.length} component${shortfalls.length === 1 ? "" : "s"}. Complete or receive those items first. A partial completion is available when the requested issue quantities are covered.`}
-                          </p>
+                      {recipeShortages.length > 0 ? (
+                        <div className="mb-3 space-y-3">
+                          <MaterialShortageNotice
+                            title="These ingredients are low in the store on this batch."
+                            items={recipeShortages}
+                          />
                           {order.status === "DRAFT" && canWrite ? (
                             <Button size="sm" variant="outline" disabled={acting} onClick={restartStores}>Restart input and output stores</Button>
                           ) : null}

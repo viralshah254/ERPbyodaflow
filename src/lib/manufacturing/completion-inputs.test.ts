@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ManufacturingWorkOrder } from "@/lib/api/manufacturing";
-import { completionInputDefaults } from "./completion-inputs";
+import { completionInputDefaults, completionIssueShortages } from "./completion-inputs";
 const order = { quantity: 100, materialLines: [{ lineId: "flour", plannedQuantity: 50, issuedQuantity: 0, returnedQuantity: 0, consumedQuantity: 0 }] } as ManufacturingWorkOrder;
 describe("partial production actual suggestions", () => {
   it("scales consumption to this posting", () => {
@@ -13,6 +13,15 @@ describe("partial production actual suggestions", () => {
   it("uses existing floor stock before suggesting another issue", () => {
     const next = { ...order, materialLines: [{ ...order.materialLines[0], issuedQuantity: 20, consumedQuantity: 10 }] };
     expect(completionInputDefaults(next, 20).flour).toEqual({ issue: "0", consume: "10", returnQty: "0" });
+  });
+  it("names a short ingredient instead of joining ids", () => {
+    const batch = {
+      ...order,
+      materialLines: [{ ...order.materialLines[0], lineId: "flour", productId: "org-sfa-x:prd:FLOUR", productName: "Flour", warehouseId: "org-sfa-x:wh:PRD", warehouseName: "PRD — PRODUCTION WARE HOUSE", uom: "KG" }],
+    };
+    expect(completionIssueShortages(batch, { flour: { issue: "10" } }, [{ productId: "org-sfa-x:prd:FLOUR", warehouseId: "org-sfa-x:wh:PRD", onHandQty: 2 }])).toEqual([
+      expect.objectContaining({ productName: "Flour", warehouseName: "PRD — PRODUCTION WARE HOUSE", short: 8, uom: "KG" }),
+    ]);
   });
   it.each([NaN, -1, 0])("does not suggest consumption for invalid quantity %s", (quantity) => {
     expect(completionInputDefaults(order, quantity).flour.consume).toBe("0");
