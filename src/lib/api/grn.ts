@@ -158,7 +158,7 @@ export function openingCostsHref(products?: OpeningCostGap[] | null): string {
 const OPENING_COST_FALLBACK = "A product on this receipt already has stock, but no opening cost. Enter the opening cost, then post this receipt.";
 
 export function isOpeningCostPostError(error: { code?: string; message?: string }): boolean {
-  return error.code === "OPENING_COST_REQUIRED" || /no opening cost|company-average opening value/i.test(error.message ?? "");
+  return error.code === "OPENING_COST_REQUIRED" || /no opening cost|company-average opening value|company-average valuation is not reconciled/i.test(error.message ?? "");
 }
 
 export function openingCostPostMessage(error: { code?: string; message?: string; products?: OpeningCostGap[] }): string {

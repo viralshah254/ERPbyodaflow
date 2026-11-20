@@ -22,10 +22,26 @@ export type WarehouseUpsertInput = {
   status?: string;
 };
 
-export async function fetchWarehousesApi(): Promise<BackendWarehouse[]> {
+export async function fetchWarehousesApi(opts?: { limit?: number; offset?: number }): Promise<BackendWarehouse[]> {
   requireLiveApi("Warehouses");
-  const payload = await apiRequest<{ items: BackendWarehouse[] }>("/api/master/warehouses");
+  const params = new URLSearchParams();
+  if (opts?.limit) params.set("limit", String(opts.limit));
+  if (opts?.offset) params.set("offset", String(opts.offset));
+  const query = params.toString();
+  const payload = await apiRequest<{ items: BackendWarehouse[] }>(`/api/master/warehouses${query ? `?${query}` : ""}`);
   return payload.items ?? [];
+}
+
+/** The warehouse list defaults to 50 rows. Preparation must see the store that holds the ingredients. */
+export async function fetchAllWarehousesApi(): Promise<BackendWarehouse[]> {
+  const pageSize = 100;
+  const rows: BackendWarehouse[] = [];
+  for (let offset = 0; offset < 1000; offset += pageSize) {
+    const page = await fetchWarehousesApi({ limit: pageSize, offset });
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
 }
 
 /** Fetch all warehouse codes in the org. Used by New Warehouse form to suggest the next sequential code. */
