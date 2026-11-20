@@ -2,7 +2,7 @@ import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ preview: vi.fn(), save: vi.fn(), stores: vi.fn(), saved: vi.fn(), recommend: vi.fn() }));
-vi.mock("@/lib/api/warehouses", () => ({ fetchWarehousesApi: mocks.stores }));
+vi.mock("@/lib/api/warehouses", () => ({ fetchWarehousesApi: mocks.stores, fetchAllWarehousesApi: mocks.stores }));
 vi.mock("@/lib/api/manufacturing", () => ({ previewWorkOrderPreparation: mocks.preview, saveWorkOrderPreparation: mocks.save, fetchInputStoreRecommendation: mocks.recommend }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 import { WorkOrderPreparation } from "./work-order-preparation";
@@ -22,7 +22,9 @@ describe("operator preparation review", () => {
     expect(screen.queryByText("Save reviewed preparation")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview preparation" })).toBeDisabled();
     fireEvent.click(await screen.findByRole("checkbox", { name: "Raw store" }));
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "fg" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Find an output store" }), { target: { value: "Finished" } });
+    expect(screen.queryByRole("radio", { name: "Raw store" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Finished store" }));
     expect(screen.queryByText("Inactive store")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Preview preparation" }));
     await screen.findByText("Flour");
@@ -33,18 +35,19 @@ describe("operator preparation review", () => {
   it("selects the store that already holds the ingredients", async () => {
     mocks.recommend.mockResolvedValue({ warehouseId: "rm", code: "PRD", name: "Production warehouse", linesNeeded: 2, linesCovered: 2, lines: [{ productId: "flour", productName: "Flour", requiredQty: 1, covered: true, onHandQty: 4 }] });
     render(<WorkOrderPreparation order={{ ...order, materialLines: [{ warehouseId: "old" }] } as ManufacturingWorkOrder} onSaved={mocks.saved} />);
-    expect(await screen.findByText("Use PRD Production warehouse")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Use this store" }));
-    expect(screen.getByRole("checkbox", { name: "Raw store Recommended" })).toBeChecked();
+    const marker = await screen.findByRole("button", { name: "Recommended" });
+    expect(marker).toHaveAttribute("title", expect.stringContaining("Flour"));
+    fireEvent.click(marker);
+    expect(screen.getByRole("checkbox", { name: "Raw store" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Finished store" })).not.toBeChecked();
   });
   it("invalidates a reviewed snapshot after changing stores", async () => {
     render(<WorkOrderPreparation order={order} onSaved={mocks.saved} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Raw store" }));
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "fg" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Finished store" }));
     fireEvent.click(screen.getByRole("button", { name: "Preview preparation" }));
     await screen.findByText("Save reviewed preparation");
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "rm" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Raw store" }));
     expect(screen.queryByText("Save reviewed preparation")).not.toBeInTheDocument();
     expect(mocks.save).not.toHaveBeenCalled();
   });
