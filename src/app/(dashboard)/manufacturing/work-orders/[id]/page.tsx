@@ -30,6 +30,8 @@ import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { toastStockMoveError } from "@/lib/inventory/opening-cost-notice";
+import { postingAccountNotice } from "@/lib/inventory/posting-account-notice";
+import { openingCostsHref } from "@/lib/api/grn";
 import { printProductionSheet } from "@/lib/manufacturing/production-sheet";
 import { DeviceReadingPicker } from "@/components/manufacturing/device-reading-picker";
 import { WorkOrderFloor } from "@/components/manufacturing/work-order-floor";
@@ -198,7 +200,12 @@ export default function WorkOrderDetailPage() {
       if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
-      toastStockMoveError(error, [...(order?.materialLines ?? []), ...(order?.outputLines ?? [])], "Action failed.");
+      const posting = postingAccountNotice(error);
+      if (posting) {
+        toast.error(posting.message, { action: { label: "Open posting accounts", onClick: () => { window.location.href = posting.href; } }, duration: 12000 });
+      } else {
+        toastStockMoveError(error, [...(order?.materialLines ?? []), ...(order?.outputLines ?? [])], "Action failed.");
+      }
     } finally {
       setActing(false);
     }
@@ -257,6 +264,16 @@ export default function WorkOrderDetailPage() {
           <p className="text-sm text-muted-foreground">This work order does not exist or you cannot open it.</p>
         ) : (
           <>
+            {order.status !== "COMPLETED" && order.status !== "CANCELLED" && (order.postingGaps?.length || order.openingCosts?.length) ? (
+              <div className="space-y-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-3 text-sm">
+                {order.postingGaps?.length ? (
+                  <p>{order.postingGaps.map((gap) => gap.label).join(" and ")} {order.postingGaps.length === 1 ? "is" : "are"} not set, so this batch cannot be received yet. <Link href="/settings/financial/posting-mappings" className="font-medium underline">Open posting accounts</Link></p>
+                ) : null}
+                {order.openingCosts?.length ? (
+                  <p>{order.openingCosts.map((product) => product.name && product.code ? `${product.name} (${product.code})` : product.name || product.code).join(", ")} already {order.openingCosts.length === 1 ? "has" : "have"} stock, but no opening cost. <Link href={openingCostsHref(order.openingCosts)} className="font-medium underline">Enter opening cost</Link></p>
+                ) : null}
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives finished goods into the selected output store under QC hold. QC acceptance makes the lot available for allocation. Do not add the output again with a stock adjustment.</p></div>{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div>
             {canWrite && order.status === "DRAFT" && <div id="prepare-batch"><WorkOrderPreparation order={order} restartToken={restartToken} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} /></div>}
             {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
@@ -397,7 +414,7 @@ export default function WorkOrderDetailPage() {
                     {order.status === "IN_PROGRESS" && (
                       <Button
                         size="sm"
-                        disabled={acting || order.operationExecution?.some((step) => step.critical && (step.status !== "COMPLETED" || (step.qcRequired && step.qcOutcome !== "ACCEPTED"))) || issueShortages.length > 0 || availLoading || Boolean(availError) || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
+                        disabled={acting || Boolean(order.postingGaps?.length) || Boolean(order.openingCosts?.length) || order.operationExecution?.some((step) => step.critical && (step.status !== "COMPLETED" || (step.qcRequired && step.qcOutcome !== "ACCEPTED"))) || issueShortages.length > 0 || availLoading || Boolean(availError) || !(Number(completionQuantity) > 0) || Number(completionQuantity) > order.openQuantity || (order.weighingRequired && order.measurementMode !== "COUNT_ONLY" && !(Number(measuredWeight) > 0)) || ((order.measurementMode === "DEVICE_SCALE" || order.measurementMode === "WEIGHBRIDGE") && !deviceReadingId.trim())}
                         onClick={() => void runAction("complete")}
                       >
                         Receive actual output · QC hold

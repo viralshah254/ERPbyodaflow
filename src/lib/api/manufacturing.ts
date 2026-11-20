@@ -83,6 +83,8 @@ export type ManufacturingWorkOrder = {
   scrapQuantity: number;
   openQuantity: number;
   status: string;
+  postingGaps?: Array<{ key: string; label: string }>;
+  openingCosts?: Array<{ productId: string; code: string; name: string }>;
   updatedAt?: string;
   preparationStatus?: "READY" | "REQUIRED";
   preparationRevision?: number;
