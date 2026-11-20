@@ -3,6 +3,7 @@ import { Table as InteractiveTable } from "@/components/ui/table";
 
 import * as React from "react";
 import { toast } from "sonner";
+import { toastStockMoveError } from "@/lib/inventory/opening-cost-notice";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -22,7 +23,7 @@ export function WorkOrderFloor({ order, onSaved, storeNames }: { order: Manufact
     if (retry.current?.fingerprint !== fingerprint) retry.current = { fingerprint, key: crypto.randomUUID() };
     setBusy(true);
     try { onSaved(await postWorkOrderMaterials(order.id, { action, lines, reason, idempotencyKey: retry.current.key })); setQuantities({}); retry.current = undefined; toast.success(action === "issue" ? "Materials issued to floor" : "Original WIP returned; remaining stock reservations released"); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "Material posting failed"); } finally { setBusy(false); }
+    catch (error) { toastStockMoveError(error, order.materialLines, "Material posting failed"); } finally { setBusy(false); }
   }
   async function operation(operationId: string, status: "IN_PROGRESS" | "COMPLETED", qcRequired: boolean) {
     setBusy(true);

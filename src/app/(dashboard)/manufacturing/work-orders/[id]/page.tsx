@@ -29,6 +29,7 @@ import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { toastStockMoveError } from "@/lib/inventory/opening-cost-notice";
 import { printProductionSheet } from "@/lib/manufacturing/production-sheet";
 import { DeviceReadingPicker } from "@/components/manufacturing/device-reading-picker";
 import { WorkOrderFloor } from "@/components/manufacturing/work-order-floor";
@@ -197,7 +198,7 @@ export default function WorkOrderDetailPage() {
       if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Action failed.");
+      toastStockMoveError(error, [...(order?.materialLines ?? []), ...(order?.outputLines ?? [])], "Action failed.");
     } finally {
       setActing(false);
     }
