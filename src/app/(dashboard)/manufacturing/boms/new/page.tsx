@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -21,7 +21,7 @@ import {
   type AsyncSearchableSelectOption,
 } from "@/components/ui/async-searchable-select";
 import { createManufacturingBom, fetchNextManufacturingBomCode } from "@/lib/api/manufacturing";
-import { fetchProductsPageApi } from "@/lib/api/products";
+import { fetchProductApi, fetchProductsPageApi } from "@/lib/api/products";
 import { productSearchLabel } from "@/lib/products/product-search";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { fetchUomsApi } from "@/lib/api/uom";
@@ -29,7 +29,7 @@ import { fetchWarehousesApi, type BackendWarehouse } from "@/lib/api/warehouses"
 import { setUomsCache, listUoms } from "@/lib/data/uom.repo";
 import type { BomType } from "@/lib/manufacturing/types";
 import { manufacturingAreaLabel } from "@/lib/terminology";
-import { productionTerms } from "@/lib/manufacturing/production-language";
+import { productionTerms, productionVoice } from "@/lib/manufacturing/production-language";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { useCanWriteManufacturing, useSessionReady } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
@@ -46,6 +46,7 @@ function pickKgUomCode(codes: string[]): string | undefined {
 
 export default function NewBomPage() {
   const router = useRouter();
+  const presetProductId = useSearchParams().get("productId")?.trim() ?? "";
   const canWrite = useCanWriteManufacturing();
   const sessionReady = useSessionReady();
   const terminology = useTerminology();
@@ -53,6 +54,7 @@ export default function NewBomPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const terms = productionTerms(templateId);
   const isCoolCatchTemplate = templateId === "cool-catch";
+  const bakery = productionVoice(templateId) === "bakery";
 
   const [uomCodes, setUomCodes] = React.useState<string[]>([]);
   const [hydrating, setHydrating] = React.useState(true);
@@ -110,9 +112,31 @@ export default function NewBomPage() {
       const kg = pickKgUomCode(uomCodes);
       if (kg) setUom(kg);
       setType("disassembly");
+    } else if (bakery) {
+      setType("formula");
     }
     defaultsApplied.current = true;
-  }, [hydrating, uomCodes, isCoolCatchTemplate]);
+  }, [hydrating, uomCodes, isCoolCatchTemplate, bakery]);
+
+  React.useEffect(() => {
+    if (!presetProductId) return;
+    let cancelled = false;
+    void fetchProductApi(presetProductId).then((product) => {
+      if (cancelled || !product) return;
+      setFinishedProductId(product.id);
+      setFinishedProductOption({
+        id: product.id,
+        label: productSearchLabel(product),
+        labelClassName: CAPS_ON_PRODUCT_CLASS,
+        description: [product.size?.trim(), product.barcode?.trim()].filter(Boolean).join(" · ") || undefined,
+      });
+      setName((current) => current.trim() || product.name);
+      if (product.unit) setUom(product.unit);
+    }).catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [presetProductId]);
 
   const loadFinishedProducts = React.useCallback(async (query: string) => {
     const page = await fetchProductsPageApi({

@@ -203,6 +203,7 @@ export type FetchManufacturingBomsOpts = {
   direction?: string;
   type?: string;
   status?: "" | "active" | "inactive";
+  productId?: string;
   activeOnly?: boolean;
   includeItems?: boolean;
 };
@@ -228,6 +229,7 @@ export async function fetchManufacturingBomsPage(
   if (opts?.type) params.set("type", opts.type);
   if (opts?.status === "active") params.set("status", "active");
   if (opts?.status === "inactive") params.set("status", "inactive");
+  if (opts?.productId) params.set("productId", opts.productId);
   if (opts?.activeOnly) params.set("activeOnly", "true");
   if (opts?.includeItems) params.set("includeItems", "true");
 

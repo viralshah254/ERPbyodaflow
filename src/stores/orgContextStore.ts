@@ -3,6 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
+  canonicalIndustryTemplateId,
   resolveIndustryCategoryFromTemplateId,
   type IndustryCategory,
 } from "@/config/industry";
@@ -138,8 +139,9 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
 
       hydrateFromBackend(payload) {
         const normalizedOrgType = normalizeOrgType(payload.orgType);
+        const requestedTemplateId = payload.templateId ? canonicalIndustryTemplateId(payload.templateId) : null;
         const template =
-          (payload.templateId ? getTemplateById(payload.templateId) : null) ??
+          (requestedTemplateId ? getTemplateById(requestedTemplateId) : null) ??
           (normalizedOrgType
             ? getTemplateById(
                 normalizedOrgType === "MANUFACTURER"
@@ -152,7 +154,7 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
         if (!template) {
           set({
             orgType: normalizedOrgType,
-            templateId: payload.templateId ?? null,
+            templateId: requestedTemplateId,
             industryCategory: payload.industryCategory ?? null,
             enabledModules: (payload.enabledModules ?? []) as ModuleKey[],
             featureFlags: (payload.featureFlags ?? {}) as Partial<Record<FeatureFlagKey, boolean>>,
@@ -172,7 +174,7 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
         set({
           ...hydrateFromTemplate(template),
           orgType: normalizedOrgType ?? template.orgType,
-          templateId: payload.templateId ?? template.id,
+          templateId: requestedTemplateId ?? template.id,
           industryCategory:
             payload.industryCategory ??
             resolveIndustryCategoryFromTemplateId(payload.templateId ?? template.id),
@@ -236,8 +238,9 @@ export const useOrgContextStore = create<OrgContextState & OrgContextActions>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.templateId && !state.template) {
-          const t = getTemplateById(state.templateId!);
-          if (t) useOrgContextStore.setState({ template: t });
+          const templateId = canonicalIndustryTemplateId(state.templateId);
+          const t = getTemplateById(templateId);
+          if (t) useOrgContextStore.setState({ templateId, template: t });
         }
       },
     }

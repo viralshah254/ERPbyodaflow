@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayMrpReason, productionTerms, productionVoice, setupTaskPresentation } from "./production-language";
+import { displayMrpReason, productionPlanIsOutputFirst, productionTerms, productionVoice, setupTaskPresentation } from "./production-language";
 
 describe("production language", () => {
   it("keeps a spice plant on blend formulas and a bakery on recipes", () => {
@@ -26,5 +26,12 @@ describe("production language", () => {
     expect(plant.action).toBe("Review blend formulas");
     const bakery = setupTaskPresentation("recipes", "Reviewed production recipes", "1 effective reviewed recipes.", "Review recipes", "fmcg-bakery");
     expect(bakery.title).toBe("Reviewed production recipes");
+  });
+
+  it("keeps a bakery on work backwards even when output recording is saved", () => {
+    expect(productionPlanIsOutputFirst("fmcg-bakery", "record_output")).toBe(false);
+    expect(productionPlanIsOutputFirst("bakex", "record_output")).toBe(false);
+    expect(productionPlanIsOutputFirst("fmcg-manufacturer", "record_output")).toBe(true);
+    expect(productionPlanIsOutputFirst("fmcg-manufacturer", "planned")).toBe(false);
   });
 });

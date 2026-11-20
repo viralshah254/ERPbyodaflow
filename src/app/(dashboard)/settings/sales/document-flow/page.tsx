@@ -21,6 +21,7 @@ import {
 import { toast } from "sonner";
 import { fetchWarehouseOptions } from "@/lib/api/lookups";
 import { forgetCachedOperatingProfile } from "@/lib/fmcg/operating-profile";
+import { productionVoice } from "@/lib/manufacturing/production-language";
 
 const CLASSIC_STEPS = [
   "Sales order",
@@ -206,6 +207,7 @@ export default function SalesDocumentFlowPage() {
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcg = industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
+  const bakery = productionVoice(templateId) === "bakery";
   const [stores, setStores] = React.useState<Array<{ id: string; label: string }>>([]);
   const [settings, setSettings] = React.useState<SalesDocumentFlowSettings>(DEFAULTS);
   const [loading, setLoading] = React.useState(true);
@@ -253,7 +255,7 @@ export default function SalesDocumentFlowPage() {
   const save = async () => {
     setSaving(true);
     try {
-      const updated = await updateSalesDocumentFlowApi(settings);
+      const updated = await updateSalesDocumentFlowApi(bakery ? { ...settings, productionRecording: "planned" } : settings);
       setSettings({ ...DEFAULTS, ...updated });
       forgetCachedOperatingProfile();
       toast.success("Sales document flow saved.");
@@ -383,14 +385,23 @@ export default function SalesDocumentFlowPage() {
                   </select>
                 </div>
               ) : null}
-              <ChoiceRow
-                label="Production recording"
-                hint="Planned production runs plan → work order → issue → complete. Record output starts from what was produced and posts the frozen recipe."
-                value={settings.productionRecording ?? "planned"}
-                disabled={loading}
-                options={[["planned", "Planned production"], ["record_output", "Record output"]]}
-                onChange={(value) => setSettings((prev) => ({ ...prev, productionRecording: value as "planned" | "record_output" }))}
-              />
+              {bakery ? (
+                <div className="space-y-1">
+                  <Label>Production recording</Label>
+                  <p className="text-sm text-muted-foreground">
+                    A bakery works backwards from each product’s own recipe. Daily plan lists those recipes, then the batches that consume them. Record output does not replace that plan.
+                  </p>
+                </div>
+              ) : (
+                <ChoiceRow
+                  label="Production recording"
+                  hint="Planned production runs plan → work order → issue → complete. Record output starts from what was produced and posts the frozen recipe."
+                  value={settings.productionRecording ?? "planned"}
+                  disabled={loading}
+                  options={[["planned", "Planned production"], ["record_output", "Record output"]]}
+                  onChange={(value) => setSettings((prev) => ({ ...prev, productionRecording: value as "planned" | "record_output" }))}
+                />
+              )}
               <ChoiceRow
                 label="Finished-goods sales unit"
                 hint="Use each product's own pack setup, or read the pack size from the product name (e.g. 'ROLLS 6 PCS' sells as a pack)."

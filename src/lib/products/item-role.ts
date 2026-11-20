@@ -2,6 +2,13 @@ export const ITEM_ROLES = ["FINISHED", "RAW", "PACKAGING", "SEMI"] as const;
 
 export type ItemRole = (typeof ITEM_ROLES)[number];
 
+/** Finished goods and semi-finished goods keep their own recipe. Bought items do not. */
+export function productKeepsOwnRecipe(product: { itemRole?: string | null; productType?: string | null }): boolean {
+  if (product.itemRole === "FINISHED" || product.itemRole === "SEMI") return true;
+  if (product.itemRole === "RAW" || product.itemRole === "PACKAGING") return false;
+  return product.productType === "FINISHED" || product.productType === "BOTH";
+}
+
 export function isItemRole(value: string | null | undefined): value is ItemRole {
   return value === "FINISHED" || value === "RAW" || value === "PACKAGING" || value === "SEMI";
 }

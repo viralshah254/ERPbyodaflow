@@ -78,6 +78,15 @@ const BAKERY: ProductionTerms = {
   buyWithoutFormula: "Usable stock is short, and this item has no recipe, so the plan would buy it. Add a recipe if the bakery makes it.",
 };
 
+/** Bakeries always plan from finished output back through each product’s recipe. */
+export function productionPlanIsOutputFirst(
+  templateId?: string | null,
+  recording?: "planned" | "record_output" | null,
+): boolean {
+  if (productionVoice(templateId) === "bakery") return false;
+  return recording === "record_output";
+}
+
 export function productionTerms(templateId?: string | null): ProductionTerms {
   const voice = productionVoice(templateId);
   if (voice === "plant") return PLANT;
