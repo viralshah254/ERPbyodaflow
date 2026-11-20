@@ -46,6 +46,7 @@ import {
 import { fetchGRNs } from "@/lib/api/grn";
 import { fetchAllWarehousesApi } from "@/lib/api/warehouses";
 import { recommendInputStoreForFormula } from "@/lib/manufacturing/recommend-input-store";
+import { compareStoresForBatch, recommendOutputStore } from "@/lib/manufacturing/store-list-order";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -90,7 +91,7 @@ export default function WorkOrdersPage() {
   const [productId, setProductId] = React.useState("");
   const [selectedProductOption, setSelectedProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
   const [routingId, setRoutingId] = React.useState("");
-  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
+  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string; purpose?: string | null }>>([]);
   const [inputWarehouseIds, setInputWarehouseIds] = React.useState<string[]>([]);
   const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
   const [inputQuery, setInputQuery] = React.useState("");
@@ -403,12 +404,16 @@ export default function WorkOrdersPage() {
   const recommendationReason = storeRecommendation
     ? `Input store. Has ${storeRecommendation.linesCovered} of ${storeRecommendation.linesNeeded} ingredients this batch needs: ${storeRecommendation.lines.filter((line) => line.covered).map((line) => line.productName || "ingredient").join(", ") || "part of the ingredients"}.${storeRecommendation.lines.some((line) => !line.covered) ? ` Still short: ${storeRecommendation.lines.filter((line) => !line.covered).map((line) => line.productName || "ingredient").join(", ")}.` : ""}`
     : "";
-  const visibleInputs = storeCatalog.filter((store) => store.id === recommendedId || inputWarehouseIds.includes(store.id) || !inputQueryText || storeLabel(store).toLowerCase().includes(inputQueryText)).sort((a, b) => {
-    if (a.id === recommendedId) return -1;
-    if (b.id === recommendedId) return 1;
-    return storeLabel(a).localeCompare(storeLabel(b));
-  });
-  const visibleOutputs = storeCatalog.filter((store) => store.id === outputWarehouseId || !outputQueryText || storeLabel(store).toLowerCase().includes(outputQueryText)).sort((a, b) => storeLabel(a).localeCompare(storeLabel(b)));
+  const formulaOutputId = boms.find((item) => item.id === bomId)?.outputWarehouseId;
+  const outputRecommendation = recommendOutputStore(storeCatalog, formulaOutputId);
+  const outputRecommendedId = outputRecommendation?.id;
+  const outputRecommendationReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, or Dispatch.";
+  const visibleInputs = storeCatalog.filter((store) => store.id === recommendedId || inputWarehouseIds.includes(store.id) || !inputQueryText || storeLabel(store).toLowerCase().includes(inputQueryText)).sort((a, b) => compareStoresForBatch(a, b, recommendedId, storeLabel));
+  const visibleOutputs = storeCatalog.filter((store) => store.id === outputWarehouseId || store.id === outputRecommendedId || !outputQueryText || storeLabel(store).toLowerCase().includes(outputQueryText)).sort((a, b) => compareStoresForBatch(a, b, outputRecommendedId, storeLabel));
+  React.useEffect(() => {
+    if (!sheetOpen || outputWarehouseId || !outputRecommendedId) return;
+    setOutputWarehouseId(outputRecommendedId);
+  }, [sheetOpen, outputWarehouseId, outputRecommendedId]);
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
@@ -760,10 +765,15 @@ export default function WorkOrdersPage() {
                   ) : visibleOutputs.length === 0 ? (
                     <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No output store matches that search."}</p>
                   ) : visibleOutputs.map((warehouse) => (
-                    <label key={warehouse.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
-                      <input type="radio" name="create-output-store" checked={outputWarehouseId === warehouse.id} onChange={() => setOutputWarehouseId(warehouse.id)} />
-                      <span className="truncate">{storeLabel(warehouse)}</span>
-                    </label>
+                    <div key={warehouse.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                        <input type="radio" name="create-output-store" checked={outputWarehouseId === warehouse.id} onChange={() => setOutputWarehouseId(warehouse.id)} />
+                        <span className="truncate">{storeLabel(warehouse)}</span>
+                      </label>
+                      {warehouse.id === outputRecommendedId ? (
+                        <button type="button" title={outputRecommendationReason} className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary" onClick={() => setOutputWarehouseId(warehouse.id)}>Recommended</button>
+                      ) : null}
+                    </div>
                   ))}
                 </div>
               </div>

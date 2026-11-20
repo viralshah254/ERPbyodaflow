@@ -32,6 +32,19 @@ describe("operator preparation review", () => {
     await waitFor(() => expect(mocks.saved).toHaveBeenCalledWith(expect.objectContaining({ preparationStatus: "READY" })));
     expect(mocks.save).toHaveBeenCalledWith("wo", { inputWarehouseIds: ["rm"], outputWarehouseId: "fg" }, expect.objectContaining({ previewToken: "review", version: "v1" }));
   });
+  it("lists the recommended store first, then shelf stores, on input and output", async () => {
+    mocks.stores.mockResolvedValue([
+      { id: "c4", code: "C4", name: "C4 FRIDAY", status: "ACTIVE" },
+      { id: "prd", code: "PRD", name: "PRODUCTION WARE HOUSE", status: "ACTIVE", purpose: "STORAGE" },
+      { id: "dsp", code: "DSP", name: "Dispatch", status: "ACTIVE", purpose: "DISPATCH" },
+    ]);
+    mocks.recommend.mockResolvedValue({ warehouseId: "c4", code: "C4", name: "C4 FRIDAY", linesNeeded: 1, linesCovered: 1, lines: [{ productId: "flour", productName: "Flour", requiredQty: 1, covered: true, onHandQty: 4 }] });
+    render(<WorkOrderPreparation order={order} onSaved={mocks.saved} />);
+    const names = (role: "checkbox" | "radio") => screen.findAllByRole(role).then((rows) => rows.map((row) => row.closest("label")?.textContent));
+    expect(await names("checkbox")).toEqual(["C4 C4 FRIDAY", "DSP Dispatch", "PRD PRODUCTION WARE HOUSE"]);
+    expect(await names("radio")).toEqual(["PRD PRODUCTION WARE HOUSE", "DSP Dispatch", "C4 C4 FRIDAY"]);
+    await waitFor(() => expect(screen.getByRole("radio", { name: "PRD PRODUCTION WARE HOUSE" })).toBeChecked());
+  });
   it("selects the store that already holds the ingredients", async () => {
     mocks.recommend.mockResolvedValue({ warehouseId: "rm", code: "PRD", name: "Production warehouse", linesNeeded: 2, linesCovered: 2, lines: [{ productId: "flour", productName: "Flour", requiredQty: 1, covered: true, onHandQty: 4 }] });
     render(<WorkOrderPreparation order={{ ...order, materialLines: [{ warehouseId: "old" }] } as ManufacturingWorkOrder} onSaved={mocks.saved} />);
