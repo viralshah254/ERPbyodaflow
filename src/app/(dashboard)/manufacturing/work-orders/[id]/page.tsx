@@ -9,6 +9,7 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -104,6 +105,7 @@ export default function WorkOrderDetailPage() {
   const [deviceReadingId, setDeviceReadingId] = React.useState("");
   const [actualInputs, setActualInputs] = React.useState<Record<string, { issue: string; consume: string; returnQty: string }>>({});
   const [restartToken, setRestartToken] = React.useState(0);
+  const [pendingAction, setPendingAction] = React.useState<"reopen" | "cancel" | null>(null);
 
   function restartStores() {
     setRestartToken((current) => current + 1);
@@ -448,10 +450,7 @@ export default function WorkOrderDetailPage() {
                       </Button>
                     )}
                     {canChangeStores(order) && (
-                      <Button size="sm" variant="outline" disabled={acting} onClick={() => {
-                        if (!window.confirm("This returns the batch to draft and releases the reserved ingredients. You can then change the output store.")) return;
-                        void runAction("reopen");
-                      }}>
+                      <Button size="sm" variant="outline" disabled={acting} onClick={() => setPendingAction("reopen")}>
                         Change stores
                       </Button>
                     )}
@@ -465,10 +464,7 @@ export default function WorkOrderDetailPage() {
                       </Button>
                     )}
                     {(order.status === "DRAFT" || order.status === "RELEASED") && (
-                      <Button size="sm" variant="ghost" disabled={acting || order.producedQuantity > 0 || order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9)} onClick={() => {
-                        if (!window.confirm("Cancel closes this batch. To change the output store, use Change stores.")) return;
-                        void runAction("cancel");
-                      }}>
+                      <Button size="sm" variant="ghost" disabled={acting || order.producedQuantity > 0 || order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9)} onClick={() => setPendingAction("cancel")}>
                         Cancel batch
                       </Button>
                     )}
@@ -566,6 +562,16 @@ export default function WorkOrderDetailPage() {
           </>
         )}
       </div>
+      <ConfirmDialog
+        open={pendingAction !== null}
+        onOpenChange={(open) => { if (!open) setPendingAction(null); }}
+        title={pendingAction === "cancel" ? "Cancel this batch?" : "Change the stores?"}
+        description={pendingAction === "cancel" ? "Cancel closes this batch. To change the output store, use Change stores." : "This returns the batch to draft and releases the reserved ingredients. You can then change the output store."}
+        confirmLabel={pendingAction === "cancel" ? "Cancel batch" : "Change stores"}
+        cancelLabel="Keep this batch"
+        variant={pendingAction === "cancel" ? "destructive" : "default"}
+        onConfirm={() => { if (pendingAction) void runAction(pendingAction); }}
+      />
     </PageShell>
   );
 }
