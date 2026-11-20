@@ -742,6 +742,11 @@ export async function fetchInputStoreRecommendation(id: string): Promise<InputSt
   return payload.recommendation;
 }
 
+export async function fetchBomInputStoreRecommendation(bomId: string, quantity: number): Promise<InputStoreRecommendation | null> {
+  const payload = await apiRequest<{ recommendation: InputStoreRecommendation | null }>(`/api/manufacturing/work-orders/input-store?bomId=${encodeURIComponent(bomId)}&quantity=${encodeURIComponent(String(quantity))}`);
+  return payload.recommendation;
+}
+
 export async function previewWorkOrderPreparation(id: string, stores: { inputWarehouseIds: string[]; outputWarehouseId: string }) {
   await requireManufacturingCapability("preparation", "work-order-preparation-v1");
   return apiRequest<WorkOrderPreparationPreview>(`/api/manufacturing/work-orders/${encodeURIComponent(id)}/prepare`, { method: "POST", body: stores });

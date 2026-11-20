@@ -91,6 +91,12 @@ export default function WorkOrderDetailPage() {
   const [measuredWeight, setMeasuredWeight] = React.useState("");
   const [deviceReadingId, setDeviceReadingId] = React.useState("");
   const [actualInputs, setActualInputs] = React.useState<Record<string, { issue: string; consume: string; returnQty: string }>>({});
+  const [restartToken, setRestartToken] = React.useState(0);
+
+  function restartStores() {
+    setRestartToken((current) => current + 1);
+    document.getElementById("prepare-batch")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const refresh = React.useCallback(async () => {
     setLoading(true);
@@ -251,7 +257,7 @@ export default function WorkOrderDetailPage() {
         ) : (
           <>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives finished goods into the selected output store under QC hold. QC acceptance makes the lot available for allocation. Do not add the output again with a stock adjustment.</p></div>{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div>
-            {canWrite && order.status === "DRAFT" && <WorkOrderPreparation order={order} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
+            {canWrite && order.status === "DRAFT" && <div id="prepare-batch"><WorkOrderPreparation order={order} restartToken={restartToken} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} /></div>}
             {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             <Card data-tutorial-hint="work-order-lifecycle">
               <CardHeader className="pb-3">
@@ -377,6 +383,11 @@ export default function WorkOrderDetailPage() {
                         Release to production
                       </Button>
                     )}
+                    {order.status === "DRAFT" && shortfalls.length > 0 && (
+                      <Button size="sm" variant="outline" disabled={acting} onClick={restartStores}>
+                        Restart input and output stores
+                      </Button>
+                    )}
                     {order.status === "RELEASED" && (
                       <Button size="sm" variant="outline" disabled={acting} onClick={() => void runAction("start")}>
                         Start production
@@ -392,8 +403,11 @@ export default function WorkOrderDetailPage() {
                       </Button>
                     )}
                     {(order.status === "DRAFT" || order.status === "RELEASED") && (
-                      <Button size="sm" variant="ghost" disabled={acting || order.producedQuantity > 0 || order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9)} onClick={() => void runAction("cancel")}>
-                        Cancel
+                      <Button size="sm" variant="ghost" disabled={acting || order.producedQuantity > 0 || order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9)} onClick={() => {
+                        if (!window.confirm("Cancel closes this batch. It does not change the stores. To pick different stores, use Restart input and output stores.")) return;
+                        void runAction("cancel");
+                      }}>
+                        Cancel batch
                       </Button>
                     )}
                     </div>
@@ -426,10 +440,16 @@ export default function WorkOrderDetailPage() {
                   ) : (
                     <>
                       {shortfalls.length > 0 ? (
-                        <p className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
-                          Short on {shortfalls.length} component{shortfalls.length === 1 ? "" : "s"}. Complete or
-                          receive those items first. A partial completion is available when the requested issue quantities are covered.
-                        </p>
+                        <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
+                          <p>
+                            {order.status === "DRAFT"
+                              ? `Short on ${shortfalls.length} component${shortfalls.length === 1 ? "" : "s"} in the stores on this batch. Restart the input and output stores and pick stores that hold the ingredients. The batch stays open.`
+                              : `Short on ${shortfalls.length} component${shortfalls.length === 1 ? "" : "s"}. Complete or receive those items first. A partial completion is available when the requested issue quantities are covered.`}
+                          </p>
+                          {order.status === "DRAFT" && canWrite ? (
+                            <Button size="sm" variant="outline" disabled={acting} onClick={restartStores}>Restart input and output stores</Button>
+                          ) : null}
+                        </div>
                       ) : (
                         <p className="mb-3 text-sm text-muted-foreground">{terms.covered}</p>
                       )}

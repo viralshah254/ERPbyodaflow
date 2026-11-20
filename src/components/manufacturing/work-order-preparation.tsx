@@ -20,7 +20,7 @@ function recommendationReason(recommendation: InputStoreRecommendation): string 
   return `Input store. Has ${recommendation.linesCovered} of ${recommendation.linesNeeded} ingredients this batch needs: ${held}.${missing}`;
 }
 
-export function WorkOrderPreparation({ order, onSaved }: { order: ManufacturingWorkOrder; onSaved: (order: ManufacturingWorkOrder) => void }) {
+export function WorkOrderPreparation({ order, onSaved, restartToken = 0 }: { order: ManufacturingWorkOrder; onSaved: (order: ManufacturingWorkOrder) => void; restartToken?: number }) {
   const [stores, setStores] = React.useState<BackendWarehouse[]>([]);
   const [inputs, setInputs] = React.useState<string[]>(order.preparationDefaults?.inputWarehouseIds || [...new Set((order.materialLines ?? []).map((line) => line.warehouseId))]);
   const [output, setOutput] = React.useState(order.preparationDefaults?.outputWarehouseId || order.outputLines?.[0]?.warehouseId || "");
@@ -37,6 +37,14 @@ export function WorkOrderPreparation({ order, onSaved }: { order: ManufacturingW
       .catch(() => { if (!cancelled) setRecommendation(null); });
     return () => { cancelled = true; };
   }, [order.id]);
+  React.useEffect(() => {
+    if (!restartToken) return;
+    setInputs([]);
+    setOutput("");
+    setPreview(null);
+    setStoreQuery("");
+    setOutputQuery("");
+  }, [restartToken]);
   async function run(commit: boolean) {
     setBusy(true);
     try {

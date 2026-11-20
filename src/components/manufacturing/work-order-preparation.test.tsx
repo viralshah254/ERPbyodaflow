@@ -41,6 +41,16 @@ describe("operator preparation review", () => {
     expect(screen.getByRole("checkbox", { name: "Raw store" })).toBeChecked();
     expect(screen.getByRole("checkbox", { name: "Finished store" })).not.toBeChecked();
   });
+  it("clears the chosen stores when the batch is restarted", async () => {
+    const prepared = { ...order, materialLines: [{ warehouseId: "rm" }], outputLines: [{ warehouseId: "fg" }] } as ManufacturingWorkOrder;
+    const { rerender } = render(<WorkOrderPreparation order={prepared} onSaved={mocks.saved} restartToken={0} />);
+    expect(await screen.findByRole("checkbox", { name: "Raw store" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Finished store" })).toBeChecked();
+    rerender(<WorkOrderPreparation order={prepared} onSaved={mocks.saved} restartToken={1} />);
+    expect(screen.getByRole("checkbox", { name: "Raw store" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Finished store" })).not.toBeChecked();
+    expect(screen.getByRole("button", { name: "Preview preparation" })).toBeDisabled();
+  });
   it("invalidates a reviewed snapshot after changing stores", async () => {
     render(<WorkOrderPreparation order={order} onSaved={mocks.saved} />);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Raw store" }));

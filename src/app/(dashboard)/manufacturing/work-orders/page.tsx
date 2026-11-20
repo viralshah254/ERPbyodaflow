@@ -31,6 +31,7 @@ import { cn } from "@/lib/utils";
 import {
   checkWorkOrderAvailability,
   createManufacturingWorkOrder,
+  fetchManufacturingBom,
   fetchManufacturingBoms,
   fetchManufacturingRoutes,
   fetchManufacturingWorkOrdersPage,
@@ -39,10 +40,12 @@ import {
   type ManufacturingRoute,
   type ManufacturingWorkOrder,
   type ProductionPlanRow,
+  type InputStoreRecommendation,
   type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
 import { fetchGRNs } from "@/lib/api/grn";
-import { fetchWarehousesApi } from "@/lib/api/warehouses";
+import { fetchAllWarehousesApi } from "@/lib/api/warehouses";
+import { recommendInputStoreForFormula } from "@/lib/manufacturing/recommend-input-store";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
 import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
@@ -90,6 +93,9 @@ export default function WorkOrdersPage() {
   const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string }>>([]);
   const [inputWarehouseIds, setInputWarehouseIds] = React.useState<string[]>([]);
   const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
+  const [inputQuery, setInputQuery] = React.useState("");
+  const [outputQuery, setOutputQuery] = React.useState("");
+  const [storeRecommendation, setStoreRecommendation] = React.useState<InputStoreRecommendation | null>(null);
   const [measurementMode, setMeasurementMode] = React.useState<ManufacturingWorkOrder["measurementMode"]>("COUNT_ONLY");
   const [quantity, setQuantity] = React.useState("1");
   const [dueDate, setDueDate] = React.useState("");
@@ -180,7 +186,7 @@ export default function WorkOrdersPage() {
     void Promise.all([
       fetchManufacturingBoms({ includeItems: true }),
       fetchManufacturingRoutes({ includeOperations: true }),
-      fetchWarehousesApi(),
+      fetchAllWarehousesApi(),
     ])
       .then(([nextBoms, nextRoutes, nextWarehouses]) => {
         setBoms(nextBoms);
@@ -204,7 +210,6 @@ export default function WorkOrdersPage() {
       try {
         const result = await checkWorkOrderAvailability(bomId, Number(quantity), inputWarehouseIds);
         setAvailLines(result.lines);
-        if (inputWarehouseIds.length === 0) setInputWarehouseIds([...new Set(result.lines.map((line) => line.warehouseId).filter((id): id is string => Boolean(id)))]);
       } catch {
         setAvailLines([]);
       } finally {
@@ -215,6 +220,28 @@ export default function WorkOrdersPage() {
       if (availDebounce.current) clearTimeout(availDebounce.current);
     };
   }, [bomId, quantity, inputWarehouseIds]);
+
+  React.useEffect(() => {
+    if (!sheetOpen || !bomId || !Number(quantity)) {
+      setStoreRecommendation(null);
+      return;
+    }
+    const selected = boms.find((item) => item.id === bomId);
+    if (!selected) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        const formula = selected.items.length ? selected : await fetchManufacturingBom(bomId);
+        if (!formula || cancelled) return;
+        const next = await recommendInputStoreForFormula(formula, Number(quantity), warehouses);
+        if (!cancelled) setStoreRecommendation(next);
+      })().catch(() => { if (!cancelled) setStoreRecommendation(null); });
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [sheetOpen, bomId, quantity, boms, warehouses]);
 
   const hasShortfall = availLines.some((line) => line.shortfall > 0);
 
@@ -355,6 +382,9 @@ export default function WorkOrdersPage() {
     setRoutingId("");
     setInputWarehouseIds([]);
     setOutputWarehouseId("");
+    setInputQuery("");
+    setOutputQuery("");
+    setStoreRecommendation(null);
     setMeasurementMode("COUNT_ONLY");
     setGrnId("");
     setQuantity("1");
@@ -362,6 +392,23 @@ export default function WorkOrdersPage() {
     setAvailLines([]);
     setSelectedProductOption(null);
   }
+
+  const storeLabel = (store: { code?: string; name?: string }) => [store.code, store.name].filter(Boolean).join(" — ");
+  const inputQueryText = inputQuery.trim().toLowerCase();
+  const outputQueryText = outputQuery.trim().toLowerCase();
+  const storeCatalog = storeRecommendation && !warehouses.some((store) => store.id === storeRecommendation.warehouseId)
+    ? [{ id: storeRecommendation.warehouseId, code: storeRecommendation.code, name: storeRecommendation.name || storeRecommendation.code || "Recommended store" }, ...warehouses]
+    : warehouses;
+  const recommendedId = storeRecommendation?.warehouseId;
+  const recommendationReason = storeRecommendation
+    ? `Input store. Has ${storeRecommendation.linesCovered} of ${storeRecommendation.linesNeeded} ingredients this batch needs: ${storeRecommendation.lines.filter((line) => line.covered).map((line) => line.productName || "ingredient").join(", ") || "part of the ingredients"}.${storeRecommendation.lines.some((line) => !line.covered) ? ` Still short: ${storeRecommendation.lines.filter((line) => !line.covered).map((line) => line.productName || "ingredient").join(", ")}.` : ""}`
+    : "";
+  const visibleInputs = storeCatalog.filter((store) => store.id === recommendedId || inputWarehouseIds.includes(store.id) || !inputQueryText || storeLabel(store).toLowerCase().includes(inputQueryText)).sort((a, b) => {
+    if (a.id === recommendedId) return -1;
+    if (b.id === recommendedId) return 1;
+    return storeLabel(a).localeCompare(storeLabel(b));
+  });
+  const visibleOutputs = storeCatalog.filter((store) => store.id === outputWarehouseId || !outputQueryText || storeLabel(store).toLowerCase().includes(outputQueryText)).sort((a, b) => storeLabel(a).localeCompare(storeLabel(b)));
 
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
@@ -677,48 +724,48 @@ export default function WorkOrdersPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <div className="flex items-center justify-between"><Label>Input stores</Label><Button type="button" variant="outline" size="sm" onClick={() => setInputWarehouseIds([])}>Find materials automatically</Button></div>
-                <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-md border p-2">
-                  {warehouses.length === 0 ? (
-                    <p className="px-1 py-1 text-xs text-muted-foreground">
-                      {sheetMetaLoading ? "Loading stores…" : "No stores found."}
-                    </p>
-                  ) : (
-                    warehouses.map((warehouse) => {
-                      const checked = inputWarehouseIds.includes(warehouse.id);
-                      return (
-                        <label key={warehouse.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(value) => {
-                              setInputWarehouseIds((current) => {
-                                if (value === true) return current.includes(warehouse.id) ? current : [...current, warehouse.id];
-                                return current.filter((id) => id !== warehouse.id);
-                              });
-                            }}
-                          />
-                          <span>{warehouse.code ? `${warehouse.code} — ` : ""}{warehouse.name}</span>
-                        </label>
-                      );
-                    })
-                  )}
+                <Label>Input stores</Label>
+                <Input aria-label="Find an input store" placeholder="Find an input store" value={inputQuery} onChange={(event) => setInputQuery(event.target.value)} />
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                  {sheetMetaLoading ? (
+                    <p className="px-1 py-1 text-xs text-muted-foreground">Loading stores…</p>
+                  ) : visibleInputs.length === 0 ? (
+                    <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No input store matches that search."}</p>
+                  ) : visibleInputs.map((warehouse) => (
+                    <div key={warehouse.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                        <Checkbox
+                          checked={inputWarehouseIds.includes(warehouse.id)}
+                          onCheckedChange={(value) => {
+                            setInputWarehouseIds((current) => value === true
+                              ? (current.includes(warehouse.id) ? current : [...current, warehouse.id])
+                              : current.filter((id) => id !== warehouse.id));
+                          }}
+                        />
+                        <span className="truncate">{storeLabel(warehouse)}</span>
+                      </label>
+                      {warehouse.id === recommendedId ? (
+                        <button type="button" title={recommendationReason} className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary" onClick={() => setInputWarehouseIds((current) => current.includes(warehouse.id) ? current : [...current, warehouse.id])}>Recommended</button>
+                      ) : null}
+                    </div>
+                  ))}
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  Tick every store this order may draw from. A component is taken from the first ticked store that has it. A store set on the BOM component is used for that line.
-                </p>
               </div>
               <div className="space-y-2">
                 <Label>Output store</Label>
-                <Select value={outputWarehouseId} onValueChange={setOutputWarehouseId}>
-                  <SelectTrigger><SelectValue placeholder="Required output store" /></SelectTrigger>
-                  <SelectContent>
-                    {warehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
-                        {warehouse.code ? `${warehouse.code} — ` : ""}{warehouse.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Input aria-label="Find an output store" placeholder="Find an output store" value={outputQuery} onChange={(event) => setOutputQuery(event.target.value)} />
+                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
+                  {sheetMetaLoading ? (
+                    <p className="px-1 py-1 text-xs text-muted-foreground">Loading stores…</p>
+                  ) : visibleOutputs.length === 0 ? (
+                    <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No output store matches that search."}</p>
+                  ) : visibleOutputs.map((warehouse) => (
+                    <label key={warehouse.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                      <input type="radio" name="create-output-store" checked={outputWarehouseId === warehouse.id} onChange={() => setOutputWarehouseId(warehouse.id)} />
+                      <span className="truncate">{storeLabel(warehouse)}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
