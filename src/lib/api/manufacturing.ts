@@ -492,7 +492,7 @@ export async function createManufacturingWorkOrder(payload: {
 export async function runManufacturingWorkOrderAction(
   id: string,
   payload: {
-    action: "release" | "start" | "complete" | "cancel";
+    action: "release" | "start" | "complete" | "cancel" | "reopen";
     producedQuantity?: number;
     scrapQuantity?: number;
     /** Why there was waste on this completion (spoilt dough, burnt, mis-shapes, floor spill…). */

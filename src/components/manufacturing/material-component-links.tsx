@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import type { MaterialAvailabilityLine } from "@/lib/api/manufacturing";
+import { PURCHASE_HREF, readableProductName, stockAdjustHref } from "@/lib/manufacturing/material-shortage";
 
 export function materialStockHref(
   line: Pick<MaterialAvailabilityLine, "productSku" | "productName" | "barcode">
@@ -25,15 +26,17 @@ export function MaterialComponentLinks({
   compact?: boolean;
 }) {
   const stockHref = materialStockHref(line);
-  const label = line.productName || line.productSku || line.productId;
+  const named = readableProductName(line.productName);
+  const label = named === "Ingredient" ? readableProductName(line.productSku) : named;
   const purchased = isPurchasedSku(line.productSku);
   const barcode = line.barcode?.trim();
+  const linkClass = "text-[10px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline";
 
   return (
     <div className="space-y-0.5">
       <Link
-        href={stockHref}
-        className={`inline-block font-medium text-primary underline-offset-2 hover:underline${line.productName ? ` ${CAPS_ON_PRODUCT_CLASS}` : ""}`}
+        href={line.productId ? stockAdjustHref(line) : stockHref}
+        className={`inline-block font-medium text-primary underline-offset-2 hover:underline${label !== "Ingredient" ? ` ${CAPS_ON_PRODUCT_CLASS}` : ""}`}
       >
         {label}
       </Link>
@@ -41,27 +44,10 @@ export function MaterialComponentLinks({
         <p className="font-mono text-[11px] text-muted-foreground">{barcode}</p>
       ) : null}
       <div className="flex flex-wrap gap-x-2 gap-y-0.5">
-        <Link
-          href={stockHref}
-          className="text-[10px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-        >
-          Stock
-        </Link>
-        {purchased ? (
-          <Link
-            href="/docs/purchase-order/new"
-            className="text-[10px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-          >
-            Purchase
-          </Link>
-        ) : (
-          <Link
-            href="/manufacturing/work-orders"
-            className="text-[10px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
-          >
-            Work orders
-          </Link>
-        )}
+        <Link href={stockHref} className={linkClass}>Stock</Link>
+        {line.productId ? <Link href={stockAdjustHref(line)} className={linkClass}>Adjust stock</Link> : null}
+        <Link href={PURCHASE_HREF} className={linkClass}>Purchase</Link>
+        {purchased ? null : <Link href="/manufacturing/work-orders" className={linkClass}>Work orders</Link>}
       </div>
     </div>
   );

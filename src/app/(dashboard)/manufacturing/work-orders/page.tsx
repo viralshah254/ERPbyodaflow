@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import {
   checkWorkOrderAvailability,
   createManufacturingWorkOrder,
-  fetchManufacturingBom,
+  fetchBomInputStoreRecommendation,
   fetchManufacturingBoms,
   fetchManufacturingRoutes,
   fetchManufacturingWorkOrdersPage,
@@ -45,7 +45,6 @@ import {
 } from "@/lib/api/manufacturing";
 import { fetchGRNs } from "@/lib/api/grn";
 import { fetchAllWarehousesApi } from "@/lib/api/warehouses";
-import { recommendInputStoreForFormula } from "@/lib/manufacturing/recommend-input-store";
 import { compareStoresForBatch, recommendOutputStore } from "@/lib/manufacturing/store-list-order";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
 import { isApiConfigured } from "@/lib/api/client";
@@ -106,6 +105,24 @@ export default function WorkOrdersPage() {
   const [availLines, setAvailLines] = React.useState<MaterialAvailabilityLine[]>([]);
   const [availLoading, setAvailLoading] = React.useState(false);
   const availDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRecommendationCache = React.useRef(new Map<string, InputStoreRecommendation | null>());
+  const inputRecommendationFlight = React.useRef(new Map<string, Promise<InputStoreRecommendation | null>>());
+  const inputRecommendationKey = React.useRef("");
+  const requestInputRecommendation = React.useCallback((nextBomId: string, nextQuantity: number) => {
+    const key = `${nextBomId}:${nextQuantity}`;
+    if (inputRecommendationCache.current.has(key)) return Promise.resolve(inputRecommendationCache.current.get(key) ?? null);
+    const existing = inputRecommendationFlight.current.get(key);
+    if (existing) return existing;
+    const pending = fetchBomInputStoreRecommendation(nextBomId, nextQuantity)
+      .then((next) => {
+        inputRecommendationCache.current.set(key, next);
+        return next;
+      })
+      .catch(() => null)
+      .finally(() => { inputRecommendationFlight.current.delete(key); });
+    inputRecommendationFlight.current.set(key, pending);
+    return pending;
+  }, []);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
@@ -224,25 +241,29 @@ export default function WorkOrdersPage() {
 
   React.useEffect(() => {
     if (!sheetOpen || !bomId || !Number(quantity)) {
+      if (!sheetOpen || !bomId) inputRecommendationKey.current = "";
       setStoreRecommendation(null);
       return;
     }
-    const selected = boms.find((item) => item.id === bomId);
-    if (!selected) return;
+    const qty = Number(quantity);
+    const key = `${bomId}:${qty}`;
+    if (inputRecommendationCache.current.has(key)) {
+      inputRecommendationKey.current = key;
+      setStoreRecommendation(inputRecommendationCache.current.get(key) ?? null);
+      return;
+    }
+    const productJustSelected = !inputRecommendationKey.current.startsWith(`${bomId}:`);
+    if (productJustSelected) setStoreRecommendation(null);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void (async () => {
-        const formula = selected.items.length ? selected : await fetchManufacturingBom(bomId);
-        if (!formula || cancelled) return;
-        const next = await recommendInputStoreForFormula(formula, Number(quantity), warehouses);
-        if (!cancelled) setStoreRecommendation(next);
-      })().catch(() => { if (!cancelled) setStoreRecommendation(null); });
-    }, 400);
+      inputRecommendationKey.current = key;
+      void requestInputRecommendation(bomId, qty).then((next) => { if (!cancelled) setStoreRecommendation(next); });
+    }, productJustSelected ? 0 : 300);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [sheetOpen, bomId, quantity, boms, warehouses]);
+  }, [sheetOpen, bomId, quantity, requestInputRecommendation]);
 
   const hasShortfall = availLines.some((line) => line.shortfall > 0);
 
@@ -627,11 +648,20 @@ export default function WorkOrdersPage() {
                   const cached = makeableById.current.get(nextProductId);
                   const match = boms.find((bom) => bom.finishedProductId === nextProductId)
                     ?? (cached?.bomId ? boms.find((bom) => bom.id === cached.bomId) : undefined);
-                  if (cached?.bomId) setBomId(cached.bomId);
-                  else if (match) setBomId(match.id);
+                  const nextBomId = cached?.bomId || match?.id || "";
+                  if (nextBomId) setBomId(nextBomId);
                   if (cached?.routingId) setRoutingId(cached.routingId);
                   else if (match?.routeId) setRoutingId(match.routeId);
                   if (match?.outputWarehouseId) setOutputWarehouseId(match.outputWarehouseId);
+                  if (!nextBomId) return;
+                  const recommendationKey = `${nextBomId}:${Number(quantity) || 1}`;
+                  if (inputRecommendationCache.current.has(recommendationKey)) {
+                    inputRecommendationKey.current = recommendationKey;
+                    setStoreRecommendation(inputRecommendationCache.current.get(recommendationKey) ?? null);
+                  } else {
+                    setStoreRecommendation(null);
+                    void requestInputRecommendation(nextBomId, Number(quantity) || 1);
+                  }
                 }}
                 onOptionSelect={setSelectedProductOption}
                 loadOptions={loadMakeableProducts}
@@ -657,6 +687,14 @@ export default function WorkOrdersPage() {
                 onValueChange={(value) => {
                   const nextBomId = value === "__none__" ? "" : value;
                   setBomId(nextBomId);
+                  const recommendationKey = `${nextBomId}:${Number(quantity) || 1}`;
+                  if (nextBomId && inputRecommendationCache.current.has(recommendationKey)) {
+                    inputRecommendationKey.current = recommendationKey;
+                    setStoreRecommendation(inputRecommendationCache.current.get(recommendationKey) ?? null);
+                  } else {
+                    setStoreRecommendation(null);
+                    if (nextBomId) void requestInputRecommendation(nextBomId, Number(quantity) || 1);
+                  }
                   const bom = boms.find((item) => item.id === nextBomId);
                   if (bom) {
                     setProductId(bom.finishedProductId);

@@ -11,15 +11,62 @@ export function completionInputDefaults(order: ManufacturingWorkOrder, quantity:
   }));
 }
 
-/** Aggregate requested issues by product/store so duplicate recipe lines share free stock. */
-export function completionIssueShortages(order: ManufacturingWorkOrder, actuals: Record<string, { issue: string }>, availability: Array<{ productId: string; warehouseId?: string; onHandQty: number }>) {
-  const requested = new Map<string, number>();
+/** Aggregate requested issues by product and store so duplicate recipe lines share free stock. */
+export type IssueShortage = {
+  productId: string;
+  productName: string;
+  productSku?: string;
+  barcode?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  needed: number;
+  onHand: number;
+  short: number;
+  uom?: string;
+};
+
+function issueStockKey(productId: string, warehouseId: string): string {
+  return `${productId}\0${warehouseId}`;
+}
+
+export function completionIssueShortages(
+  order: ManufacturingWorkOrder,
+  actuals: Record<string, { issue: string }>,
+  availability: Array<{ productId: string; productName?: string; productSku?: string; barcode?: string; warehouseId?: string; warehouseName?: string; onHandQty: number; uom?: string }>,
+): IssueShortage[] {
+  const requested = new Map<string, { needed: number; line: ManufacturingWorkOrder["materialLines"][number] }>();
   for (const line of order.materialLines) {
-    const key = `${line.productId}:${line.warehouseId}`;
+    const key = issueStockKey(line.productId, line.warehouseId);
     const quantity = Number(actuals[line.lineId]?.issue ?? 0);
-    requested.set(key, (requested.get(key) ?? 0) + (Number.isFinite(quantity) ? quantity : Infinity));
+    const needed = Number.isFinite(quantity) ? quantity : Number.POSITIVE_INFINITY;
+    const current = requested.get(key);
+    if (current) current.needed += needed;
+    else requested.set(key, { needed, line });
   }
-  const available = new Map<string, number>();
-  for (const line of availability) { const key = `${line.productId}:${line.warehouseId}`; available.set(key, Math.max(available.get(key) ?? 0, line.onHandQty)); }
-  return [...requested].filter(([key, quantity]) => quantity > (available.get(key) ?? 0) + 1e-9);
+  const available = new Map<string, (typeof availability)[number]>();
+  for (const row of availability) {
+    const key = issueStockKey(row.productId, row.warehouseId ?? "");
+    const previous = available.get(key);
+    if (!previous || row.onHandQty > previous.onHandQty) available.set(key, row);
+  }
+  const shortages: IssueShortage[] = [];
+  for (const [key, row] of requested) {
+    const stock = available.get(key);
+    const onHand = stock?.onHandQty ?? 0;
+    const short = Math.round((row.needed - onHand) * 1000) / 1000;
+    if (!(short > 1e-9)) continue;
+    shortages.push({
+      productId: row.line.productId,
+      productName: row.line.productName || stock?.productName || "Ingredient",
+      productSku: row.line.sku || stock?.productSku,
+      barcode: row.line.barcode || stock?.barcode,
+      warehouseId: row.line.warehouseId,
+      warehouseName: row.line.warehouseName || stock?.warehouseName,
+      needed: row.needed,
+      onHand,
+      short,
+      uom: row.line.uom || stock?.uom,
+    });
+  }
+  return shortages;
 }
