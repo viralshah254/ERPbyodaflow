@@ -120,6 +120,29 @@ export function normalizeAlternateRow(
   return row;
 }
 
+const PHYSICAL_UNIT_GROUPS: Array<Record<string, number>> = [
+  { KG: 1, G: 0.001, GRAM: 0.001, GRAMS: 0.001, MG: 0.000001, TONNE: 1000 },
+  { L: 1, LITRE: 1, LITER: 1, ML: 0.001 },
+];
+const PHYSICAL_UNIT_CHOICES: Record<string, string[]> = { KG: ["KG", "G"], L: ["L", "ML"] };
+
+/** Exact physical unit conversions; pieces are never silently kilograms or litres. */
+function physicalFactor(from: string, to: string): number | null {
+  for (const group of PHYSICAL_UNIT_GROUPS) {
+    if (group[from] != null && group[to] != null) return group[from]! / group[to]!;
+  }
+  return null;
+}
+
+/** Weight or volume units that convert to this base without SKU setup (e.g. G for a KG item). */
+export function physicalUnitChoices(productBaseUom: string): string[] {
+  const base = normalizeUomCode(productBaseUom);
+  const group = PHYSICAL_UNIT_GROUPS.find((units) => units[base] != null);
+  if (!group) return [];
+  const choices = PHYSICAL_UNIT_CHOICES[group.KG != null ? "KG" : "L"] ?? [];
+  return choices.filter((uom) => uom !== base);
+}
+
 export function resolveFactorToBase(
   uom: string,
   rows: SkuAlternateUom[],
@@ -129,6 +152,8 @@ export function resolveFactorToBase(
   const base = normalizeUomCode(productBaseUom) || "PCS";
   if (!want) return null;
   if (uomsMatch(want, base)) return 1;
+  const physical = physicalFactor(want, base);
+  if (physical != null) return physical;
 
   const byCode = new Map<string, SkuAlternateUom>();
   for (const row of rows) {

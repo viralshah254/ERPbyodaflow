@@ -3,6 +3,7 @@
 import * as React from "react";
 import {
   LIST_PAGE_SHELL_CLASS,
+  LIST_PAGE_BODY_CLASS,
   LIST_TABLE_SURFACE_CLASS,
   PageShell,
 } from "@/components/layout/page-shell";
@@ -130,7 +131,7 @@ export default function TasksPage() {
           </Button>
         }
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6">
+      <div className={LIST_PAGE_BODY_CLASS}>
         <div className="flex shrink-0 flex-wrap gap-2 border-b pb-3">
           <Button
             size="sm"

@@ -296,7 +296,7 @@ export default function PurchaseReturnsPage() {
       />
       <div className={LIST_PAGE_BODY_CLASS}>
         <Button asChild variant="outline"><Link href="/finance/notes">All supplier and customer notes</Link></Button>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex min-h-fit flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 p-4 pb-0">
             <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
               searchPlaceholder="Search by number, supplier, GRN ref…"
@@ -350,7 +350,7 @@ export default function PurchaseReturnsPage() {
             <div
               className={cn(
                 LIST_TABLE_SURFACE_CLASS,
-                "min-h-0 flex-1 border-0 border-t rounded-none shadow-none",
+                "flex-1 border-0 border-t rounded-none shadow-none",
               )}
             >
               <TableLinearProgress active={tableBusy} />

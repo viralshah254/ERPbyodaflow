@@ -219,17 +219,17 @@ export function DataTable<T extends object>({
       scrollMode === "fill" ||
       (scrollMode === "auto" && needsAutoScroll)) &&
       "overflow-auto",
-    scrollMode === "fixed" && "max-h-[min(28rem,70dvh)] min-h-0",
+    scrollMode === "fixed" && "max-h-[min(36rem,75dvh)] min-h-0",
     scrollMode === "fill" && "min-h-0 h-full flex-1 overflow-x-auto overflow-y-auto",
     scrollMode === "auto" && needsAutoScroll && "min-h-0",
   );
 
   const tableSizeClass =
     size === "comfortable"
-      ? "[&_td]:h-auto [&_td]:py-3.5 [&_td]:px-4 [&_th]:h-auto [&_th]:min-h-10 [&_th]:py-3 [&_th]:px-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
+      ? "[&_td]:h-auto [&_td]:py-2.5 [&_td]:px-4 [&_th]:h-auto [&_th]:min-h-10 [&_th]:py-2.5 [&_th]:px-4 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
       : size === "compact"
         ? "[&_td]:min-h-9 [&_td]:py-1.5 [&_td]:px-3 [&_th]:h-9 [&_th]:py-1.5 [&_th]:px-3 [&_th]:text-xs [&_th]:font-semibold [&_th]:uppercase [&_th]:tracking-wide [&_th]:text-muted-foreground"
-        : "[&_td]:h-auto [&_th]:h-auto [&_th]:min-h-10";
+        : "[&_td]:h-auto [&_td]:py-2.5 [&_th]:h-auto [&_th]:min-h-10";
 
   return (
     <div

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { BomComponentEditor } from "@/components/manufacturing/bom-component-editor";
+import { RecipePriceSimulator } from "@/components/manufacturing/recipe-price-simulator";
 import {
   fetchManufacturingBom,
   fetchManufacturingRoutes,
@@ -225,7 +226,23 @@ export default function BomDetailPage() {
         <TabsList data-bom-tabs aria-label="BOM record sections">
           <TabsTrigger value="components">Components</TabsTrigger>
           <TabsTrigger value="routing">Routing</TabsTrigger>
+          <TabsTrigger value="simulator">Price simulator</TabsTrigger>
         </TabsList>
+        <TabsContent value="simulator">
+          {section === "simulator" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Price simulator</CardTitle>
+                <CardDescription>
+                  Try a different formula or ingredient price and see the cost and margin before anyone changes the recipe. Type a batch quantity or a cost to compare it with today.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <RecipePriceSimulator bom={bom} />
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
         <TabsContent value="components" forceMount hidden={section !== "components"}>
         <Card>
           <CardHeader>
@@ -248,6 +265,8 @@ export default function BomDetailPage() {
               uoms={uoms}
               warehouses={warehouses}
               canWrite={editable}
+              outputQuantity={bom.quantity}
+              outputUom={bom.uom}
               onSaved={setBom}
             />
           </CardContent>

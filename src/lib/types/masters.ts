@@ -18,6 +18,8 @@ export type ProductRow = {
   categoryName?: string;
   unit?: string;
   baseUom?: string;
+  /** Catalogue price per base unit: standard cost (excl. VAT) on raw materials, selling price on finished goods. */
+  unitPrice?: number;
   productType?: "RAW" | "FINISHED" | "BOTH";
   /** Plant material type. Absent until the item is classified. */
   itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";

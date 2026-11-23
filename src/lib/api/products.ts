@@ -15,6 +15,7 @@ type BackendProduct = {
   categoryName?: string;
   unit?: string;
   baseUom?: string;
+  unitPrice?: number | null;
   productType?: "RAW" | "FINISHED" | "BOTH";
   itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   defaultTaxCodeId?: string;
@@ -63,6 +64,7 @@ function mapProduct(item: BackendProduct & { categoryId?: string; categoryName?:
     categoryName: item.categoryName ?? undefined,
     unit: uom,
     baseUom: uom,
+    unitPrice: typeof item.unitPrice === "number" && Number.isFinite(item.unitPrice) ? item.unitPrice : undefined,
     productType: item.productType,
     itemRole: item.itemRole,
     defaultTaxCodeId: item.defaultTaxCodeId,
