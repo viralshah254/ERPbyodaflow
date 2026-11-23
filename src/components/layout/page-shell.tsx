@@ -6,31 +6,38 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { DocumentSummaryDrawer, useDockedDocumentSummary } from "./document-panel";
 import { useUIStore } from "@/stores/ui-store";
 
-/** List pages: constrain height so tables scroll inside the shell, not the window. */
-export const LIST_PAGE_SHELL_CLASS = "min-h-0 min-w-0 flex-1 overflow-hidden";
+/**
+ * List pages: the table card fills the window on tall screens. On short screens
+ * it keeps LIST_TABLE_MIN_H and the page scrolls, so filters never squeeze it
+ * down to a handful of rows.
+ */
+export const LIST_PAGE_SHELL_CLASS = "min-h-0 min-w-0 flex-1";
 
 /** Toolbar + table column below PageHeader. */
 export const LIST_PAGE_BODY_CLASS =
-  "flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-6";
+  "flex min-w-0 flex-1 flex-col gap-4 p-4 sm:p-6";
+
+/** Header row plus 10–12 body rows before the table scrolls inside its card. */
+const LIST_TABLE_MIN_H = "min-h-[36rem]";
 
 /** Bordered surface wrapping DataTable scrollMode="fill" (scroll inside the card). */
 export const LIST_TABLE_SURFACE_CLASS =
-  "relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
+  `relative flex ${LIST_TABLE_MIN_H} flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm`;
 
 /** Inventory-style lists: tall table body from the viewport, pager stays in the card footer. */
 export const LIST_TABLE_VIEWPORT_CLASS =
-  "relative flex h-[calc(100dvh-14.5rem)] min-h-0 flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
+  `relative flex h-[calc(100dvh-14.5rem)] ${LIST_TABLE_MIN_H} flex-col overflow-hidden rounded-xl border bg-card shadow-sm`;
 
 /**
  * Purchasing worklists (optional KPI strip above): table is the primary pane —
  * taller than chrome above it, scrolls inside the card.
  */
 export const LIST_TABLE_WORKLIST_CLASS =
-  "relative flex h-[calc(100dvh-20.5rem)] min-h-[18rem] flex-col overflow-hidden rounded-xl border bg-card shadow-sm";
+  `relative flex h-[calc(100dvh-20.5rem)] ${LIST_TABLE_MIN_H} flex-col overflow-hidden rounded-xl border bg-card shadow-sm`;
 
 /** Compact body under PageHeader when the table uses LIST_TABLE_VIEWPORT_CLASS. */
 export const LIST_PAGE_BODY_VIEWPORT_CLASS =
-  "flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden px-0 py-3";
+  "flex min-w-0 flex-1 flex-col gap-3 px-0 py-3";
 
 /** Flex child between LIST_TABLE_SURFACE and DataTable — scrolls when rows overflow. */
 export const LIST_TABLE_SCROLL_BODY_CLASS =

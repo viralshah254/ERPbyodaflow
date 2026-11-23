@@ -499,7 +499,7 @@ export default function APSuppliersPage() {
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
+        <div className="flex min-h-fit flex-1 flex-col overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="shrink-0 space-y-4 p-4 pb-0">
             <DataTableToolbar className="shrink-0 rounded-xl border bg-card/80 shadow-sm backdrop-blur-sm"
               searchPlaceholder="Search suppliers…"
@@ -550,7 +550,7 @@ export default function APSuppliersPage() {
               />
             </div>
           ) : (
-            <div className={cn(LIST_TABLE_SURFACE_CLASS, "min-h-0 flex-1 border-0 border-t rounded-none shadow-none")}>
+            <div className={cn(LIST_TABLE_SURFACE_CLASS, "flex-1 border-0 border-t rounded-none shadow-none")}>
               <TableLinearProgress active={tableBusy} />
               <div
                 className={cn(

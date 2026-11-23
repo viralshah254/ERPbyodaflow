@@ -218,7 +218,7 @@ export default function MasterWarehousesPage() {
           ) : undefined
         }
       />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2 overflow-hidden p-3 sm:px-5">
+      <div className="flex min-w-0 flex-1 flex-col gap-2 p-3 sm:px-5">
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Filter stores">
             {storeFilters.map(({ id, label, count }) => (
