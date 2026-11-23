@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/docs/DocumentProductPickerSheet";
 import {
@@ -107,7 +108,24 @@ function scrapPercentFromStored(scrapFactor?: number, mode?: "RATIO" | "PERCENT"
 }
 
 function warehouseOptionLabel(warehouse: WarehouseOption): string {
-  return warehouse.code ? `${warehouse.code} — ${warehouse.name}` : warehouse.name;
+  const code = warehouse.code?.trim();
+  return code && code.toLowerCase() !== warehouse.name.trim().toLowerCase() ? `${code} — ${warehouse.name}` : warehouse.name;
+}
+
+const WORK_ORDER_STORE = "__none__";
+const WORK_ORDER_STORE_LABEL = "Choose on work order";
+const WORK_ORDER_STORE_OPTION: AsyncSearchableSelectOption = {
+  id: WORK_ORDER_STORE,
+  label: WORK_ORDER_STORE_LABEL,
+  description: "No fixed store. Pick the input stores when you start each work order.",
+};
+
+function storeOptions(warehouses: WarehouseOption[], query: string): AsyncSearchableSelectOption[] {
+  const needle = query.trim().toLowerCase();
+  const stores = warehouses
+    .map((warehouse) => ({ id: warehouse.id, label: warehouseOptionLabel(warehouse) }))
+    .filter((option) => !needle || option.label.toLowerCase().includes(needle));
+  return needle ? stores : [WORK_ORDER_STORE_OPTION, ...stores];
 }
 
 function toDraftLine(item: ManufacturingBomItem): ComponentDraftLine {
@@ -528,7 +546,10 @@ export function BomComponentEditor({
                 aria-label="Search products to add"
               />
               {searchOpen && search.trim() && (
-                <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md">
+                <div
+                  className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-md"
+                  onMouseDown={(event) => event.preventDefault()}
+                >
                   {searching && results.length === 0 ? (
                     <p className="p-3 text-sm text-muted-foreground">Searching…</p>
                   ) : results.length === 0 ? (
@@ -565,7 +586,7 @@ export function BomComponentEditor({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. Units list only what the product can be measured in; add more under the product&apos;s Packaging tab.
+            Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. Leave the store on Choose on work order unless this ingredient must always come from one store. Units list only what the product can be measured in; add more under the product&apos;s Packaging tab.
           </p>
         </div>
       )}
@@ -670,22 +691,19 @@ export function BomComponentEditor({
                   <TableCell className="text-right tabular-nums">{cost != null ? formatAmount(cost) : "—"}</TableCell>
                   <TableCell>
                     {canWrite ? (
-                      <Select
-                        value={line.warehouseId || "__none__"}
-                        onValueChange={(value) => updateLine(line.id, { warehouseId: value === "__none__" ? "" : value })}
-                      >
-                        <SelectTrigger className="h-8"><SelectValue placeholder="Work order store" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Work order store</SelectItem>
-                          {warehouses.map((warehouse) => (
-                            <SelectItem key={warehouse.id} value={warehouse.id}>
-                              {warehouseOptionLabel(warehouse)}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <AsyncSearchableSelect
+                        value={line.warehouseId || WORK_ORDER_STORE}
+                        selectedOption={store ? { id: store.id, label: warehouseOptionLabel(store) } : WORK_ORDER_STORE_OPTION}
+                        onValueChange={(value) => updateLine(line.id, { warehouseId: value === WORK_ORDER_STORE ? "" : value })}
+                        loadOptions={async (query) => storeOptions(warehouses, query)}
+                        searchDebounceMs={0}
+                        placeholder={WORK_ORDER_STORE_LABEL}
+                        searchPlaceholder="Find a store"
+                        emptyMessage="No store matches."
+                        triggerClassName="h-8"
+                      />
                     ) : (
-                      store ? warehouseOptionLabel(store) : "Work order store"
+                      store ? warehouseOptionLabel(store) : WORK_ORDER_STORE_LABEL
                     )}
                   </TableCell>
                   <TableCell>
