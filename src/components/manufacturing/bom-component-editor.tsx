@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +15,14 @@ import {
 } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
 import { fetchProductsPageApi } from "@/lib/api/products";
+import { fetchProductPackagingBatchApi } from "@/lib/api/product-master";
+import {
+  normalizeUomCode,
+  physicalUnitChoices,
+  prepareSkuAlternateUoms,
+  resolveFactorToBase,
+  type SkuAlternateUom,
+} from "@/lib/products/sku-uom";
 import { updateManufacturingBom, type ManufacturingBom, type ManufacturingBomItem } from "@/lib/api/manufacturing";
 import { canonicalIndustryTemplateId, FMCG_SELLING_TEMPLATE_IDS } from "@/config/industry";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -35,8 +44,48 @@ type ComponentDraftLine = {
   isOptional: boolean;
   scrapPercent: string;
   warehouseId: string;
-  unitCost?: number;
+  /** Cost per recipe unit, excl. VAT. Empty uses the product's catalogue price. */
+  unitCost: string;
 };
+
+/** Units a product can be measured in for production, and its catalogue price per base unit. */
+type ProductUnits = { baseUom: string; unitPrice?: number; rows: SkuAlternateUom[] };
+
+function unitChoices(info: ProductUnits): string[] {
+  const alternates = info.rows.filter((row) => row.status !== "inactive").map((row) => normalizeUomCode(row.uom));
+  return [...new Set([info.baseUom, ...physicalUnitChoices(info.baseUom), ...alternates])];
+}
+
+/** Base units per one recipe unit; null when no conversion is set up, undefined while loading. */
+function factorToBase(info: ProductUnits | undefined, uom: string): number | null | undefined {
+  if (!info) return undefined;
+  return resolveFactorToBase(uom, info.rows, info.baseUom);
+}
+
+function lineUnitCost(line: ComponentDraftLine, info: ProductUnits | undefined): number | undefined {
+  if (line.unitCost.trim()) {
+    const typed = Number(line.unitCost);
+    return Number.isFinite(typed) && typed >= 0 ? typed : undefined;
+  }
+  const factor = factorToBase(info, line.uom);
+  return info?.unitPrice != null && info.unitPrice > 0 && factor ? info.unitPrice * factor : undefined;
+}
+
+function lineCost(line: ComponentDraftLine, info: ProductUnits | undefined): number | undefined {
+  const cost = lineUnitCost(line, info);
+  const quantity = Number(line.quantity);
+  if (cost == null || !Number.isFinite(quantity)) return undefined;
+  const scrap = Number(line.scrapPercent);
+  return quantity * (1 + (Number.isFinite(scrap) && scrap > 0 ? scrap / 100 : 0)) * cost;
+}
+
+function formatAmount(value: number): string {
+  return value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatQuantity(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 3 });
+}
 
 type DraftPayload = { lines: ComponentDraftLine[]; savedAt: string };
 
@@ -72,13 +121,13 @@ function toDraftLine(item: ManufacturingBomItem): ComponentDraftLine {
     isOptional: item.isOptional === true,
     scrapPercent: scrapPercentFromStored(item.scrapFactor, item.scrapFactorMode),
     warehouseId: item.warehouseId ?? "",
-    unitCost: item.unitCost,
+    unitCost: item.unitCost != null ? String(item.unitCost) : "",
   };
 }
 
 function normalizeLine(value: unknown): ComponentDraftLine | null {
   if (!value || typeof value !== "object") return null;
-  const row = value as Partial<ComponentDraftLine>;
+  const row = value as Omit<Partial<ComponentDraftLine>, "unitCost"> & { unitCost?: unknown };
   if (typeof row.id !== "string" || typeof row.productId !== "string" || !row.productId) return null;
   return {
     id: row.id,
@@ -90,7 +139,7 @@ function normalizeLine(value: unknown): ComponentDraftLine | null {
     isOptional: row.isOptional === true,
     scrapPercent: row.scrapPercent != null ? String(row.scrapPercent) : "",
     warehouseId: typeof row.warehouseId === "string" ? row.warehouseId : "",
-    unitCost: typeof row.unitCost === "number" ? row.unitCost : undefined,
+    unitCost: typeof row.unitCost === "number" || typeof row.unitCost === "string" ? String(row.unitCost) : "",
   };
 }
 
@@ -141,6 +190,7 @@ function lineFromProduct(product: ProductRow, qty: number): ComponentDraftLine {
     isOptional: false,
     scrapPercent: "",
     warehouseId: "",
+    unitCost: "",
   };
 }
 
@@ -173,7 +223,7 @@ function toBomItem(line: ComponentDraftLine): ManufacturingBomItem {
     scrapFactorMode: "RATIO",
     scrapFactor: scrap != null && Number.isFinite(scrap) && scrap > 0 ? scrap / 100 : undefined,
     warehouseId: line.warehouseId || undefined,
-    unitCost: line.unitCost,
+    unitCost: line.unitCost.trim() ? Number(line.unitCost) : undefined,
   };
 }
 
@@ -189,6 +239,8 @@ export function BomComponentEditor({
   uoms,
   warehouses,
   canWrite,
+  outputQuantity,
+  outputUom,
   onSaved,
 }: {
   bomId: string;
@@ -196,6 +248,8 @@ export function BomComponentEditor({
   uoms: string[];
   warehouses: WarehouseOption[];
   canWrite: boolean;
+  outputQuantity?: number;
+  outputUom?: string;
   onSaved: (bom: ManufacturingBom) => void;
 }) {
   const templateId = useOrgContextStore((state) => state.templateId);
@@ -219,6 +273,27 @@ export function BomComponentEditor({
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [highlight, setHighlight] = React.useState(0);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [productUnits, setProductUnits] = React.useState<Record<string, ProductUnits>>({});
+  const requestedUnitsRef = React.useRef(new Set<string>());
+
+  React.useEffect(() => {
+    if (!isApiConfigured()) return;
+    const missing = [...new Set(lines.map((line) => line.productId))].filter((id) => !requestedUnitsRef.current.has(id)).slice(0, 100);
+    if (!missing.length) return;
+    missing.forEach((id) => requestedUnitsRef.current.add(id));
+    void Promise.all([fetchProductsPageApi({ ids: missing, limit: 100, includeStock: false }), fetchProductPackagingBatchApi(missing)])
+      .then(([page, packaging]) => {
+        setProductUnits((current) => {
+          const next = { ...current };
+          for (const product of page.items) {
+            const baseUom = normalizeUomCode(product.unit) || "EA";
+            next[product.id] = { baseUom, unitPrice: product.unitPrice, rows: prepareSkuAlternateUoms(packaging[product.id] ?? [], baseUom).rows };
+          }
+          return next;
+        });
+      })
+      .catch(() => missing.forEach((id) => requestedUnitsRef.current.delete(id)));
+  }, [lines]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -338,6 +413,16 @@ export function BomComponentEditor({
     setLines((current) => current.map((line) => (line.id === id ? { ...line, ...patch } : line)));
   }
 
+  /** A typed cost is per recipe unit, so it follows the unit (240 per KG stays 240 per KG, becomes 0.24 per G). */
+  function changeUnit(line: ComponentDraftLine, uom: string) {
+    const info = productUnits[line.productId];
+    const from = factorToBase(info, line.uom);
+    const to = factorToBase(info, uom);
+    const typed = Number(line.unitCost);
+    const unitCost = line.unitCost.trim() && Number.isFinite(typed) && from && to ? String(Math.round((typed / from) * to * 10000) / 10000) : line.unitCost;
+    updateLine(line.id, { uom, unitCost });
+  }
+
   function discardDraft() {
     const serverLines = savedRef.current.map(toDraftLine);
     baselineRef.current = JSON.stringify(serverLines);
@@ -355,6 +440,16 @@ export function BomComponentEditor({
       const quantity = Number(line.quantity);
       if (!line.productId || !Number.isFinite(quantity) || quantity <= 0) {
         toast.error("Each component needs a quantity greater than zero.");
+        return;
+      }
+      const cost = Number(line.unitCost);
+      if (line.unitCost.trim() && (!Number.isFinite(cost) || cost < 0)) {
+        toast.error(`Enter a cost of zero or more for ${line.productName ?? line.productSku ?? "each component"}.`);
+        return;
+      }
+      const info = productUnits[line.productId];
+      if (factorToBase(info, line.uom) === null) {
+        toast.error(`${line.productName ?? line.productSku ?? "A component"} has no ${line.uom} to ${info?.baseUom} conversion. Pick another unit or set the conversion up on the product.`);
         return;
       }
     }
@@ -386,6 +481,11 @@ export function BomComponentEditor({
       : draftSavedAt
         ? `Draft saved ${formatDraftTime(draftSavedAt)}. Save components to update this BOM.`
         : "Unsaved changes.";
+
+  const costs = lines.map((line) => lineCost(line, productUnits[line.productId]));
+  const unpriced = costs.filter((cost) => cost == null).length;
+  const totalCost = costs.reduce<number>((sum, cost) => sum + (cost ?? 0), 0);
+  const perOutput = outputQuantity && outputQuantity > 0 ? totalCost / outputQuantity : undefined;
 
   return (
     <div>
@@ -465,7 +565,7 @@ export function BomComponentEditor({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Search and press Enter to add the next product. Set quantity, unit, store, and scrap on the row.
+            Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. Units list only what the product can be measured in; add more under the product&apos;s Packaging tab.
           </p>
         </div>
       )}
@@ -475,7 +575,9 @@ export function BomComponentEditor({
           <TableRow>
             <TableHead>Product</TableHead>
             <TableHead className="w-28">Qty</TableHead>
-            <TableHead className="w-28">UOM</TableHead>
+            <TableHead className="w-36">UOM</TableHead>
+            <TableHead className="w-32">Cost / unit (excl. VAT)</TableHead>
+            <TableHead className="w-28 text-right">Line cost</TableHead>
             <TableHead className="min-w-44">Input store</TableHead>
             <TableHead className="w-24">Optional</TableHead>
             <TableHead className="w-24">Scrap %</TableHead>
@@ -485,13 +587,22 @@ export function BomComponentEditor({
         <TableBody>
           {lines.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
                         {hydrated ? (canWrite ? "No components yet. Search above to add the first product." : "No components on this BOM.") : "Loading components…"}
               </TableCell>
             </TableRow>
           ) : (
-            lines.map((line) => {
-              const uomOptions = line.uom && !uoms.includes(line.uom) ? [line.uom, ...uoms] : uoms;
+            lines.map((line, index) => {
+              const info = productUnits[line.productId];
+              const choices = info ? unitChoices(info) : uoms;
+              const uomOptions = line.uom && !choices.includes(line.uom) ? [line.uom, ...choices] : choices;
+              const factor = factorToBase(info, line.uom);
+              const quantity = Number(line.quantity);
+              const stockHint = info && factor && factor !== 1 && Number.isFinite(quantity) && quantity > 0
+                ? `= ${formatQuantity(quantity * factor)} ${info.baseUom} from stock`
+                : null;
+              const defaultCost = lineUnitCost({ ...line, unitCost: "" }, info);
+              const cost = costs[index];
               const store = warehouses.find((warehouse) => warehouse.id === line.warehouseId);
               return (
                 <TableRow key={line.id}>
@@ -518,7 +629,7 @@ export function BomComponentEditor({
                   </TableCell>
                   <TableCell>
                     {canWrite ? (
-                      <Select value={line.uom || "EA"} onValueChange={(value) => updateLine(line.id, { uom: value })}>
+                      <Select value={line.uom || "EA"} onValueChange={(value) => changeUnit(line, value)}>
                         <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {uomOptions.map((uom) => (
@@ -529,7 +640,34 @@ export function BomComponentEditor({
                     ) : (
                       line.uom
                     )}
+                    {stockHint && <span className="mt-1 block text-xs text-muted-foreground tabular-nums">{stockHint}</span>}
+                    {factor === null && (
+                      <span className="mt-1 block text-xs text-destructive">
+                        No {line.uom} to {info?.baseUom} conversion.{" "}
+                        <Link href={`/master/products/${encodeURIComponent(line.productId)}?tab=packaging`} target="_blank" className="underline">
+                          Set it up
+                        </Link>
+                      </span>
+                    )}
                   </TableCell>
+                  <TableCell>
+                    {canWrite ? (
+                      <Input
+                        className="h-8 tabular-nums"
+                        inputMode="decimal"
+                        aria-label={`Cost per ${line.uom} for ${line.productName ?? line.productSku ?? "component"}`}
+                        placeholder={defaultCost != null ? formatAmount(defaultCost) : "No price"}
+                        value={line.unitCost}
+                        onChange={(event) => updateLine(line.id, { unitCost: event.target.value })}
+                      />
+                    ) : (
+                      <span className="tabular-nums">{lineUnitCost(line, info) != null ? formatAmount(lineUnitCost(line, info)!) : "—"}</span>
+                    )}
+                    {canWrite && !line.unitCost.trim() && defaultCost != null && (
+                      <span className="mt-1 block text-xs text-muted-foreground">Product price</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{cost != null ? formatAmount(cost) : "—"}</TableCell>
                   <TableCell>
                     {canWrite ? (
                       <Select
@@ -594,6 +732,21 @@ export function BomComponentEditor({
           )}
         </TableBody>
       </Table>
+
+      {lines.length > 0 && (
+        <div className="flex flex-col gap-1 border-t px-4 py-3 text-sm sm:flex-row sm:items-baseline sm:justify-between">
+          <p className="font-medium tabular-nums">
+            Total cost (excl. VAT): {formatAmount(totalCost)}
+            {outputQuantity != null && outputQuantity > 0 && ` for ${formatQuantity(outputQuantity)} ${outputUom ?? ""}`}
+            {perOutput != null && outputQuantity !== 1 && ` · ${formatAmount(perOutput)} per ${outputUom ?? "unit"}`}
+          </p>
+          {unpriced > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {unpriced === 1 ? "1 component has" : `${unpriced} components have`} no price, so the total is incomplete.
+            </p>
+          )}
+        </div>
+      )}
 
       {canWrite && (
         <div className="flex flex-col gap-3 border-t p-4 sm:flex-row sm:items-center sm:justify-between">

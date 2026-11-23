@@ -307,6 +307,41 @@ export async function updateManufacturingBom(id: string, payload: Partial<Manufa
   return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}`, { method: "PATCH", body: payload });
 }
 
+export type RecipeCostLine = { productId: string; quantity: number; uom: string; unitCost: number | null; cost: number | null; rolledUp: boolean };
+export type RecipeCost = { total: number; perUnit: number | null; unpricedLines: number; lines: RecipeCostLine[] };
+export type RecipeMargin = { sellingPriceIncl: number; vatRate: number; sellingPriceExcl: number; current: number | null; proposed: number | null };
+export type RecipeCostSimulation = {
+  recipeId: string;
+  productId: string;
+  sku?: string;
+  name?: string;
+  outputQuantity: number;
+  outputUom: string;
+  baseUom: string;
+  current: RecipeCost;
+  proposed: RecipeCost;
+  margin: RecipeMargin | null;
+  affected: Array<{
+    recipeId: string;
+    recipeCode?: string;
+    productId: string;
+    sku?: string;
+    name?: string;
+    uom: string;
+    current: RecipeCost;
+    proposed: RecipeCost;
+    margin: RecipeMargin | null;
+  }>;
+};
+
+/** Cost this recipe and every product made from it with a proposed formula. Nothing is saved. */
+export async function simulateManufacturingBomCost(
+  id: string,
+  items: Array<Pick<ManufacturingBomItem, "productId" | "quantity" | "uom" | "unitCost" | "scrapFactor" | "scrapFactorMode">>,
+): Promise<RecipeCostSimulation> {
+  return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}/cost-simulation`, { method: "POST", body: { items } });
+}
+
 export async function deleteManufacturingBom(id: string): Promise<{ deleted: boolean }> {
   return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
