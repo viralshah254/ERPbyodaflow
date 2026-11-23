@@ -583,7 +583,7 @@ export function DocumentCreateWizard({
   const operatingProfile = useOperatingProfile(currentOrgId);
   /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
   const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
-  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && operatingProfile.routeCollectionsEnabled;
+  const joyRouteOrderEnabled = routeDeliveryStore && operatingProfile.routeCollectionsEnabled;
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -830,7 +830,9 @@ export function DocumentCreateWizard({
 
   const watchedWarehouse = form.watch("warehouse");
   const orderDate = form.watch("date");
-  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string>();
+  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string | undefined>(
+    () => (mode === "edit" ? existingDocument?.joyRoute?.deliveryDate?.slice(0, 10) : undefined),
+  );
   const routeDeliveryDate = deliveryDateOverride ?? orderDate;
   const routeLookupKey = JSON.stringify([selectedPartyId, selectedDeliverySite, routeDeliveryDate]);
   const [routeLookup, setRouteLookup] = React.useState<{
@@ -840,26 +842,68 @@ export function DocumentCreateWizard({
   const [routeSelection, setRouteSelection] = React.useState<{ key: string; routeId: string }>();
   const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
   const availableDeliveryRoutes = React.useMemo(() => {
-    if (!joyRouteOrderEnabled || !activeRouteLookup || activeRouteLookup.error) return [];
-    const configured = new Map(activeRouteLookup.routes.map((route) => [route.id, route]));
-    for (const warehouse of fieldOptions.warehouse ?? []) {
-      if (!configured.has(warehouse.id) && !/dispatch/i.test(warehouse.label)) {
-        configured.set(warehouse.id, { id: warehouse.id, name: warehouse.label, collectors: [] });
+    if (!joyRouteOrderEnabled) return [];
+    const configured = new Map<string, CollectionRoute>();
+    if (activeRouteLookup && !activeRouteLookup.error) {
+      for (const route of activeRouteLookup.routes ?? []) configured.set(route.id, route);
+      for (const warehouse of fieldOptions.warehouse ?? []) {
+        if (!configured.has(warehouse.id) && !/dispatch/i.test(warehouse.label)) {
+          configured.set(warehouse.id, { id: warehouse.id, name: warehouse.label, collectors: [] });
+        }
       }
     }
+    const savedRouteId = isEditMode ? existingDocument?.warehouseId?.trim() : "";
+    if (savedRouteId && !configured.has(savedRouteId)) {
+      configured.set(savedRouteId, {
+        id: savedRouteId,
+        name: existingDocument?.joyRoute?.routeName || savedRouteId,
+        collectors: [],
+      });
+    }
     return [...configured.values()];
-  }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse]);
-  const activeCollectionRoute = availableDeliveryRoutes.find((route) =>
-    route.id === (manualRoute?.routeId ?? activeRouteLookup?.defaultRouteId));
-  const [routeSalesRep, setRouteSalesRep] = React.useState<PickedSalesRep | null>(null);
-  const [routeTillChoice, setRouteTillChoice] = React.useState("");
+  }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse, isEditMode, existingDocument?.warehouseId, existingDocument?.joyRoute?.routeName]);
+  /** Keep the order's route until the operator picks a different one. */
+  const editRouteHoldRef = React.useRef<string | null>(
+    mode === "edit" ? existingDocument?.warehouseId?.trim() || null : null,
+  );
+  const heldRouteId = editRouteHoldRef.current?.trim() || undefined;
+  const chosenRouteId = manualRoute ? manualRoute.routeId : (heldRouteId || activeRouteLookup?.defaultRouteId);
+  const activeCollectionRoute = availableDeliveryRoutes.find((route) => route.id === chosenRouteId);
+  const [routeSalesRep, setRouteSalesRep] = React.useState<PickedSalesRep | null>(() => {
+    const saved = mode === "edit" ? existingDocument?.joyRoute : undefined;
+    return saved?.salesRepId && saved.salesRep
+      ? { id: saved.salesRepId, name: saved.salesRep, phone: saved.salesRepPhone }
+      : null;
+  });
+  const [routeTillChoice, setRouteTillChoice] = React.useState(
+    () => (mode === "edit" ? existingDocument?.joyRoute?.tillNumber ?? "" : ""),
+  );
   const routeTills = React.useMemo(
     () => [...new Set(activeCollectionRoute?.collectors.map((row) => row.tillNumber).filter(Boolean))],
     [activeCollectionRoute],
   );
-  const routeTill = routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "";
+  const routeKnownToLookup = Boolean(
+    activeCollectionRoute &&
+    activeRouteLookup &&
+    !activeRouteLookup.error &&
+    (activeRouteLookup.routes ?? []).some((route) => route.id === activeCollectionRoute.id),
+  );
+  const routeTill = routeKnownToLookup
+    ? (routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "")
+    : routeTillChoice;
+  const routeReadyForSave = Boolean(
+    activeCollectionRoute && (
+      (isEditMode && existingDocument?.joyRoute) ||
+      (activeRouteLookup && !activeRouteLookup.error && (
+        routeKnownToLookup ||
+        (fieldOptions.warehouse ?? []).some((warehouse) => warehouse.id === activeCollectionRoute.id)
+      ))
+    ),
+  );
   /** Route orders: store the whole order is picked from. Blank means the dispatch store. */
-  const [routeSourceChoice, setRouteSourceStoreId] = React.useState("");
+  const [routeSourceChoice, setRouteSourceStoreId] = React.useState(
+    () => (mode === "edit" ? existingDocument?.sourceWarehouseId ?? "" : ""),
+  );
   const routeSourceStoreId = routeSourceChoice === activeCollectionRoute?.id ? "" : routeSourceChoice;
   const routeDispatchStore = React.useMemo(() => {
     const stores = fieldOptions.warehouse ?? [];
@@ -874,8 +918,15 @@ export function DocumentCreateWizard({
   React.useEffect(() => {
     if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
     let active = true;
-    fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite)
-      .then((result) => { if (active) setRouteLookup({ key: routeLookupKey, ...result }); })
+    void Promise.resolve(fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite))
+      .then((result) => {
+        if (active) setRouteLookup({
+          key: routeLookupKey,
+          routes: result?.routes ?? [],
+          defaultRouteId: result?.defaultRouteId,
+          saved: result?.saved,
+        });
+      })
       .catch((error) => {
         if (active) setRouteLookup({ key: routeLookupKey, routes: [], error: error.message || "Could not load delivery routes." });
       });
@@ -883,8 +934,10 @@ export function DocumentCreateWizard({
   }, [joyRouteOrderEnabled, routeLookupKey, selectedPartyId, routeDeliveryDate, selectedDeliverySite]);
 
   React.useEffect(() => {
-    if (joyRouteOrderEnabled) form.setValue("warehouse", activeCollectionRoute?.id ?? "");
-  }, [joyRouteOrderEnabled, form, activeCollectionRoute?.id]);
+    if (!joyRouteOrderEnabled) return;
+    if (activeCollectionRoute?.id) form.setValue("warehouse", activeCollectionRoute.id);
+    else if (!isEditMode) form.setValue("warehouse", "");
+  }, [joyRouteOrderEnabled, isEditMode, form, activeCollectionRoute?.id]);
 
 
   React.useEffect(() => {
@@ -941,6 +994,16 @@ export function DocumentCreateWizard({
     editHydratedRef.current = false;
     skipEditAutosaveRef.current = true;
     const doc = existingDocument;
+    editRouteHoldRef.current = doc.warehouseId?.trim() || null;
+    setRouteSelection(undefined);
+    setDeliveryDateOverride(doc.joyRoute?.deliveryDate?.slice(0, 10));
+    setRouteSourceStoreId(doc.sourceWarehouseId ?? "");
+    setRouteTillChoice(doc.joyRoute?.tillNumber ?? "");
+    setRouteSalesRep(
+      doc.joyRoute?.salesRepId && doc.joyRoute.salesRep
+        ? { id: doc.joyRoute.salesRepId, name: doc.joyRoute.salesRep, phone: doc.joyRoute.salesRepPhone }
+        : null,
+    );
     setRepriceExistingRevision(0);
     previousPricingParty.current = doc.partyId ?? "";
     allowLeaveRef.current = false;
@@ -1601,15 +1664,17 @@ export function DocumentCreateWizard({
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
-        warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
-        ...(joyRouteOrderEnabled && activeCollectionRoute ? {
+        warehouseId: joyRouteOrderEnabled
+          ? (activeCollectionRoute?.id || (isEditMode ? form.getValues("warehouse") || undefined : undefined))
+          : form.getValues("warehouse") || undefined,
+        ...(joyRouteOrderEnabled && routeReadyForSave && (activeCollectionRoute?.id || form.getValues("warehouse")) ? {
           joyRouteOrder: {
             deliveryDate: routeDeliveryDate,
             ...(routeSalesRep ? { salesRepId: routeSalesRep.id } : {}),
             ...(routeTill ? { tillNumber: routeTill } : {}),
           },
         } : {}),
-        ...(joyRouteOrderEnabled && routeSourceStoreId ? { sourceWarehouseId: routeSourceStoreId } : {}),
+        ...(joyRouteOrderEnabled && (isEditMode || routeSourceStoreId) ? { sourceWarehouseId: routeSourceStoreId } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1694,7 +1759,9 @@ export function DocumentCreateWizard({
       hasDeliverySiteChange,
       selectedDeliverySite,
       joyRouteOrderEnabled,
+      isEditMode,
       activeCollectionRoute,
+      routeReadyForSave,
       routeSalesRep,
       routeTill,
       routeDeliveryDate,
@@ -2943,7 +3010,10 @@ export function DocumentCreateWizard({
                   routes={availableDeliveryRoutes}
                   route={activeCollectionRoute}
                   savedRoute={activeRouteLookup?.saved}
-                  onRouteChange={(routeId) => setRouteSelection({ key: routeLookupKey, routeId })}
+                  onRouteChange={(routeId) => {
+                    editRouteHoldRef.current = null;
+                    setRouteSelection({ key: routeLookupKey, routeId });
+                  }}
                   salesRep={routeSalesRep}
                   onSalesRepChange={setRouteSalesRep}
                   tillNumber={routeTill}
@@ -2953,6 +3023,7 @@ export function DocumentCreateWizard({
                   onSourceStoreChange={setRouteSourceStoreId}
                   dispatchStoreLabel={routeDispatchStore?.label ?? "DISPATCH"}
                   hasCustomer={!!selectedPartyId}
+                  captions={!isEditMode}
                   loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
                   error={activeRouteLookup?.error}
                 />

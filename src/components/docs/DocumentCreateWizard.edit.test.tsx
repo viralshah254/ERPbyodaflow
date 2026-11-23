@@ -18,8 +18,8 @@ vi.mock("@/lib/api/joy-route-orders", async (original) => ({
   fetchJoyOrderRoute: vi.fn(),
 }));
 vi.mock("@/components/ui/async-searchable-select", () => ({
-  AsyncSearchableSelect: ({ id, value, onValueChange, placeholder, loadOptions, reloadToken }: {
-    id?: string; value?: string; onValueChange: (id: string) => void; placeholder: string; reloadToken?: unknown;
+  AsyncSearchableSelect: ({ id, value, onValueChange, placeholder, loadOptions, reloadToken, disabled }: {
+    id?: string; value?: string; onValueChange: (id: string) => void; placeholder: string; reloadToken?: unknown; disabled?: boolean;
     loadOptions?: (query: string) => Promise<Array<{ id: string; label: string }> | { options: Array<{ id: string; label: string }> }>;
   }) => {
     const [options, setOptions] = React.useState<Array<{ id: string; label: string }>>([]);
@@ -31,7 +31,7 @@ vi.mock("@/components/ui/async-searchable-select", () => ({
       return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reloadToken]);
-    return <select id={id} aria-label={placeholder} value={value ?? ""} onChange={(event) => onValueChange(event.target.value)}>
+    return <select id={id} aria-label={placeholder} disabled={disabled} value={value ?? ""} onChange={(event) => onValueChange(event.target.value)}>
       <option value="">Choose</option><option value="customer">Synthetic QA customer</option>
       {options.filter((option) => option.id !== "customer").map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
     </select>;
@@ -166,16 +166,67 @@ it("changes price and VAT tags locally without changing customer defaults or aut
 it("keeps a Joy sales order on the header until a delivery warehouse is selected", async () => {
   render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{ ...doc("sales-order"), warehouseId: "" }} />);
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
-  const routeWarehouse = screen.getByText(/Route warehouse/);
-  const branch = screen.getByText("Branch");
-  expect(routeWarehouse.compareDocumentPosition(branch) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(screen.getByText("This store is the route the order is delivered on.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Delivery date")).toBeInTheDocument();
+  expect(screen.getByLabelText("Route warehouse")).toBeInTheDocument();
+  expect(screen.getByLabelText("Pick from store")).toBeInTheDocument();
+  expect(screen.getByLabelText("Sales rep")).toBeInTheDocument();
+  expect(screen.getByLabelText("M-Pesa till")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
-  expect(await screen.findByText("Select the route warehouse. That store is the route this order is going to.")).toBeInTheDocument();
   expect(screen.getByText(/Step 1 of 3/)).toBeInTheDocument();
   expect(screen.queryByTestId("edit-sheet")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Review & Submit" }));
   expect(screen.getByText(/Step 1 of 3/)).toBeInTheDocument();
+  expect(screen.queryByTestId("edit-sheet")).not.toBeInTheDocument();
+});
+
+it("shows the saved pick-from store on a Joy order and saves a change", async () => {
+  vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
+    { id: "legacy", label: "Existing route" },
+    { id: "fg", label: "FG - Finished Goods" },
+    { id: "cold", label: "Cold store" },
+    { id: "dispatch", label: "DISPATCH - Dispatch" },
+  ]);
+  vi.mocked(fetchJoyOrderRoute).mockResolvedValueOnce({
+    routes: [{ id: "legacy", name: "Existing route", collectors: [{ salesRepId: "sfa-ann", salesRep: "Ann Wanjiku", tillNumber: "501001" }] }],
+    defaultRouteId: "other-day",
+    saved: true,
+  });
+  render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{
+    ...doc("sales-order"),
+    warehouseId: "legacy",
+    sourceWarehouseId: "fg",
+    joyRoute: {
+      deliveryDate: "2026-11-16",
+      routeName: "Existing route",
+      routeWarehouseId: "legacy",
+      salesRepId: "sfa-ann",
+      salesRep: "Ann Wanjiku",
+      tillNumber: "501001",
+    },
+  }} />);
+  expect(await screen.findByLabelText("Delivery date")).toHaveValue("2026-11-16");
+  const route = screen.getByLabelText("Route warehouse");
+  await waitFor(() => expect(route).toHaveValue("legacy"));
+  expect(route).toBeEnabled();
+  expect(screen.queryByText("This order keeps its delivery route. You can still change the store it is picked from.")).not.toBeInTheDocument();
+  expect(screen.queryByText("The whole order is picked from this store when its route is loaded.")).not.toBeInTheDocument();
+  expect(screen.queryByText("From OdaFlow SFA. Optional. You can add or change it later here or on the loader note.")).not.toBeInTheDocument();
+  const source = screen.getByLabelText("Pick from store");
+  await waitFor(() => expect(source).toHaveValue("fg"));
+  expect(screen.getByLabelText("M-Pesa till")).toHaveDisplayValue("501001");
+  fireEvent.change(source, { target: { value: "cold" } });
+  expect(source).toHaveValue("cold");
+  fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
+  await screen.findByTestId("edit-sheet");
+  const review = screen.getAllByRole("button", { name: "Review & Submit" });
+  fireEvent.click(review[review.length - 1]);
+  fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
+  expect(patchDocumentApi).toHaveBeenCalledWith("sales-order", "synthetic-doc", expect.objectContaining({
+    warehouseId: "legacy",
+    sourceWarehouseId: "cold",
+    joyRouteOrder: { deliveryDate: "2026-11-16", salesRepId: "sfa-ann", tillNumber: "501001" },
+  }));
 });
 
 it("does not ask other organisations for a delivery warehouse on a sales order", async () => {

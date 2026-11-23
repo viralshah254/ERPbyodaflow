@@ -35,10 +35,12 @@ export function JoyOrderRouteFields(props: {
   loading: boolean;
   error?: string;
   hasCustomer: boolean;
+  /** Edit hides the standing explanations under the fields. */
+  captions?: boolean;
 }) {
   const {
     date, onDateChange, routes, route, savedRoute, onRouteChange, salesRep, onSalesRepChange, tillNumber, onTillChange,
-    sourceStores, sourceStoreId, onSourceStoreChange, dispatchStoreLabel, loading, error, hasCustomer,
+    sourceStores, sourceStoreId, onSourceStoreChange, dispatchStoreLabel, loading, error, hasCustomer, captions = true,
   } = props;
   const tills = [...new Set(route?.collectors.map((row) => row.tillNumber).filter(Boolean))];
 
@@ -83,13 +85,15 @@ export function JoyOrderRouteFields(props: {
           wrapLabels
           minDropdownWidth={300}
         />
-        <p className="text-xs text-muted-foreground">
-          {loading ? "Loading delivery routes…" : error ? error : !hasCustomer ? "Choose a customer first." : !date ? "Choose a delivery date."
-            : !routes.length ? "Create a route store to continue."
-              : route && !route.collectors.length ? "This route has no till configured. You can still save the order."
-                : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
-                : "The first route you save for this outlet and weekday becomes its default."}
-        </p>
+        {captions ? (
+          <p className="text-xs text-muted-foreground">
+            {loading ? "Loading delivery routes…" : error ? error : !hasCustomer ? "Choose a customer first." : !date ? "Choose a delivery date."
+              : !routes.length ? "Create a route store to continue."
+                : route && !route.collectors.length ? "This route has no till configured. You can still save the order."
+                  : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
+                  : "The first route you save for this outlet and weekday becomes its default."}
+          </p>
+        ) : error ? <p className="text-xs text-destructive">{error}</p> : null}
       </div>
       <div className="space-y-1">
         <Label htmlFor="joy-source-store">Pick from store</Label>
@@ -107,15 +111,17 @@ export function JoyOrderRouteFields(props: {
           wrapLabels
           minDropdownWidth={300}
         />
-        <p className="text-xs text-muted-foreground">
-          The whole order is picked from this store when its route is loaded.
-        </p>
+        {captions ? (
+          <p className="text-xs text-muted-foreground">
+            The whole order is picked from this store when its route is loaded.
+          </p>
+        ) : null}
       </div>
       <div className="hidden sm:block" aria-hidden />
       <div className="space-y-1">
         <Label htmlFor="joy-sales-rep">Sales rep</Label>
         <SfaSalesRepSelect id="joy-sales-rep" value={salesRep} onChange={onSalesRepChange} disabled={!route} />
-        <p className="text-xs text-muted-foreground">From OdaFlow SFA. Optional. You can add or change it later here or on the loader note.</p>
+        {captions ? <p className="text-xs text-muted-foreground">From OdaFlow SFA. Optional. You can add or change it later here or on the loader note.</p> : null}
       </div>
       <div className="space-y-1">
         <Label htmlFor="joy-till-number">M-Pesa till</Label>
