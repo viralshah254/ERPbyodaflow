@@ -468,7 +468,6 @@ function WaitingRouteCard({
             <div className="w-full max-w-md space-y-1">
               <Label htmlFor={`load-reps-${route.warehouseId}`}>Sales reps</Label>
               <SfaSalesRepsField id={`load-reps-${route.warehouseId}`} value={salesReps} onChange={setSalesReps} disabled={busy} />
-              <p className="text-xs text-muted-foreground">From OdaFlow SFA. Reps on these orders are already listed.</p>
             </div>
             <div className="w-56 space-y-1">
               <Label>Truck</Label>
