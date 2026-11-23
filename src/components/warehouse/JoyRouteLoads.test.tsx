@@ -1,5 +1,6 @@
 import React from "react";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { JoyLoaderNote, JoyRouteLoads } from "./JoyRouteLoads";
 
@@ -10,6 +11,8 @@ const api = vi.hoisted(() => ({
   waiting: [] as Array<{
     warehouseId: string;
     warehouseName: string;
+    sourceWarehouseId?: string;
+    sourceWarehouseName?: string;
     orderCount: number;
     orders: Array<{ id: string; number: string; customerName: string; branchName: string; orderedAt?: string; lines: [] }>;
     products: Array<{ productId: string; sku?: string; name: string; orderedQty: number }>;
@@ -32,7 +35,10 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
     trucks: api.trucks,
     busyTrucks: [],
     dispatchWarehouseName: "DISPATCH - DISPATCH WAREHOUSE",
+    dispatchWarehouseId: "dispatch-1",
+    stores: [{ id: "dispatch-1", name: "DISPATCH - DISPATCH WAREHOUSE" }],
   }),
+  setJoyRouteSourceStore: vi.fn().mockResolvedValue({ moved: 1 }),
   allocateJoyLoad: (...args: unknown[]) => api.allocate(...args),
   createJoyLoadNote: (...args: unknown[]) => api.create(...args),
 }));
@@ -291,17 +297,22 @@ it("starts a route's loader note with the reps on its orders and sends them when
   api.waiting = [{
     warehouseId: "meru",
     warehouseName: "MERU - EMBU",
+    sourceWarehouseId: "dispatch-1",
+    sourceWarehouseName: "DISPATCH - DISPATCH WAREHOUSE",
     orderCount: 1,
     orders: [{ id: "so-2", number: "500013", customerName: "Shop", branchName: "", lines: [] }],
     products: [{ productId: "p2", sku: "1", name: "JOY QUEEN CAKES 4PCS (135 GMS)", orderedQty: 12 }],
     salesReps: [{ id: "sfa-ann", name: "Ann Wanjiku", phone: "+254711000001" }, { id: "sfa-ben", name: "Ben Otieno" }],
   }];
   api.create.mockResolvedValue({ id: "note-1", number: "LN-1", truck: "KDA 123A" });
+  const user = userEvent.setup();
   render(<JoyRouteLoads />);
   const reps = await screen.findByRole("list", { name: "Chosen sales reps" });
   expect(reps).toHaveTextContent("Ann Wanjiku");
   fireEvent.click(screen.getByRole("button", { name: "Remove Ben Otieno" }));
-  fireEvent.change(screen.getByDisplayValue("Choose a truck"), { target: { value: "KDA 123A" } });
+  await user.click(document.getElementById("load-truck-meru")!);
+  await waitFor(() => expect(screen.getByRole("button", { name: "KDA 123A" })).toBeVisible());
+  await user.click(screen.getByRole("button", { name: "KDA 123A" }));
   fireEvent.click(screen.getByRole("button", { name: "Create loading note" }));
   await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
     warehouseId: "meru", truck: "KDA 123A", salesRepIds: ["sfa-ann"],
