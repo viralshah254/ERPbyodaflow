@@ -203,10 +203,13 @@ export default function BomDetailPage() {
   }, [bom, canWrite, startEditing, router, id]);
 
   const afterSave = React.useCallback((updated: ManufacturingBom) => {
+    if (updated.id !== id) {
+      router.replace(`/manufacturing/boms/${encodeURIComponent(updated.id)}`);
+    }
     setBom(updated);
     setEditing(false);
     void loadHistory();
-  }, [loadHistory]);
+  }, [id, router, loadHistory]);
 
   async function runAction(action: () => Promise<void>) {
     setBusy(true);
@@ -294,7 +297,6 @@ export default function BomDetailPage() {
   const names = namesFromHistory(history, Object.fromEntries(bom.items.map((item) => [item.productId, item.productName ?? item.productSku ?? item.productId])));
   const currentRevision = history?.revisions.find((revision) => revision.isCurrent);
   const liveSibling = history?.otherRecords.find((record) => record.isActive && !record.pendingDraft);
-  const pendingDrafts = bakery && state !== "draft" ? (history?.otherRecords ?? []).filter((record) => record.pendingDraft) : [];
   const versionNo = currentRevision?.revisionNo ?? bom.revisionNo;
   const lastChanged = bom.updatedAt ? new Date(bom.updatedAt) : null;
   const optionalCount = bom.items.filter((item) => item.isOptional).length;
@@ -376,25 +378,6 @@ export default function BomDetailPage() {
         }
       />
       <div className="space-y-5 p-4 sm:p-6">
-        {bakery && state === "draft" && (
-          <Banner
-            tone="amber"
-            icon={Icons.FilePen}
-            title={liveSibling ? "Draft not yet used for production" : "This recipe is not used for production yet"}
-            actions={canWrite && (
-              <>
-                <Button size="sm" disabled={busy} onClick={() => setConfirmApply({ id: bom.id, label: liveSibling ? `Apply to ${liveSibling.code ?? liveSibling.name}` : "Start using this recipe" })}>
-                  <Icons.Check className="mr-1.5 size-4" />{liveSibling ? "Apply to live recipe" : "Start using it"}
-                </Button>
-                {liveSibling && <Button size="sm" variant="outline" asChild><Link href={`/manufacturing/boms/${encodeURIComponent(liveSibling.id)}`}>Open live recipe</Link></Button>}
-              </>
-            )}
-          >
-            {liveSibling
-              ? <>This draft was saved under the old approval process. Apply it and its ingredients become the next version of {liveSibling.code ?? liveSibling.name}; nothing is lost.</>
-              : <>Check the ingredients, then start using it. Later changes are saved as versions on this recipe.</>}
-          </Banner>
-        )}
         {state === "earlier" && (
           <Banner
             tone="muted"
@@ -410,23 +393,6 @@ export default function BomDetailPage() {
             Kept for reference. Batches made with it keep their own record. {bakery ? "To bring it back, use this copy; it is saved onto the live recipe as a new version." : ""}
           </Banner>
         )}
-        {pendingDrafts.length > 0 && (
-          <Banner tone="primary" icon={Icons.GitMerge} title={`${pendingDrafts.length} unapplied draft${pendingDrafts.length === 1 ? "" : "s"} from the old approval process`}>
-            <ul className="mt-2 space-y-1.5">
-              {pendingDrafts.map((draft) => (
-                <li key={draft.id} className="flex flex-wrap items-center gap-2">
-                  <span className="font-medium text-foreground">{draft.code ?? draft.name}</span>
-                  <span className="text-xs">{draft.componentCount} ingredients{draft.updatedAt ? ` · saved ${formatDistanceToNow(new Date(draft.updatedAt), { addSuffix: true })}` : ""}</span>
-                  <span className="ml-auto flex gap-1.5">
-                    <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" asChild><Link href={`/manufacturing/boms/${encodeURIComponent(draft.id)}`}>Review</Link></Button>
-                    {canWrite && <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs" disabled={busy} onClick={() => setConfirmApply({ id: draft.id, label: `Apply ${draft.code ?? "draft"}` })}>Apply</Button>}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </Banner>
-        )}
-
         <div data-bom-summary className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Stat icon={Icons.Package} label="Makes" hint={productLabel}>
             {formatQty(bom.quantity)} <span className="text-sm font-normal text-muted-foreground">{bom.uom}</span>
