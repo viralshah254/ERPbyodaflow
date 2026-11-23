@@ -277,6 +277,23 @@ export function BomComponentEditor({
   const fmcgOrg = (FMCG_SELLING_TEMPLATE_IDS as readonly string[]).includes(canonicalIndustryTemplateId(templateId));
   const savedRef = React.useRef(savedItems);
   savedRef.current = savedItems;
+  const savedFingerprint = React.useMemo(
+    () =>
+      JSON.stringify(
+        savedItems.map((item) => [
+          item.id,
+          item.productId,
+          item.quantity,
+          item.uom,
+          item.unitCost,
+          item.warehouseId,
+          item.isOptional,
+          item.scrapFactor,
+          item.scrapFactorMode,
+        ]),
+      ),
+    [savedItems],
+  );
   const baselineRef = React.useRef("");
   const hydratedRef = React.useRef(false);
   const draftActiveRef = React.useRef(false);
@@ -349,6 +366,30 @@ export function BomComponentEditor({
       cancelled = true;
     };
   }, [bomId, canWrite]);
+
+  /** Restore or save elsewhere: show the server recipe when the user is not actively editing. */
+  React.useEffect(() => {
+    if (!hydrated) return;
+    const serverLines = savedItems.map(toDraftLine);
+    const nextBaseline = JSON.stringify(serverLines);
+    if (nextBaseline === baselineRef.current) return;
+    let applied = false;
+    setLines((current) => {
+      const locallyDirty = JSON.stringify(current) !== baselineRef.current;
+      if (locallyDirty && canWrite) return current;
+      applied = true;
+      return serverLines;
+    });
+    if (!applied) return;
+    baselineRef.current = nextBaseline;
+    draftGenRef.current += 1;
+    draftActiveRef.current = false;
+    setDraftSavedAt(null);
+    setDraftStatus("idle");
+    setChangeNote("");
+    clearLocalDraft(bomId);
+    if (isApiConfigured()) void deleteDocumentDraftApi(draftType(bomId)).catch(() => {});
+  }, [savedFingerprint, hydrated, canWrite, bomId, savedItems]);
 
   const linesDirty = hydrated && JSON.stringify(lines) !== baselineRef.current;
   const dirty = linesDirty || Boolean(extraChanges?.length);
@@ -638,13 +679,13 @@ export function BomComponentEditor({
         <TableHeader>
           <TableRow>
             <TableHead>Product</TableHead>
-            <TableHead className="min-w-[9.5rem] w-[9.5rem]">Qty</TableHead>
+            <TableHead className="min-w-[8.5rem] w-[8.5rem]">Qty</TableHead>
             <TableHead className="w-36">UOM</TableHead>
             <TableHead className="w-32">Cost / unit (excl. VAT)</TableHead>
             <TableHead className="w-28 text-right">Line cost</TableHead>
             <TableHead className="min-w-44">Input store</TableHead>
             <TableHead className="w-24">Optional</TableHead>
-            <TableHead className="w-24">Scrap %</TableHead>
+            <TableHead className="min-w-[5.5rem] w-[5.5rem]">Scrap %</TableHead>
             <TableHead className="w-12" />
           </TableRow>
         </TableHeader>
@@ -678,10 +719,10 @@ export function BomComponentEditor({
                       </span>
                     </span>
                   </TableCell>
-                  <TableCell className="min-w-[9.5rem] align-top">
+                  <TableCell className="min-w-[8.5rem] w-[8.5rem] align-top">
                     {canWrite ? (
                       <Input
-                        className="h-8 w-full min-w-[8.5rem] tabular-nums text-sm"
+                        className="h-8 w-full min-w-0 tabular-nums text-sm"
                         inputMode="decimal"
                         aria-label={`Quantity for ${line.productName ?? line.productSku ?? "component"}`}
                         value={line.quantity}
@@ -756,10 +797,10 @@ export function BomComponentEditor({
                       line.isOptional ? "Yes" : "No"
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-[5.5rem] w-[5.5rem]">
                     {canWrite ? (
                       <Input
-                        className="h-8 tabular-nums"
+                        className="h-8 w-full min-w-0 tabular-nums"
                         inputMode="decimal"
                         aria-label={`Scrap percent for ${line.productName ?? "component"}`}
                         placeholder="0"
@@ -810,7 +851,7 @@ export function BomComponentEditor({
           {pendingChanges.length > 0 ? (
             <div className="space-y-1.5">
               <p className="text-xs font-medium text-muted-foreground">Will be saved as version {versioned.nextVersion}</p>
-              <ChangeChips changes={pendingChanges} names={lineNames} limit={8} />
+              <ChangeChips changes={pendingChanges} names={lineNames} limit={6} />
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">Add, remove or change ingredients. Nothing is saved until you choose Save.</p>

@@ -227,6 +227,10 @@ export default function BomDetailPage() {
     const updated = await restoreRecipeRevision(bom.id, revisionNo);
     setBom(updated);
     setEditing(false);
+    setNameDraft(updated.name);
+    setQuantityDraft(String(updated.quantity));
+    setUomDraft(updated.uom);
+    setHistoryOpen(false);
     toast.success(updated.revisionNo ? `Version ${revisionNo} restored. Production now uses it as version ${updated.revisionNo}.` : `Version ${revisionNo} restored.`);
     await loadHistory();
   });
@@ -427,7 +431,7 @@ export default function BomDetailPage() {
         {!editing && currentRevision && currentRevision.changes.length > 0 && history?.historyStarted && (
           <div className="flex flex-col gap-2 rounded-xl border bg-card/60 px-4 py-3 sm:flex-row sm:items-center">
             <p className="shrink-0 text-xs font-medium text-muted-foreground">Latest change</p>
-            <ChangeChips changes={currentRevision.changes} names={names} limit={5} className="min-w-0 flex-1" />
+            <ChangeChips changes={currentRevision.changes} names={names} limit={4} className="min-w-0 flex-1" />
             <Button variant="link" size="sm" className="h-auto shrink-0 p-0 text-xs" onClick={() => setHistoryOpen(true)}>Full history →</Button>
           </div>
         )}
