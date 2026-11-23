@@ -3034,7 +3034,6 @@ export function DocumentCreateWizard({
                 </p>
               ) : null}
               <div className="border-t pt-4 mt-4">
-                <h4 className="text-sm font-medium mb-3">Currency</h4>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <div className="flex items-center gap-1">

@@ -111,17 +111,11 @@ export function JoyOrderRouteFields(props: {
           wrapLabels
           minDropdownWidth={300}
         />
-        {captions ? (
-          <p className="text-xs text-muted-foreground">
-            The whole order is picked from this store when its route is loaded.
-          </p>
-        ) : null}
       </div>
       <div className="hidden sm:block" aria-hidden />
       <div className="space-y-1">
         <Label htmlFor="joy-sales-rep">Sales rep</Label>
         <SfaSalesRepSelect id="joy-sales-rep" value={salesRep} onChange={onSalesRepChange} disabled={!route} />
-        {captions ? <p className="text-xs text-muted-foreground">From OdaFlow SFA. Optional. You can add or change it later here or on the loader note.</p> : null}
       </div>
       <div className="space-y-1">
         <Label htmlFor="joy-till-number">M-Pesa till</Label>

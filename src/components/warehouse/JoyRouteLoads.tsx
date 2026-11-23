@@ -21,6 +21,7 @@ import {
   markJoyLoadDeparted,
   recordJoyLoaded,
   setJoyLoadSalesReps,
+  setJoyRouteSourceStore,
   type JoyLoadDocumentPlan,
   type JoyLoadNote,
   type JoyLoadNotes,
@@ -411,21 +412,29 @@ function WaitingRouteCard({
   busyTrucks,
   canLoad,
   dispatchName,
+  dispatchId,
+  stores,
   activeNote,
   focused,
+  onChanged,
 }: {
   route: JoyWaitingRoute;
   trucks: string[];
   busyTrucks: string[];
   canLoad: boolean;
   dispatchName: string;
+  dispatchId?: string;
+  stores: Array<{ id: string; name: string }>;
   activeNote?: JoyLoadNote;
   focused?: boolean;
+  onChanged: () => Promise<void>;
 }) {
   const router = useRouter();
   const [truck, setTruck] = React.useState("");
   const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
+  const pickFrom = route.sourceWarehouseId && route.sourceWarehouseId !== dispatchId ? route.sourceWarehouseId : "";
+  const pickStores = stores.filter((store) => store.id !== dispatchId && store.id !== route.warehouseId);
   return (
     <Card id={`route-${route.warehouseId}`} className={focused ? "min-w-0 ring-2 ring-primary" : "min-w-0"}>
       <CardHeader className="space-y-1">
@@ -468,7 +477,32 @@ function WaitingRouteCard({
             <div className="w-full max-w-md space-y-1">
               <Label htmlFor={`load-reps-${route.warehouseId}`}>Sales reps</Label>
               <SfaSalesRepsField id={`load-reps-${route.warehouseId}`} value={salesReps} onChange={setSalesReps} disabled={busy} />
-              <p className="text-xs text-muted-foreground">From OdaFlow SFA. Reps on these orders are already listed.</p>
+            </div>
+            <div className="w-56 space-y-1">
+              <Label htmlFor={`load-store-${route.warehouseId}-${pickFrom}`}>Pick from</Label>
+              <select
+                id={`load-store-${route.warehouseId}-${pickFrom}`}
+                className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
+                value={pickFrom}
+                disabled={busy}
+                onChange={(event) => {
+                  const toWarehouseId = event.target.value;
+                  setBusy(true);
+                  void setJoyRouteSourceStore({ warehouseId: route.warehouseId, sourceWarehouseId: route.sourceWarehouseId, toWarehouseId })
+                    .then(async () => {
+                      const name = pickStores.find((store) => store.id === toWarehouseId)?.name ?? dispatchName;
+                      toast.success(`${route.orderCount} order${route.orderCount === 1 ? "" : "s"} now picked from ${placeLabel(name)}.`);
+                      await onChanged();
+                    })
+                    .catch((error) => toast.error(errorMessage(error, "Could not change the pick store")))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <option value="">{placeLabel(dispatchName)}</option>
+                {pickStores.map((store) => (
+                  <option key={store.id} value={store.id}>{placeLabel(store.name)}</option>
+                ))}
+              </select>
             </div>
             <div className="w-56 space-y-1">
               <Label>Truck</Label>
@@ -1332,6 +1366,9 @@ function JoyRouteLoadsInner() {
                 busyTrucks={data.busyTrucks}
                 canLoad={canLoad}
                 dispatchName={data.dispatchWarehouseName}
+                dispatchId={data.dispatchWarehouseId}
+                stores={data.stores ?? []}
+                onChanged={reload}
                 focused={route.warehouseId === focusWarehouse}
                 activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
                   (!route.sourceWarehouseId || !note.fulfilmentWarehouseId || note.fulfilmentWarehouseId === route.sourceWarehouseId) &&

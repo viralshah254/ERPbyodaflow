@@ -375,12 +375,15 @@ export async function fetchArCustomersApi(search?: string): Promise<Array<{ id: 
 }
 
 /** Receive payment: unpaid customers first, soonest due day, then the larger balance. */
+const RECEIPT_CUSTOMER_LIMIT = 50;
+
 export async function searchReceiptCustomerOptionsApi(search?: string): Promise<PartyLookupOption[]> {
   requireLiveApi("AR customer lookup");
   const params = new URLSearchParams();
   const trimmed = search?.trim() ?? "";
   if (trimmed) params.set("search", trimmed);
   else params.set("owing", "1");
+  params.set("limit", String(RECEIPT_CUSTOMER_LIMIT));
   const payload = await apiRequest<{ items: BackendPartyOption[] }>("/api/ar/customers", { params });
   const rows = payload.items.map((item) => {
     const balance = item.outstandingBalance ?? 0;
