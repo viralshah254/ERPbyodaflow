@@ -15,7 +15,7 @@ const api = vi.hoisted(() => ({
     sourceWarehouseName?: string;
     orderCount: number;
     orders: Array<{ id: string; number: string; customerName: string; branchName: string; orderedAt?: string; lines: [] }>;
-    products: Array<{ productId: string; sku?: string; name: string; orderedQty: number }>;
+    products: Array<{ productId: string; sku?: string; name: string; orderedQty: number; availableQty?: number; shortQty?: number }>;
     salesReps?: Array<{ id: string; name: string; phone?: string }>;
   }>,
   notes: [] as Array<Record<string, unknown>>,
@@ -317,4 +317,29 @@ it("starts a route's loader note with the reps on its orders and sends them when
   await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
     warehouseId: "meru", truck: "KDA 123A", salesRepIds: ["sfa-ann"],
   })));
+});
+
+it("flags short products in the pick store and blocks the loading note", async () => {
+  access.write = true;
+  api.trucks = ["KDA 123A"];
+  api.waiting = [{
+    warehouseId: "meru",
+    warehouseName: "MERU - EMBU",
+    sourceWarehouseId: "dispatch-1",
+    sourceWarehouseName: "DISPATCH - DISPATCH WAREHOUSE",
+    orderCount: 1,
+    orders: [{ id: "so-2", number: "500013", customerName: "Shop", branchName: "", lines: [] }],
+    products: [
+      { productId: "p1", sku: "7", name: "JOY MUFFINS CHOCO", orderedQty: 10, availableQty: 4, shortQty: 6 },
+      { productId: "p2", sku: "1", name: "JOY QUEEN CAKES", orderedQty: 1 },
+    ],
+  }];
+  const user = userEvent.setup();
+  render(<JoyRouteLoads />);
+  expect(await screen.findByText("Not enough stock: 4 available, short 6")).toBeVisible();
+  expect(screen.getByRole("alert")).toHaveTextContent("short on 1 product");
+  await user.click(document.getElementById("load-truck-meru")!);
+  await user.click(await screen.findByRole("button", { name: "KDA 123A" }));
+  expect(screen.getByRole("button", { name: "Create loading note" })).toBeDisabled();
+  expect(api.create).not.toHaveBeenCalled();
 });

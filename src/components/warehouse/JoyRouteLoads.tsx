@@ -434,6 +434,7 @@ function WaitingRouteCard({
   const [truck, setTruck] = React.useState("");
   const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
+  const shortCount = route.products.filter((product) => (product.shortQty ?? 0) > 0.0001).length;
   const pickStoreId = route.sourceWarehouseId || dispatchId || "";
   const pickStoreOptions = React.useMemo(() => {
     const byId = new Map<string, AsyncSearchableSelectOption>();
@@ -499,16 +500,35 @@ function WaitingRouteCard({
               </tr>
             </thead>
             <tbody>
-              {route.products.map((product) => (
-                <tr key={product.productId} className="border-t">
-                  <td className="py-1 pr-3 align-top">{product.sku ?? ""}</td>
-                  <td className={`break-words py-1 pr-3 align-top ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
-                  <td className="py-1 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
-                </tr>
-              ))}
+              {route.products.map((product) => {
+                const short = (product.shortQty ?? 0) > 0.0001;
+                return (
+                  <tr
+                    key={product.productId}
+                    className={short ? "outline outline-1 -outline-offset-1 outline-red-500 bg-red-500/10" : "border-t"}
+                  >
+                    <td className="py-1 pl-1 pr-3 align-top">{product.sku ?? ""}</td>
+                    <td className={`break-words py-1 pr-3 align-top ${CAPS_ON_PRODUCT_CLASS}`}>
+                      {product.name}
+                      {short ? (
+                        <span className="mt-0.5 block text-xs font-medium normal-case text-red-600 dark:text-red-400">
+                          Not enough stock: {product.availableQty ?? 0} available, short {product.shortQty}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-1 pr-1 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+        {shortCount > 0 && !activeNote ? (
+          <p role="alert" className="rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
+            {placeLabel(route.sourceWarehouseName || dispatchName)} is short on {shortCount} product{shortCount === 1 ? "" : "s"}.
+            Update the stock or pick from another store before creating the loading note.
+          </p>
+        ) : null}
         {activeNote ? (
           <p className="rounded-md border bg-muted/50 p-3 text-sm">
             Waiting for {activeNote.number} to clear.{" "}
@@ -582,7 +602,7 @@ function WaitingRouteCard({
               />
             </div>
             <Button
-              disabled={!truck || busy}
+              disabled={!truck || busy || shortCount > 0}
               onClick={() => {
                 setBusy(true);
                 void createJoyLoadNote({

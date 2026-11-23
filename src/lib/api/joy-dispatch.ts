@@ -145,7 +145,10 @@ export type JoyRouteOrder = {
   orderedAt?: string;
   lines: JoyRouteOrderLine[];
 };
-export type JoyRouteProduct = { productId: string; sku?: string; name: string; unit?: string; orderedQty: number };
+/** `availableQty` and `shortQty` are set only when the pick store cannot cover the orders. */
+export type JoyRouteProduct = {
+  productId: string; sku?: string; name: string; unit?: string; orderedQty: number; availableQty?: number; shortQty?: number;
+};
 export type JoyWaitingRoute = {
   warehouseId: string;
   warehouseName: string;
