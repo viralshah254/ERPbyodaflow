@@ -131,6 +131,21 @@ function stockLevelQueryParams(filters?: FetchStockLevelsPageOpts): URLSearchPar
   return params;
 }
 
+export type StockShortLine = { productId: string; need: number; available: number };
+
+/** Products the store cannot cover for these quantities. Empty when everything is in stock. */
+export async function checkStockApi(
+  warehouseId: string,
+  lines: Array<{ productId: string; quantity: number }>,
+): Promise<StockShortLine[]> {
+  requireLiveApi("Stock check");
+  const data = await apiRequest<{ short?: StockShortLine[] }>("/api/inventory/stock-check", {
+    method: "POST",
+    body: { warehouseId, lines },
+  });
+  return data.short ?? [];
+}
+
 export async function fetchStockLevelsPageApi(
   filters?: FetchStockLevelsPageOpts,
 ): Promise<FetchStockLevelsPageResult> {

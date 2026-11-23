@@ -7,6 +7,7 @@ import { fetchJoyOrderRoute } from "@/lib/api/joy-route-orders";
 import { patchDocumentApi, previewDocumentPostingApi } from "@/lib/api/documents";
 import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import type { DocumentDetailRecord } from "@/lib/types/documents";
+import { checkStockApi } from "@/lib/api/inventory-stock";
 const state = vi.hoisted(() => ({ push: vi.fn(), orgId: "org-sfa-6a890b7765042fb41c9d89a6", lineByLine: false, defaults: vi.fn(), taxDefaults: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/stores/auth-store", () => ({ useAuthStore: (selector: any) => selector({ org: { orgId: state.orgId } }) }));
@@ -65,6 +66,7 @@ vi.mock("@/lib/api/pricing", () => ({
   resolveCustomerTaxConfigApi: vi.fn().mockResolvedValue({ taxConfigId: "stored-tax", source: "org", config: { id: "stored-tax", rate: 16, taxCodeId: "vat", pricesAreTaxInclusive: true } }),
   setCustomerDefaultPriceList: state.defaults, setCustomerDefaultTaxConfig: state.taxDefaults,
 }));
+vi.mock("@/lib/api/inventory-stock", () => ({ checkStockApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/api/payment-terms", () => ({ fetchPaymentTermsApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/api/customer-categories", () => ({ fetchCustomerCategoriesApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("@/lib/api/financial-taxes", () => ({ fetchFinancialTaxesApi: vi.fn().mockResolvedValue([{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]) }));
@@ -219,6 +221,8 @@ it("shows the saved pick-from store on a Joy order and saves a change", async ()
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
   await screen.findByTestId("edit-sheet");
   const review = screen.getAllByRole("button", { name: "Review & Submit" });
+  await waitFor(() => expect(review[review.length - 1]).toBeEnabled());
+  expect(checkStockApi).toHaveBeenLastCalledWith("cold", [{ productId: "queen", quantity: 2 }]);
   fireEvent.click(review[review.length - 1]);
   fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
@@ -227,6 +231,29 @@ it("shows the saved pick-from store on a Joy order and saves a change", async ()
     sourceWarehouseId: "cold",
     joyRouteOrder: { deliveryDate: "2026-11-16", salesRepId: "sfa-ann", tillNumber: "501001" },
   }));
+});
+
+it("blocks a Joy sales order while the pick store is short and names the short product", async () => {
+  vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
+    { id: "legacy", label: "Existing route" }, { id: "fg", label: "FG - Finished Goods" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
+  ]);
+  vi.mocked(fetchJoyOrderRoute).mockResolvedValueOnce({ routes: [], saved: false });
+  vi.mocked(checkStockApi).mockResolvedValue([{ productId: "queen", need: 2, available: 0 }]);
+  render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{
+    ...doc("sales-order"),
+    warehouseId: "legacy",
+    sourceWarehouseId: "fg",
+  }} />);
+  await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
+  fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
+  await screen.findByTestId("edit-sheet");
+  const alert = await screen.findByRole("alert");
+  expect(alert).toHaveTextContent("FG - Finished Goods does not have enough stock for 1 product");
+  expect(alert).toHaveTextContent("Queen cakes: 0 available, needs 2");
+  expect(checkStockApi).toHaveBeenLastCalledWith("fg", [{ productId: "queen", quantity: 2 }]);
+  const review = screen.getAllByRole("button", { name: "Review & Submit" });
+  expect(review[review.length - 1]).toBeDisabled();
+  vi.mocked(checkStockApi).mockResolvedValue([]);
 });
 
 it("does not ask other organisations for a delivery warehouse on a sales order", async () => {

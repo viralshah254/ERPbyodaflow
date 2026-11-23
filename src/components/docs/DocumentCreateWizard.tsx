@@ -108,6 +108,7 @@ import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteDocumentDraftApi } from "@/lib/api/document-drafts";
 import { isApiConfigured } from "@/lib/api/client";
+import { checkStockApi } from "@/lib/api/inventory-stock";
 import { toast } from "sonner";
 import { QuickAddCustomerSheet } from "@/components/customers/QuickAddCustomerSheet";
 import { CustomerLink } from "@/components/customers/CustomerLink";
@@ -914,6 +915,74 @@ export function DocumentCreateWizard({
     () => (fieldOptions.warehouse ?? []).filter((store) => store.id !== routeDispatchStore?.id),
     [fieldOptions.warehouse, routeDispatchStore?.id],
   );
+
+  /** FMCG sales orders: the store the stock leaves from. Route orders pick from their chosen store, else dispatch. */
+  const stockCheckStoreId = type !== "sales-order" || !fmcgOrg || !isApiConfigured()
+    ? ""
+    : routeDeliveryStore
+      ? (joyRouteOrderEnabled && routeSourceStoreId) || routeDispatchStore?.id || ""
+      : String(watchedWarehouse ?? "").trim();
+  const stockCheckStoreLabel = (fieldOptions.warehouse ?? []).find((store) => store.id === stockCheckStoreId)?.label ?? "the chosen store";
+  const stockCheckLines = React.useMemo(() => {
+    const need = new Map<string, number>();
+    for (const line of billableLines) {
+      if (!line.productId) continue;
+      const qty = Number(line.baseQty) > 0 ? Number(line.baseQty) : Number(line.qty);
+      if (!(qty > 0)) continue;
+      need.set(line.productId, (need.get(line.productId) ?? 0) + qty);
+    }
+    return [...need.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([productId, quantity]) => ({ productId, quantity: Math.round(quantity * 10000) / 10000 }));
+  }, [billableLines]);
+  const stockCheckKey = stockCheckStoreId && stockCheckLines.length
+    ? JSON.stringify([stockCheckStoreId, stockCheckLines])
+    : "";
+  const [stockCheck, setStockCheck] = React.useState<{
+    key: string;
+    short: Record<string, { need: number; available: number }>;
+    error?: string;
+  } | null>(null);
+  React.useEffect(() => {
+    if (!stockCheckKey) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      void checkStockApi(stockCheckStoreId, stockCheckLines)
+        .then((rows) => {
+          if (!live) return;
+          setStockCheck({
+            key: stockCheckKey,
+            short: Object.fromEntries(rows.map((row) => [row.productId, { need: row.need, available: row.available }])),
+          });
+        })
+        .catch((error: unknown) => {
+          if (!live) return;
+          setStockCheck({
+            key: stockCheckKey,
+            short: {},
+            error: error instanceof Error ? error.message : "Could not check stock.",
+          });
+        });
+    }, 350);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockCheckKey]);
+  const stockCheckCurrent = stockCheckKey && stockCheck?.key === stockCheckKey ? stockCheck : null;
+  const stockShortByProductId = stockCheckCurrent?.short;
+  const stockShortCount = stockShortByProductId ? Object.keys(stockShortByProductId).length : 0;
+  /** Blocks saving while the store cannot cover the order, or while the latest check is still running. */
+  const stockBlockReason = !stockCheckKey
+    ? undefined
+    : !stockCheckCurrent
+      ? "Checking stock in the store…"
+      : stockCheckCurrent.error
+        ? `Could not check stock: ${stockCheckCurrent.error}`
+        : stockShortCount > 0
+          ? `${stockCheckStoreLabel} does not have enough stock for ${stockShortCount} product${stockShortCount === 1 ? "" : "s"}. Change the store or update the stock.`
+          : undefined;
 
   React.useEffect(() => {
     if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
@@ -2243,6 +2312,10 @@ export function DocumentCreateWizard({
       setStep(2);
       return;
     }
+    if (stockBlockReason) {
+      toast.error(stockBlockReason);
+      return;
+    }
     if (fmcgOrg && type === "grn") {
       if (!String(form.getValues("party") ?? "").trim()) {
         toast.error("Select the supplier.");
@@ -2648,7 +2721,7 @@ export function DocumentCreateWizard({
 
   const stepAdvanceBlocked =
     (step === 1 && !headerStepReady) ||
-    (step === 2 && (!linesStepReady || !linesOperational));
+    (step === 2 && (!linesStepReady || !linesOperational || Boolean(stockBlockReason)));
   const stepAdvanceBlockReason =
     step === 1 && !headerStepReady
       ? "Loading header fields…"
@@ -2656,7 +2729,9 @@ export function DocumentCreateWizard({
         ? "Loading line items and product catalog…"
         : step === 2 && !linesOperational
           ? linesBlockedMessage("continue")
-          : undefined;
+          : step === 2 && stockBlockReason
+            ? stockBlockReason
+            : undefined;
 
   const formDirty = form.formState.isDirty;
   const partyValue = (form.getValues("party") || "").trim();
@@ -3289,6 +3364,7 @@ export function DocumentCreateWizard({
               onPackagingUpdated={handlePackagingUpdated}
               onCatalogReadyChange={setLineCatalogReady}
               onDocumentProductData={handleDocumentProductData}
+              stockShortByProductId={stockShortByProductId}
               lineColumnLabels={
                 type === "grn"
                   ? {
@@ -3546,6 +3622,20 @@ export function DocumentCreateWizard({
         </Card>
       ) : null}
 
+      {step >= 2 && stockCheckCurrent && (stockShortCount > 0 || stockCheckCurrent.error) ? (
+        <div role="alert" className="rounded-md border border-red-500/50 bg-red-500/10 px-3 py-2.5 text-sm text-red-700 dark:text-red-300">
+          <p className="font-medium">{stockBlockReason}</p>
+          {stockShortCount > 0 ? (
+            <ul className="mt-1 list-disc pl-5 text-xs">
+              {Object.entries(stockShortByProductId ?? {}).map(([productId, row]) => (
+                <li key={productId}>
+                  {billableLines.find((line) => line.productId === productId)?.name || productId}: {row.available} available, needs {row.need}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       <div className="sticky bottom-0 z-30 -mx-4 flex justify-between border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex gap-2">
           {step > 1 && (
@@ -3575,7 +3665,11 @@ export function DocumentCreateWizard({
               Next
             </Button>
           ) : step === 3 ? (
-            <Button onClick={() => void onSubmit()} disabled={submitting || (deliveryNoteEdit && !editReason.trim())}>
+            <Button
+              onClick={() => void onSubmit()}
+              disabled={submitting || (deliveryNoteEdit && !editReason.trim()) || Boolean(stockBlockReason)}
+              title={stockBlockReason}
+            >
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
           ) : null}
@@ -3583,13 +3677,15 @@ export function DocumentCreateWizard({
             <Button
               variant={lineByLine && step === 2 ? "default" : "outline"}
               onClick={() => void onReview()}
-              disabled={step === 2 && (!linesStepReady || !linesOperational)}
+              disabled={step === 2 && (!linesStepReady || !linesOperational || Boolean(stockBlockReason))}
               title={
                 step === 2 && !linesStepReady
                   ? "Loading line items and product catalog…"
                   : step === 2 && !linesOperational
                     ? linesBlockedMessage("review")
-                    : undefined
+                    : step === 2 && stockBlockReason
+                      ? stockBlockReason
+                      : undefined
               }
             >
               Review & Submit
