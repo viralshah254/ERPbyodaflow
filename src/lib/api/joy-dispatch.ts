@@ -226,6 +226,9 @@ export type JoyLoadNotes = {
   trucks: string[];
   busyTrucks: string[];
   dispatchWarehouseName: string;
+  dispatchWarehouseId?: string;
+  /** Active stores a route load can be picked from. */
+  stores?: Array<{ id: string; name: string }>;
   waiting: JoyWaitingRoute[];
   notes: JoyLoadNote[];
 };
@@ -265,6 +268,14 @@ export async function createJoyLoadNote(input: {
 }): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
   return apiRequest("/api/joy-dispatch/load-notes", { method: "POST", body: input });
+}
+
+/** Blank `toWarehouseId` moves the orders back to the dispatch store. */
+export async function setJoyRouteSourceStore(input: {
+  warehouseId: string; sourceWarehouseId?: string; toWarehouseId: string;
+}): Promise<{ moved: number }> {
+  requireLiveApi(LOADS);
+  return apiRequest("/api/joy-dispatch/waiting-routes/source-store", { method: "PUT", body: input });
 }
 
 export async function setJoyLoadSalesReps(id: string, salesRepIds: string[]): Promise<JoyLoadNote> {
