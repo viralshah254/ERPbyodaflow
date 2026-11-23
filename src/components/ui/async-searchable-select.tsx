@@ -170,7 +170,12 @@ export function AsyncSearchableSelect({
   const [dragOrigin, setDragOrigin] = React.useState<{ left: number; top: number } | null>(null);
 
   React.useEffect(() => {
-    if (!open) setDragOrigin(null);
+    if (!open) {
+      setDragOrigin(null);
+      dragMovedRef.current = false;
+      return;
+    }
+    dragMovedRef.current = false;
   }, [open]);
   /** Always call latest loader without putting it in effect deps (inline handlers would retrigger searches every parent render). */
   const loadOptionsRef = React.useRef(loadOptions);
@@ -183,6 +188,12 @@ export function AsyncSearchableSelect({
   queryRef.current = query;
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const dragMovedRef = React.useRef(false);
+  const optionPressRef = React.useRef<{
+    optionId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const optionCommittedViaPointerRef = React.useRef(false);
 
   const updateFloatingPosition = React.useCallback(() => {
     const btn = triggerRef.current;
@@ -509,6 +520,9 @@ export function AsyncSearchableSelect({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      window.setTimeout(() => {
+        dragMovedRef.current = false;
+      }, 0);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
@@ -616,10 +630,32 @@ export function AsyncSearchableSelect({
                 highlightedIndex === index ? "bg-muted" : ""
               }`}
               onMouseEnter={() => setHighlightedIndex(index)}
-              onClick={(e) => {
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                optionPressRef.current = {
+                  optionId: option.id,
+                  x: event.clientX,
+                  y: event.clientY,
+                };
+              }}
+              onPointerUp={(event) => {
+                event.stopPropagation();
+                const press = optionPressRef.current;
+                optionPressRef.current = null;
+                if (event.button !== 0 || !press || press.optionId !== option.id) return;
+                if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) return;
+                if (dragMovedRef.current) return;
+                optionCommittedViaPointerRef.current = true;
+                commitSelection(option);
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (optionCommittedViaPointerRef.current) {
+                  optionCommittedViaPointerRef.current = false;
+                  return;
+                }
                 if (dragMovedRef.current) {
-                  e.preventDefault();
-                  e.stopPropagation();
+                  event.preventDefault();
                   return;
                 }
                 commitSelection(option);
