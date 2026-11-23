@@ -32,13 +32,30 @@ export function namesFromHistory(history: Pick<RecipeHistory, "productNames" | "
   };
 }
 
-export function ChangeChips({ changes, names, limit = 6, className }: { changes: RecipeRevisionChange[]; names: NameLookup; limit?: number; className?: string }) {
-  const [expanded, setExpanded] = React.useState(false);
+const CHANGE_CHIP_PILE_THRESHOLD = 20;
+
+export function ChangeChips({
+  changes,
+  names,
+  limit = 6,
+  pileThreshold = CHANGE_CHIP_PILE_THRESHOLD,
+  className,
+}: {
+  changes: RecipeRevisionChange[];
+  names: NameLookup;
+  limit?: number;
+  /** Show an ellipsis on the overflow badge when the change count exceeds this. */
+  pileThreshold?: number;
+  className?: string;
+}) {
   const described = describeChanges(changes, names);
   if (!described.length) return null;
-  const shown = expanded ? described : described.slice(0, limit);
+
+  const shown = described.slice(0, limit);
+  const hidden = described.length - shown.length;
+
   return (
-    <ul className={cn("flex flex-wrap gap-1.5", className)} aria-label="Changes">
+    <ul className={cn("flex flex-wrap items-center gap-1.5", className)} aria-label="Changes">
       {shown.map((change, index) => (
         <li key={`${change.subject}-${index}`} className={cn("inline-flex max-w-full items-center gap-1 rounded-md border px-2 py-0.5 text-xs", TONE[change.tone].chip)}>
           <span aria-hidden className="font-semibold">{TONE[change.tone].sign}</span>
@@ -46,11 +63,13 @@ export function ChangeChips({ changes, names, limit = 6, className }: { changes:
           {change.detail && <span className="truncate tabular-nums opacity-80 no-underline">{change.detail}</span>}
         </li>
       ))}
-      {described.length > limit && (
-        <li>
-          <button type="button" className="rounded-md px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => setExpanded((value) => !value)}>
-            {expanded ? "Show less" : `+${described.length - limit} more`}
-          </button>
+      {hidden > 0 && (
+        <li
+          className="inline-flex items-center gap-1 rounded-md border border-dashed px-2 py-0.5 text-xs text-muted-foreground"
+          aria-label={`${hidden} more changes — see full history`}
+        >
+          {described.length > pileThreshold ? <Icons.Ellipsis className="size-3.5 shrink-0" aria-hidden /> : null}
+          <span>+{hidden} more</span>
         </li>
       )}
     </ul>
@@ -360,7 +379,10 @@ export function RecipeHistorySheet({
         title={confirm ? `Restore version ${confirm.revisionNo}?` : "Restore version"}
         description={confirm ? `Its ingredients and batch size become the recipe production uses, saved as version ${(history?.revisions[0]?.revisionNo ?? 0) + 1}. Nothing is deleted: the versions in between stay in this history, and batches already made are not affected.` : undefined}
         confirmLabel="Restore"
-        onConfirm={() => { if (confirm) void onRestore(confirm.revisionNo); }}
+        onConfirm={() => {
+          if (!confirm) return;
+          void onRestore(confirm.revisionNo).finally(() => setConfirm(null));
+        }}
       />
       <ConfirmDialog
         open={confirmRecord != null}
