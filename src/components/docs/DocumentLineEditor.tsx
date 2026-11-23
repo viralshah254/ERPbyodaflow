@@ -166,6 +166,8 @@ interface DocumentLineEditorProps {
   /** Fires when the sellable/purchasable product catalog finishes loading (or is not needed). */
   onCatalogReadyChange?: (ready: boolean) => void;
   onDocumentProductData?: (data: Awaited<ReturnType<typeof fetchDocumentProductDataApi>>) => void;
+  /** Products the chosen store cannot cover. Those rows are outlined in red. */
+  stockShortByProductId?: Record<string, { need: number; available: number }>;
 }
 
 const defaultPriceListId = "pl-retail";
@@ -276,6 +278,7 @@ export function DocumentLineEditor({
   onPackagingUpdated,
   onCatalogReadyChange,
   onDocumentProductData,
+  stockShortByProductId,
 }: DocumentLineEditorProps) {
   const inlineCatalogue = lineByLine && !fmcgOrg;
   const linesRef = React.useRef(lines);
@@ -1793,9 +1796,17 @@ export function DocumentLineEditor({
             const taxRateLabel = taxCode ? `${taxCode.rate}%` : null;
             const itemId = (product ? displayItemCode(product) : l.sku) || l.sku;
             const colSpan = lineColumnLabels ? 8 : 7;
+            const stockShort = stockShortByProductId?.[l.productId];
             return (
               <React.Fragment key={l.id}>
-              <tr data-line-row className="border-b align-middle">
+              <tr
+                data-line-row
+                data-stock-short={stockShort ? "" : undefined}
+                className={cn(
+                  "border-b align-middle",
+                  stockShort && "bg-red-500/10 outline outline-1 -outline-offset-1 outline-red-500"
+                )}
+              >
                   <td className="px-2 py-2 align-middle">
                     <span className="block truncate text-sm tabular-nums" title={itemId || undefined}>
                       {itemId || "—"}
@@ -1837,6 +1848,11 @@ export function DocumentLineEditor({
                         </button>
                         {taxRateLabel ? (
                           <p className="mt-0.5 truncate text-xs text-muted-foreground">{taxRateLabel}</p>
+                        ) : null}
+                        {stockShort ? (
+                          <p className="mt-0.5 text-xs font-medium text-red-600 dark:text-red-400">
+                            Not enough stock: {stockShort.available} available, needs {stockShort.need}
+                          </p>
                         ) : null}
                       </div>
                     </div>

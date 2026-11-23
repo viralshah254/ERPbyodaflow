@@ -15,7 +15,7 @@ import {
   cancelJoyLoadNote,
   createJoyDeliveryNotes,
   createJoyLoadNote,
-  downloadJoyLoadNotePdf,
+  printJoyLoadNotePdf,
   fetchJoyLoadNotes,
   generateJoyInvoices,
   markJoyLoadDeparted,
@@ -30,6 +30,7 @@ import {
 import { ChevronRight, ClipboardList, MapPin, Package, Truck } from "lucide-react";
 import { toast } from "sonner";
 import { SfaSalesRepsField, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 
 function roundQty(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -433,8 +434,52 @@ function WaitingRouteCard({
   const [truck, setTruck] = React.useState("");
   const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
-  const pickFrom = route.sourceWarehouseId && route.sourceWarehouseId !== dispatchId ? route.sourceWarehouseId : "";
-  const pickStores = stores.filter((store) => store.id !== dispatchId && store.id !== route.warehouseId);
+  const shortCount = route.products.filter((product) => (product.shortQty ?? 0) > 0.0001).length;
+  const pickStoreId = route.sourceWarehouseId || dispatchId || "";
+  const pickStoreOptions = React.useMemo(() => {
+    const byId = new Map<string, AsyncSearchableSelectOption>();
+    if (dispatchId) byId.set(dispatchId, { id: dispatchId, label: placeLabel(dispatchName) });
+    for (const store of stores) {
+      if (store.id === route.warehouseId) continue;
+      byId.set(store.id, { id: store.id, label: placeLabel(store.name) });
+    }
+    if (pickStoreId && !byId.has(pickStoreId)) {
+      byId.set(pickStoreId, { id: pickStoreId, label: placeLabel(route.sourceWarehouseName || dispatchName) });
+    }
+    return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
+  }, [stores, dispatchId, dispatchName, route.warehouseId, route.sourceWarehouseName, pickStoreId]);
+  const selectedPickStore =
+    pickStoreOptions.find((row) => row.id === pickStoreId) ?? {
+      id: pickStoreId,
+      label: placeLabel(route.sourceWarehouseName || dispatchName),
+    };
+  const filterPickStores = React.useCallback(
+    async (query: string) => {
+      const needle = query.trim().toLowerCase();
+      if (!needle) return pickStoreOptions;
+      return pickStoreOptions.filter((row) => row.label.toLowerCase().includes(needle));
+    },
+    [pickStoreOptions],
+  );
+  const truckOptions = React.useMemo(
+    () =>
+      trucks.map((plate) => ({
+        id: plate,
+        label: plate,
+        ...(busyTrucks.includes(plate)
+          ? { description: "On another load", badges: [{ label: "Busy", variant: "secondary" as const }] }
+          : {}),
+      })),
+    [trucks, busyTrucks],
+  );
+  const filterTrucks = React.useCallback(
+    async (query: string) => {
+      const needle = query.trim().toLowerCase();
+      if (!needle) return truckOptions;
+      return truckOptions.filter((row) => row.label.toLowerCase().includes(needle));
+    },
+    [truckOptions],
+  );
   return (
     <Card id={`route-${route.warehouseId}`} className={focused ? "min-w-0 ring-2 ring-primary" : "min-w-0"}>
       <CardHeader className="space-y-1">
@@ -455,16 +500,35 @@ function WaitingRouteCard({
               </tr>
             </thead>
             <tbody>
-              {route.products.map((product) => (
-                <tr key={product.productId} className="border-t">
-                  <td className="py-1 pr-3 align-top">{product.sku ?? ""}</td>
-                  <td className={`break-words py-1 pr-3 align-top ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
-                  <td className="py-1 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
-                </tr>
-              ))}
+              {route.products.map((product) => {
+                const short = (product.shortQty ?? 0) > 0.0001;
+                return (
+                  <tr
+                    key={product.productId}
+                    className={short ? "outline outline-1 -outline-offset-1 outline-red-500 bg-red-500/10" : "border-t"}
+                  >
+                    <td className="py-1 pl-1 pr-3 align-top">{product.sku ?? ""}</td>
+                    <td className={`break-words py-1 pr-3 align-top ${CAPS_ON_PRODUCT_CLASS}`}>
+                      {product.name}
+                      {short ? (
+                        <span className="mt-0.5 block text-xs font-medium normal-case text-red-600 dark:text-red-400">
+                          Not enough stock: {product.availableQty ?? 0} available, short {product.shortQty}
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="py-1 pr-1 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+        {shortCount > 0 && !activeNote ? (
+          <p role="alert" className="rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
+            {placeLabel(route.sourceWarehouseName || dispatchName)} is short on {shortCount} product{shortCount === 1 ? "" : "s"}.
+            Update the stock or pick from another store before creating the loading note.
+          </p>
+        ) : null}
         {activeNote ? (
           <p className="rounded-md border bg-muted/50 p-3 text-sm">
             Waiting for {activeNote.number} to clear.{" "}
@@ -478,50 +542,67 @@ function WaitingRouteCard({
               <Label htmlFor={`load-reps-${route.warehouseId}`}>Sales reps</Label>
               <SfaSalesRepsField id={`load-reps-${route.warehouseId}`} value={salesReps} onChange={setSalesReps} disabled={busy} />
             </div>
-            <div className="w-56 space-y-1">
-              <Label htmlFor={`load-store-${route.warehouseId}-${pickFrom}`}>Pick from</Label>
-              <select
-                id={`load-store-${route.warehouseId}-${pickFrom}`}
-                className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
-                value={pickFrom}
-                disabled={busy}
-                onChange={(event) => {
-                  const toWarehouseId = event.target.value;
+            <div className="w-full max-w-md space-y-1">
+              <Label htmlFor={`load-store-${route.warehouseId}`}>Pick from</Label>
+              <AsyncSearchableSelect
+                id={`load-store-${route.warehouseId}`}
+                value={pickStoreId}
+                selectedOption={selectedPickStore}
+                onValueChange={(next) => {
+                  if (!next || next === pickStoreId) return;
                   setBusy(true);
-                  void setJoyRouteSourceStore({ warehouseId: route.warehouseId, sourceWarehouseId: route.sourceWarehouseId, toWarehouseId })
+                  void setJoyRouteSourceStore({
+                    warehouseId: route.warehouseId,
+                    sourceWarehouseId: route.sourceWarehouseId,
+                    toWarehouseId: dispatchId && next === dispatchId ? "" : next,
+                  })
                     .then(async () => {
-                      const name = pickStores.find((store) => store.id === toWarehouseId)?.name ?? dispatchName;
-                      toast.success(`${route.orderCount} order${route.orderCount === 1 ? "" : "s"} now picked from ${placeLabel(name)}.`);
+                      const name = pickStoreOptions.find((row) => row.id === next)?.label ?? dispatchName;
+                      toast.success(`${route.orderCount} order${route.orderCount === 1 ? "" : "s"} now picked from ${name}.`);
                       await onChanged();
                     })
                     .catch((error) => toast.error(errorMessage(error, "Could not change the pick store")))
                     .finally(() => setBusy(false));
                 }}
-              >
-                <option value="">{placeLabel(dispatchName)}</option>
-                {pickStores.map((store) => (
-                  <option key={store.id} value={store.id}>{placeLabel(store.name)}</option>
-                ))}
-              </select>
+                loadOptions={filterPickStores}
+                searchDebounceMs={0}
+                disabled={busy}
+                placeholder="Pick store"
+                searchPlaceholder="Find a store"
+                emptyMessage="No store matches."
+                wrapLabels
+                minDropdownWidth={300}
+              />
             </div>
-            <div className="w-56 space-y-1">
-              <Label>Truck</Label>
-              <select
-                className="flex h-9 w-full rounded-md border bg-background px-3 text-sm"
+            <div className="w-full max-w-md space-y-1">
+              <Label htmlFor={`load-truck-${route.warehouseId}`}>Truck</Label>
+              <AsyncSearchableSelect
+                id={`load-truck-${route.warehouseId}`}
                 value={truck}
-                onChange={(event) => setTruck(event.target.value)}
-              >
-                <option value="">Choose a truck</option>
-                {trucks.map((plate) => (
-                  <option key={plate} value={plate} disabled={busyTrucks.includes(plate)}>
-                    {plate}
-                    {busyTrucks.includes(plate) ? " (on another load)" : ""}
-                  </option>
-                ))}
-              </select>
+                selectedOption={truck ? { id: truck, label: truck } : null}
+                onValueChange={(next) => {
+                  if (!next) {
+                    setTruck("");
+                    return;
+                  }
+                  if (busyTrucks.includes(next)) {
+                    toast.error(`${next} is already on another load.`);
+                    return;
+                  }
+                  setTruck(next);
+                }}
+                loadOptions={filterTrucks}
+                searchDebounceMs={0}
+                disabled={busy}
+                placeholder="Choose a truck"
+                searchPlaceholder="Search plate"
+                emptyMessage="No truck matches."
+                wrapLabels
+                minDropdownWidth={280}
+              />
             </div>
             <Button
-              disabled={!truck || busy}
+              disabled={!truck || busy || shortCount > 0}
               onClick={() => {
                 setBusy(true);
                 void createJoyLoadNote({
@@ -578,7 +659,7 @@ function LoadingNoteCard({
       />
       <CardContent className="space-y-4">
         <OrderRoster orders={ordersOnNote(note)} />
-        <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
+        <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loader note
         </Button>
         <div className="overflow-x-auto">
@@ -1069,7 +1150,7 @@ function ConfirmedNoteCard({
     <Card id={`note-${note.id}`} className="min-w-0">
       <LoadNoteHeader note={note} routeHint="Loader note confirmed" />
       <CardContent className="space-y-3">
-        <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
+        <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loader note
         </Button>
         <div className="space-y-2 text-sm">
