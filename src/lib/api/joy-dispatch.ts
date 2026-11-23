@@ -149,10 +149,17 @@ export type JoyRouteProduct = { productId: string; sku?: string; name: string; u
 export type JoyWaitingRoute = {
   warehouseId: string;
   warehouseName: string;
+  /** Store these orders are picked from: chosen on the order, else the dispatch store. */
+  sourceWarehouseId?: string;
+  sourceWarehouseName?: string;
   orderCount: number;
   orders: JoyRouteOrder[];
+  /** Reps already on these orders. The loader note starts with them. */
+  salesReps?: LoadSalesRep[];
   products: JoyRouteProduct[];
 };
+
+export type LoadSalesRep = { id: string; name: string; phone?: string };
 
 export type JoyLoadNoteStatus = "OPEN" | "AWAITING_FINANCE" | "CONFIRMED" | "INVOICING" | "INVOICED" | "CANCELLED";
 /** "both" sends the invoice with the delivery note. "delivery_note" leaves the invoice on standby. */
@@ -173,10 +180,13 @@ export type JoyLoadNote = {
   createdAt?: string;
   status: JoyLoadNoteStatus;
   truck: string;
+  salesReps?: LoadSalesRep[];
   routeWarehouseId: string;
   routeWarehouseName: string;
   fulfilmentWarehouseName: string;
   fulfilmentWarehouseId?: string;
+  /** The orders chose the pick store, so it is not the dispatch store. */
+  fulfilmentFromOrder?: boolean;
   salesOrderIds: string[];
   lines: Array<{
     productId: string;
@@ -250,9 +260,16 @@ export async function fetchJoyLoadNoteForDeliveryNote(
   return apiRequest(`/api/joy-dispatch/load-notes/by-delivery-note/${encodeURIComponent(deliveryNoteId)}`);
 }
 
-export async function createJoyLoadNote(input: { warehouseId: string; truck: string }): Promise<JoyLoadNote> {
+export async function createJoyLoadNote(input: {
+  warehouseId: string; truck: string; sourceWarehouseId?: string; salesRepIds?: string[];
+}): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
   return apiRequest("/api/joy-dispatch/load-notes", { method: "POST", body: input });
+}
+
+export async function setJoyLoadSalesReps(id: string, salesRepIds: string[]): Promise<JoyLoadNote> {
+  requireLiveApi(LOADS);
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/sales-reps`, { method: "PUT", body: { salesRepIds } });
 }
 
 export async function recordJoyLoaded(

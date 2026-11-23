@@ -20,12 +20,6 @@ export function readableProductName(name?: string): string {
   return value;
 }
 
-export function stockAdjustHref(row: { productId: string; warehouseId?: string }): string {
-  const params = new URLSearchParams({ action: "stockIn", productId: row.productId });
-  if (row.warehouseId) params.set("warehouseId", row.warehouseId);
-  return `/inventory/stock-levels?${params.toString()}`;
-}
-
 export const PURCHASE_HREF = "/docs/purchase-order/new";
 
 function shortageFromUnknown(value: unknown): MaterialShortageRow | null {

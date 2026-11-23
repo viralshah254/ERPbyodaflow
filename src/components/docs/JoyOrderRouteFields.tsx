@@ -3,10 +3,19 @@
 import React from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import type { CollectionRoute, RouteCollector } from "@/lib/api/joy-route-orders";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import type { CollectionRoute } from "@/lib/api/joy-route-orders";
+import { SfaSalesRepSelect, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 
 const selectClass = "block min-h-10 w-full rounded-md border bg-background px-3 py-2 text-sm";
-const collectorKey = ({ salesRepId, tillNumber }: RouteCollector) => JSON.stringify([salesRepId, tillNumber]);
+const DISPATCH_DEFAULT = "__dispatch__";
+
+export type RouteSourceStore = { id: string; label: string };
+
+function matching<T extends AsyncSearchableSelectOption>(options: T[], query: string): T[] {
+  const needle = query.trim().toLowerCase();
+  return needle ? options.filter((option) => option.label.toLowerCase().includes(needle)) : options;
+}
 
 export function JoyOrderRouteFields(props: {
   date: string;
@@ -15,15 +24,41 @@ export function JoyOrderRouteFields(props: {
   route?: CollectionRoute;
   savedRoute?: boolean;
   onRouteChange: (value: string) => void;
-  collector?: RouteCollector;
-  onCollectorChange: (value?: RouteCollector) => void;
+  salesRep: PickedSalesRep | null;
+  onSalesRepChange: (value: PickedSalesRep | null) => void;
+  tillNumber: string;
+  onTillChange: (value: string) => void;
+  sourceStores: RouteSourceStore[];
+  sourceStoreId: string;
+  onSourceStoreChange: (value: string) => void;
+  dispatchStoreLabel: string;
   loading: boolean;
   error?: string;
   hasCustomer: boolean;
 }) {
-  const { date, onDateChange, routes, route, savedRoute, onRouteChange, collector, onCollectorChange, loading, error, hasCustomer } = props;
-  const reps = [...new Map(route?.collectors.map((row) => [row.salesRepId, row.salesRep])).entries()];
-  const tills = route?.collectors.filter((row) => row.salesRepId === collector?.salesRepId) ?? [];
+  const {
+    date, onDateChange, routes, route, savedRoute, onRouteChange, salesRep, onSalesRepChange, tillNumber, onTillChange,
+    sourceStores, sourceStoreId, onSourceStoreChange, dispatchStoreLabel, loading, error, hasCustomer,
+  } = props;
+  const tills = [...new Set(route?.collectors.map((row) => row.tillNumber).filter(Boolean))];
+
+  const routeOptions = React.useMemo<AsyncSearchableSelectOption[]>(
+    () => routes.map((row) => ({
+      id: row.id,
+      label: row.name,
+      description: row.collectors.length ? undefined : "No till configured",
+    })),
+    [routes],
+  );
+  const dispatchOption = React.useMemo<AsyncSearchableSelectOption>(
+    () => ({ id: DISPATCH_DEFAULT, label: `${dispatchStoreLabel} (default)`, description: "The dispatch store route trucks load from." }),
+    [dispatchStoreLabel],
+  );
+  const sourceOptions = React.useMemo<AsyncSearchableSelectOption[]>(
+    () => sourceStores.filter((store) => store.id !== route?.id).map((store) => ({ id: store.id, label: store.label })),
+    [sourceStores, route?.id],
+  );
+  const selectedSource = sourceOptions.find((option) => option.id === sourceStoreId) ?? dispatchOption;
 
   return (
     <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -33,33 +68,61 @@ export function JoyOrderRouteFields(props: {
       </div>
       <div className="space-y-1">
         <Label htmlFor="joy-delivery-route">Route warehouse</Label>
-        <select id="joy-delivery-route" className={selectClass} value={route?.id ?? ""} disabled={!hasCustomer || loading || !!error}
-          onChange={(e) => onRouteChange(e.target.value)}>
-          <option value="">Select route warehouse</option>
-          {routes.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
-        </select>
+        <AsyncSearchableSelect
+          id="joy-delivery-route"
+          value={route?.id ?? ""}
+          selectedOption={route ? { id: route.id, label: route.name } : null}
+          onValueChange={onRouteChange}
+          loadOptions={async (query) => matching(routeOptions, query)}
+          reloadToken={routeOptions.length}
+          searchDebounceMs={0}
+          disabled={!hasCustomer || loading || !!error}
+          placeholder="Select route warehouse"
+          searchPlaceholder="Find a route"
+          emptyMessage="No route matches."
+          wrapLabels
+          minDropdownWidth={300}
+        />
         <p className="text-xs text-muted-foreground">
           {loading ? "Loading delivery routes…" : error ? error : !hasCustomer ? "Choose a customer first." : !date ? "Choose a delivery date."
             : !routes.length ? "Create a route store to continue."
-              : route && !route.collectors.length ? "This route has no rep or till configured. You can still save the order."
+              : route && !route.collectors.length ? "This route has no till configured. You can still save the order."
                 : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
                 : "The first route you save for this outlet and weekday becomes its default."}
         </p>
       </div>
       <div className="space-y-1">
+        <Label htmlFor="joy-source-store">Pick from store</Label>
+        <AsyncSearchableSelect
+          id="joy-source-store"
+          value={sourceStoreId || DISPATCH_DEFAULT}
+          selectedOption={selectedSource}
+          onValueChange={(next) => onSourceStoreChange(next === DISPATCH_DEFAULT ? "" : next)}
+          loadOptions={async (query) => (query.trim() ? matching(sourceOptions, query) : [dispatchOption, ...sourceOptions])}
+          reloadToken={`${sourceOptions.length}:${route?.id ?? ""}`}
+          searchDebounceMs={0}
+          placeholder={dispatchOption.label}
+          searchPlaceholder="Find a store"
+          emptyMessage="No store matches."
+          wrapLabels
+          minDropdownWidth={300}
+        />
+        <p className="text-xs text-muted-foreground">
+          The whole order is picked from this store when its route is loaded.
+        </p>
+      </div>
+      <div className="hidden sm:block" aria-hidden />
+      <div className="space-y-1">
         <Label htmlFor="joy-sales-rep">Sales rep</Label>
-        <select id="joy-sales-rep" className={selectClass} value={collector?.salesRepId ?? ""} disabled={!reps.length}
-          onChange={(e) => onCollectorChange(route?.collectors.find((row) => row.salesRepId === e.target.value))}>
-          <option value="">Select sales rep</option>
-          {reps.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
+        <SfaSalesRepSelect id="joy-sales-rep" value={salesRep} onChange={onSalesRepChange} disabled={!route} />
+        <p className="text-xs text-muted-foreground">From OdaFlow SFA. Optional. You can add or change it later here or on the loader note.</p>
       </div>
       <div className="space-y-1">
         <Label htmlFor="joy-till-number">M-Pesa till</Label>
-        <select id="joy-till-number" className={selectClass} value={collector ? collectorKey(collector) : ""} disabled={!tills.length}
-          onChange={(e) => onCollectorChange(tills.find((row) => collectorKey(row) === e.target.value))}>
-          <option value="">Select till</option>
-          {tills.map((row) => <option key={collectorKey(row)} value={collectorKey(row)}>{row.tillNumber}</option>)}
+        <select id="joy-till-number" className={selectClass} value={tills.includes(tillNumber) ? tillNumber : ""} disabled={!tills.length}
+          onChange={(e) => onTillChange(e.target.value)}>
+          <option value="">{tills.length ? "Select till" : "No till on this route"}</option>
+          {tills.map((till) => <option key={till} value={till}>{till}</option>)}
         </select>
       </div>
     </div>

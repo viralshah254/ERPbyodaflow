@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
-import { PURCHASE_HREF, readableProductName, stockAdjustHref, type MaterialShortageRow } from "@/lib/manufacturing/material-shortage";
+import { PURCHASE_HREF, readableProductName, type MaterialShortageRow } from "@/lib/manufacturing/material-shortage";
 
 export function MaterialShortageNotice({ title, items }: { title: string; items: MaterialShortageRow[] }) {
   if (!items.length) return null;
@@ -19,9 +19,6 @@ export function MaterialShortageNotice({ title, items }: { title: string; items:
                 {item.warehouseName ? ` in ${item.warehouseName}` : " in this store"}.
               </span>
               <span className="flex gap-3 text-xs">
-                {item.productId ? (
-                  <Link href={stockAdjustHref(item)} className="text-primary underline-offset-2 hover:underline">Adjust stock</Link>
-                ) : null}
                 <Link href={PURCHASE_HREF} className="text-primary underline-offset-2 hover:underline">Purchase</Link>
               </span>
             </li>

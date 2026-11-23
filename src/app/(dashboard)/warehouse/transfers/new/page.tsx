@@ -10,17 +10,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { createTransfer, fetchTransferStock, type TransferStockRow } from "@/lib/api/warehouse-transfers";
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { fetchProductPackagingApi } from "@/lib/api/product-master";
 import { activeDocumentAlternates } from "@/lib/docs/default-line-uom";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { parseTransferPrefill } from "@/lib/warehouse/transfer-prefill";
 
 type TransferLineDraft = { productId: string; qty: string; unit: string };
 
 function formatQty(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toLocaleString(undefined, { maximumFractionDigits: 6 });
+}
+
+function storeOptions(warehouses: LookupOption[], query: string, showBlock: boolean): AsyncSearchableSelectOption[] {
+  const needle = query.trim().toLowerCase();
+  return warehouses
+    .filter((wh) => !needle || wh.label.toLowerCase().includes(needle))
+    .map((wh) => ({ id: wh.id, label: wh.label, ...(showBlock && wh.transferSourceBlock ? { description: wh.transferSourceBlock } : {}) }));
 }
 
 function todayInNairobi() {
@@ -60,6 +69,15 @@ export default function NewTransferPage() {
       .sort((a, b) => (a.sku || a.name).localeCompare(b.sku || b.name, undefined, { numeric: true }));
   }, [sourceStock, search]);
   const rows = selectedOnly ? visibleStock.filter((row) => Number(lines[row.productId]?.qty ?? 0) !== 0) : visibleStock;
+
+  React.useEffect(() => {
+    const prefill = parseTransferPrefill(window.location.search);
+    if (!prefill) return;
+    setFromWarehouseId(prefill.fromWarehouseId);
+    setLines(Object.fromEntries(prefill.lines.map((line) => [line.productId, { productId: line.productId, qty: String(line.quantity), unit: "" }])));
+    if (prefill.lines.length) setSelectedOnly(true);
+    if (prefill.reference) setReference(prefill.reference);
+  }, []);
 
   React.useEffect(() => {
     if (!canWrite) return;
@@ -117,6 +135,7 @@ export default function NewTransferPage() {
     return { stock, base, alternates, unit, factor, qty, baseQty, over: Boolean(stock && baseQty > stock.available + 1e-9) };
   };
 
+  const missingLines = stockLoading || stockError ? [] : selectedLines.filter((line) => !stockByProduct.has(line.productId));
   const hasValidLines = selectedLines.length > 0 && selectedLines.every((line) => {
     const { stock, factor, baseQty, over } = lineDetails(line);
     return Boolean(stock && factor && Number.isFinite(baseQty) && baseQty > 0 && !over);
@@ -206,9 +225,16 @@ export default function NewTransferPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="transfer-from-warehouse">From warehouse</Label>
-                  <Select
+                  <AsyncSearchableSelect
+                    id="transfer-from-warehouse"
                     value={fromWarehouseId}
+                    selectedOption={warehouses.find((wh) => wh.id === fromWarehouseId) ?? null}
                     onValueChange={(value) => {
+                      const block = warehouses.find((wh) => wh.id === value)?.transferSourceBlock;
+                      if (block) {
+                        toast.error(block);
+                        return;
+                      }
                       setFromWarehouseId(value);
                       setSourceStock([]);
                       setLines({});
@@ -217,40 +243,47 @@ export default function NewTransferPage() {
                       setStockLoading(true);
                       if (toWarehouseId === value) setToWarehouseId("");
                     }}
-                  >
-                    <SelectTrigger id="transfer-from-warehouse">
-                      <SelectValue placeholder="Select warehouse" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {warehouses.map((wh) => (
-                        <SelectItem key={wh.id} value={wh.id} disabled={Boolean(wh.transferSourceBlock)}>
-                          {wh.label}{wh.transferSourceBlock && ` · ${wh.transferSourceBlock}`}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    loadOptions={async (query) => storeOptions(warehouses, query, true)}
+                    reloadToken={warehouses.length}
+                    searchDebounceMs={0}
+                    placeholder="Select warehouse"
+                    searchPlaceholder="Find a store"
+                    emptyMessage="No store matches."
+                    wrapLabels
+                    minDropdownWidth={300}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="transfer-to-warehouse">To warehouse</Label>
-                  <Select value={toWarehouseId} onValueChange={setToWarehouseId}>
-                    <SelectTrigger id="transfer-to-warehouse">
-                      <SelectValue placeholder="Select warehouse" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {warehouses
-                        .filter((wh) => wh.id !== fromWarehouseId)
-                        .map((wh) => (
-                          <SelectItem key={wh.id} value={wh.id}>
-                            {wh.label}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <AsyncSearchableSelect
+                    id="transfer-to-warehouse"
+                    value={toWarehouseId}
+                    selectedOption={warehouses.find((wh) => wh.id === toWarehouseId) ?? null}
+                    onValueChange={setToWarehouseId}
+                    loadOptions={async (query) => storeOptions(warehouses.filter((wh) => wh.id !== fromWarehouseId), query, false)}
+                    reloadToken={`${warehouses.length}:${fromWarehouseId}`}
+                    searchDebounceMs={0}
+                    placeholder="Select warehouse"
+                    searchPlaceholder="Find a store"
+                    emptyMessage="No store matches."
+                    wrapLabels
+                    minDropdownWidth={300}
+                  />
                 </div>
               </div>
             </div>
 
             {warehouseError && <p role="alert" className="mt-2 text-sm text-destructive">{warehouseError}</p>}
+            {missingLines.length > 0 && (
+              <p role="alert" className="mt-2 text-sm text-amber-700 dark:text-amber-400">
+                {missingLines.length === 1 ? "1 product has" : `${missingLines.length} products have`} no available stock in this store yet. Finished goods held for QC cannot move until QC accepts them.{" "}
+                <button type="button" className="font-medium underline" onClick={() => setLines((current) => {
+                  const next = { ...current };
+                  for (const line of missingLines) delete next[line.productId];
+                  return next;
+                })}>Remove {missingLines.length === 1 ? "it" : "them"}</button>
+              </p>
+            )}
           </section>
           <section className="overflow-hidden rounded-lg border" aria-labelledby="source-stock">
             <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">

@@ -1,5 +1,5 @@
 import React from "react";
-import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DocumentLineEditor, type DocumentLine } from "./DocumentLineEditor";
 import { fetchProductsPageApi, fetchProductApi } from "@/lib/api/products";
@@ -179,6 +179,46 @@ it("loads 100 inline rows with one metadata batch and no per-product detail or v
   await waitFor(() => expect(fetchProductVariantsApi).toHaveBeenCalledTimes(1));
   expect(fetchProductVariantsApi).toHaveBeenCalledWith("fg-0");
 }, 20000);
+
+function finishedRows(from: number, to: number) {
+  return Array.from({ length: to - from }, (_, i) => ({ ...products[0], id: `fg-${from + i}`, sku: String(from + i), code: String(from + i), name: `Finished ${from + i}` }));
+}
+
+it("loads the sheet ten rows at a time and fetches the next page when its end scrolls into view", async () => {
+  api.configured = true;
+  const observers: Array<(entries: Array<{ isIntersecting: boolean }>) => void> = [];
+  vi.stubGlobal("IntersectionObserver", class {
+    constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) { observers.push(callback); }
+    observe() {}
+    disconnect() {}
+  });
+  vi.mocked(fetchProductsPageApi)
+    .mockResolvedValueOnce({ items: finishedRows(0, 10), hasMore: true, nextCursor: "10" } as never)
+    .mockResolvedValueOnce({ items: finishedRows(10, 12), hasMore: false, nextCursor: null } as never);
+  render(<Harness />);
+  await screen.findByLabelText("Quantity for Finished 9");
+  expect(screen.queryByLabelText("Quantity for Finished 10")).not.toBeInTheDocument();
+  expect(screen.getByText("Scroll for more products")).toBeInTheDocument();
+  expect(fetchProductsPageApi).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "0", limit: 10, sortBy: "itemCode" }));
+  act(() => observers.at(-1)?.([{ isIntersecting: true }]));
+  expect(await screen.findByLabelText("Quantity for Finished 11")).toHaveValue("0");
+  expect(fetchProductsPageApi).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "10", limit: 10, sortBy: "itemCode" }));
+  expect(fetchDocumentProductDataApi).toHaveBeenLastCalledWith(["fg-10", "fg-11"]);
+  expect(screen.queryByText("Scroll for more products")).not.toBeInTheDocument();
+  vi.unstubAllGlobals();
+});
+
+it("finds a product that has not been scrolled to yet by asking the server", async () => {
+  api.configured = true;
+  vi.mocked(fetchProductsPageApi)
+    .mockResolvedValueOnce({ items: finishedRows(0, 10), hasMore: true, nextCursor: "10" } as never)
+    .mockResolvedValueOnce({ items: finishedRows(40, 41), hasMore: false, nextCursor: null } as never);
+  render(<Harness />);
+  await screen.findByLabelText("Quantity for Finished 9");
+  fireEvent.change(screen.getByLabelText("Filter finished goods"), { target: { value: "Finished 40" } });
+  expect(await screen.findByLabelText("Quantity for Finished 40")).toHaveValue("0");
+  expect(fetchProductsPageApi).toHaveBeenLastCalledWith(expect.objectContaining({ search: "Finished 40", cursor: "0" }));
+});
 
 it("uses PCS for a single cake and PACK for a Joy retail multipack without multiplying its price", async () => {
   api.configured = true;

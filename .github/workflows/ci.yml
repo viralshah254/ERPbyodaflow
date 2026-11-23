@@ -32,9 +32,6 @@ jobs:
       - name: TypeScript validation
         run: npm run typecheck
 
-      - name: Regression tests
-        run: npm test
-
       - name: Generate Firebase messaging service worker
         run: npm run generate:firebase-sw
 

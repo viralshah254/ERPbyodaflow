@@ -18,11 +18,28 @@ vi.mock("@/lib/api/joy-route-orders", async (original) => ({
   fetchJoyOrderRoute: vi.fn(),
 }));
 vi.mock("@/components/ui/async-searchable-select", () => ({
-  AsyncSearchableSelect: ({ value, onValueChange, placeholder }: {
-    value?: string; onValueChange: (id: string) => void; placeholder: string;
-  }) => <select aria-label={placeholder} value={value ?? ""} onChange={(event) => onValueChange(event.target.value)}>
-    <option value="">Choose</option><option value="customer">Synthetic QA customer</option>
-  </select>,
+  AsyncSearchableSelect: ({ id, value, onValueChange, placeholder, loadOptions, reloadToken }: {
+    id?: string; value?: string; onValueChange: (id: string) => void; placeholder: string; reloadToken?: unknown;
+    loadOptions?: (query: string) => Promise<Array<{ id: string; label: string }> | { options: Array<{ id: string; label: string }> }>;
+  }) => {
+    const [options, setOptions] = React.useState<Array<{ id: string; label: string }>>([]);
+    React.useEffect(() => {
+      let live = true;
+      Promise.resolve().then(() => loadOptions?.("")).then((result) => {
+        if (live && result) setOptions(Array.isArray(result) ? result : result.options);
+      }).catch(() => {});
+      return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reloadToken]);
+    return <select id={id} aria-label={placeholder} value={value ?? ""} onChange={(event) => onValueChange(event.target.value)}>
+      <option value="">Choose</option><option value="customer">Synthetic QA customer</option>
+      {options.filter((option) => option.id !== "customer").map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+    </select>;
+  },
+}));
+vi.mock("@/lib/api/sfa-sales-reps", () => ({
+  fetchSfaSalesReps: vi.fn().mockResolvedValue({ reps: [{ id: "sfa-ann", name: "Ann Wanjiku", phone: "+254711000001" }], areas: [] }),
+  createSfaSalesRep: vi.fn(),
 }));
 vi.mock("@/lib/api/party-sites", () => ({ fetchPartySitesApi: vi.fn().mockResolvedValue({ items: [] }) }));
 vi.mock("@/components/ui/select", () => ({
@@ -167,7 +184,7 @@ it("does not ask other organisations for a delivery warehouse on a sales order",
   expect(await screen.findByTestId("edit-sheet")).toBeInTheDocument();
 });
 
-it("suggests the delivery-day route on a new Joy order and lets the operator switch route, rep and till", async () => {
+it("suggests the delivery-day route on a new Joy order and lets the operator pick an SFA rep and the route's till", async () => {
   const primary = { salesRepId: "primary", salesRep: "Primary rep", tillNumber: "501001" };
   const cover = { salesRepId: "cover", salesRep: "Cover rep", tillNumber: "501002" };
   vi.mocked(fetchJoyOrderRoute).mockImplementation(async (_party, day) => ({
@@ -187,10 +204,13 @@ it("suggests the delivery-day route on a new Joy order and lets the operator swi
   await waitFor(() => expect(route).toHaveValue("mon"));
   fireEvent.change(deliveryDate, { target: { value: "2026-11-17" } });
   await waitFor(() => expect(route).toHaveValue("tue"));
-  fireEvent.change(screen.getByLabelText("Sales rep"), { target: { value: "cover" } });
+  const rep = screen.getByLabelText("Sales rep");
+  await waitFor(() => expect(rep).toHaveTextContent("Ann Wanjiku"));
+  fireEvent.change(rep, { target: { value: "sfa-ann" } });
+  expect(rep).toHaveValue("sfa-ann");
   const till = screen.getByLabelText("M-Pesa till");
-  expect(till).toHaveDisplayValue("501002");
-  fireEvent.change(till, { target: { value: JSON.stringify(["cover", "501003"]) } });
+  expect(till).toHaveDisplayValue("501001");
+  fireEvent.change(till, { target: { value: "501003" } });
   expect(till).toHaveDisplayValue("501003");
   fireEvent.change(route, { target: { value: "other" } });
   expect(route).toHaveValue("other");
@@ -202,10 +222,28 @@ it("keeps routes without collection settings usable during rollout", async () =>
   vi.mocked(fetchJoyOrderRoute).mockResolvedValueOnce({ routes: [], saved: false });
   render(<DocumentCreateWizard type="sales-order" />);
   fireEvent.change(screen.getByLabelText("Select customer"), { target: { value: "customer" } });
-  await screen.findByRole("option", { name: "Existing route" });
+  await waitFor(() => expect(screen.getByLabelText("Route warehouse")).toHaveTextContent("Existing route"));
   fireEvent.change(screen.getByLabelText("Route warehouse"), { target: { value: "legacy" } });
-  expect(screen.getByLabelText("Sales rep")).toBeDisabled();
+  expect(screen.getByLabelText("Sales rep")).toBeInTheDocument();
   expect(screen.getByLabelText("M-Pesa till")).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Next" }));
   expect(await screen.findByText(/Step 2 of 3/)).toBeInTheDocument();
+});
+
+it("lets a Joy order pick from any store except its route, with the dispatch store as the default", async () => {
+  vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
+    { id: "legacy", label: "Existing route" }, { id: "fg", label: "FG - Finished Goods" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
+  ]);
+  vi.mocked(fetchJoyOrderRoute).mockResolvedValueOnce({ routes: [], saved: false });
+  render(<DocumentCreateWizard type="sales-order" />);
+  fireEvent.change(screen.getByLabelText("Select customer"), { target: { value: "customer" } });
+  const route = screen.getByLabelText("Route warehouse");
+  await waitFor(() => expect(route).toHaveTextContent("Existing route"));
+  fireEvent.change(route, { target: { value: "legacy" } });
+  const source = screen.getByLabelText("Pick from store");
+  await waitFor(() => expect(source).toHaveTextContent("FG - Finished Goods"));
+  expect(source).toHaveAccessibleName("DISPATCH - Dispatch (default)");
+  expect(source).not.toHaveTextContent("Existing route");
+  fireEvent.change(source, { target: { value: "fg" } });
+  expect(source).toHaveValue("fg");
 });

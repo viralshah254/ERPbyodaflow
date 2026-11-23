@@ -102,7 +102,8 @@ export type FetchProductsOptions = {
   includeStock?: boolean;
   /** Restrict stock aggregation to this fulfilment warehouse (with includeStock). */
   warehouseId?: string;
-  sortBy?: "name" | "sku" | "barcode" | "size";
+  /** `itemCode`: whole-number item codes ascending, then name. */
+  sortBy?: "name" | "sku" | "barcode" | "size" | "itemCode";
   sortDir?: "asc" | "desc";
   size?: string;
   pricedOnPriceListId?: string;

@@ -1,20 +1,23 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { fetchAllFinishedGoods } from "./products.repo";
+import { fetchFinishedGoodsPage } from "./products.repo";
 import { fetchProductsPageApi } from "@/lib/api/products";
 vi.mock("@/lib/api/products", () => ({ fetchProductsApi: vi.fn(), fetchProductsPageApi: vi.fn() }));
 beforeEach(() => vi.resetAllMocks());
-it("loads every catalogue page without the former twenty-page cutoff", async () => {
-  vi.mocked(fetchProductsPageApi).mockImplementation(async (opts) => {
-    const n = Number(opts?.cursor ?? "0");
-    return { items: [{ id: `fg-${n}`, name: `Finished ${n}`, code: `${n}`, sku: `${n}` }], hasMore: n < 21, nextCursor: n < 21 ? `${n + 1}` : null } as never;
-  });
-  const all = await fetchAllFinishedGoods();
-  expect(all).toHaveLength(22);
-  expect(vi.mocked(fetchProductsPageApi).mock.calls.every(([opts]) => opts?.sellable && opts.status === "ACTIVE" && !opts.numericItemCode)).toBe(true);
+it("loads one small page in item-code order and hands back the next cursor", async () => {
+  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [{ id: "fg-1", name: "Finished 1", code: "1", itemRole: "FINISHED" }], hasMore: true, nextCursor: "10" } as never);
+  const page = await fetchFinishedGoodsPage({ cursor: "0", search: "queen" });
+  expect(page).toEqual({ items: [expect.objectContaining({ id: "fg-1" })], nextCursor: "10" });
+  expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({
+    status: "ACTIVE", sellable: true, sortBy: "itemCode", limit: 10, cursor: "0", search: "queen",
+  }));
 });
-it("fails visibly instead of returning a silently truncated or looping catalogue", async () => {
-  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [], hasMore: true, nextCursor: "0" } as never);
-  await expect(fetchAllFinishedGoods()).rejects.toThrow("did not advance");
-  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [], hasMore: true, nextCursor: null } as never);
-  await expect(fetchAllFinishedGoods()).rejects.toThrow("incomplete");
+it("ends on the last page and drops non-finished rows when restricted", async () => {
+  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [{ id: "raw", name: "Flour", itemRole: "RAW" }, { id: "fg", name: "Cake", itemRole: "FINISHED" }], hasMore: false, nextCursor: null } as never);
+  const page = await fetchFinishedGoodsPage({ finishedGoodsOnly: true, cursor: "20" });
+  expect(page.items.map((row) => row.id)).toEqual(["fg"]);
+  expect(page.nextCursor).toBeNull();
+});
+it("fails visibly instead of looping on a cursor that does not advance", async () => {
+  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [], hasMore: true, nextCursor: "10" } as never);
+  await expect(fetchFinishedGoodsPage({ cursor: "10" })).rejects.toThrow("did not advance");
 });

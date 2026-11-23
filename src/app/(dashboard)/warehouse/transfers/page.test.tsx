@@ -12,6 +12,23 @@ vi.mock("@/lib/rbac/use-write-guard", () => ({ useCanWriteInventory: () => true 
 vi.mock("@/lib/api/warehouse-transfers", () => ({ createTransfer: vi.fn().mockResolvedValue({ id: "draft-1" }), fetchTransferStock: vi.fn() }));
 vi.mock("@/lib/api/lookups", () => ({ fetchWarehouseOptions: vi.fn().mockResolvedValue([{ id: "source", label: "Finished Goods" }, { id: "destination", label: "Dispatch" }, { id: "choco", label: "CHOCO", transferSourceBlock: "Needs classification" }]) }));
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]) }));
+vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
+vi.mock("@/components/ui/async-searchable-select", () => ({
+  AsyncSearchableSelect: ({ id, value, onValueChange, loadOptions, reloadToken }: {
+    id?: string; value?: string; onValueChange: (id: string) => void; reloadToken?: unknown;
+    loadOptions: (query: string) => Promise<Array<{ id: string; label: string; description?: string }>>;
+  }) => {
+    const [options, setOptions] = React.useState<Array<{ id: string; label: string; description?: string }>>([]);
+    React.useEffect(() => {
+      void loadOptions("").then(setOptions);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [reloadToken]);
+    return <select id={id} value={value ?? ""} onChange={(event) => onValueChange(event.target.value)}>
+      <option value="">Select</option>
+      {options.map((option) => <option key={option.id} value={option.id}>{option.description ? `${option.label} · ${option.description}` : option.label}</option>)}
+    </select>;
+  },
+}));
 
 vi.mock("@/components/ui/select", () => ({
   Select: ({ children, value, onValueChange }: { children: React.ReactNode; value?: string; onValueChange?: (value: string) => void }) => {
@@ -27,12 +44,17 @@ vi.mock("@/components/ui/select", () => ({
   SelectItem: ({ value, children, disabled }: { value: string; children: React.ReactNode; disabled?: boolean }) => <option disabled={disabled} value={value}>{children}</option>,
 }));
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  window.history.replaceState(null, "", "/");
+});
 
 it("shows source availability beside quantity and blocks a draft over available stock", async () => {
   vi.mocked(fetchTransferStock).mockResolvedValue([{ productId: "p", sku: "SKU-072", name: "Soap", uom: "PCS", quantity: 2, reserved: 1, available: 1 }]);
   render(<NewTransferPage />);
-  expect((await screen.findAllByRole("option", { name: "CHOCO · Needs classification" }))[0]).toBeDisabled();
+  await screen.findByRole("option", { name: "CHOCO · Needs classification" });
+  fireEvent.change(screen.getByLabelText("From warehouse"), { target: { value: "choco" } });
+  expect(fetchTransferStock).not.toHaveBeenCalledWith("choco");
   fireEvent.change(screen.getByLabelText("From warehouse"), { target: { value: "source" } });
   fireEvent.change(screen.getByLabelText("To warehouse"), { target: { value: "destination" } });
   const quantity = await screen.findByRole("spinbutton", { name: "Quantity for Soap SKU-072" });
@@ -58,4 +80,25 @@ it("shows the API rejection reason and leaves draft creation disabled", async ()
   fireEvent.change(screen.getByLabelText("From warehouse"), { target: { value: "source" } });
   expect(await screen.findByRole("alert")).toHaveTextContent("Select an active, usable source warehouse.");
   expect(screen.getByRole("button", { name: "Save draft" })).toBeDisabled();
+});
+
+it("opens from a finished batch with the output store, product and quantity already filled in", async () => {
+  vi.mocked(fetchTransferStock).mockResolvedValue([
+    { productId: "p", sku: "SKU-072", name: "Soap", uom: "PCS", quantity: 40, reserved: 0, available: 40 },
+    { productId: "q", sku: "SKU-073", name: "Bread", uom: "PCS", quantity: 9, reserved: 0, available: 9 },
+  ]);
+  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source&line=p%3A24&ref=WO-0007");
+  render(<NewTransferPage />);
+  expect(await screen.findByRole("spinbutton", { name: "Quantity for Soap SKU-072" })).toHaveValue(24);
+  expect(fetchTransferStock).toHaveBeenCalledWith("source");
+  expect(screen.queryByRole("spinbutton", { name: "Quantity for Bread SKU-073" })).toBeNull();
+  expect(screen.getByLabelText("Reference (optional)")).toHaveValue("WO-0007");
+  fireEvent.change(screen.getByLabelText("To warehouse"), { target: { value: "destination" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+  await waitFor(() => expect(createTransfer).toHaveBeenLastCalledWith(expect.objectContaining({
+    fromWarehouseId: "source",
+    toWarehouseId: "destination",
+    reference: "WO-0007",
+    lines: [{ productId: "p", sku: "SKU-072", productName: "Soap", quantity: 24, unit: "PCS" }],
+  })));
 });

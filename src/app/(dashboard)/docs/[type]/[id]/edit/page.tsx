@@ -110,7 +110,13 @@ export default function DocEditPage() {
     <PageShell>
       <PageHeader
         title={document ? `Edit ${label} ${document.number}` : `Edit ${label}`}
-        description={explicitSheetEdit ? "Update quantities in the full product sheet, review totals, then choose Save changes." : "Modify header and line items. Use the numbered steps to go back; changes autosave as you work."}
+        description={
+          explicitSheetEdit
+            ? "Update quantities in the full product sheet, review totals, then choose Save changes."
+            : type === "delivery-note"
+              ? "Modify header and line items, then give a reason and choose Save changes. Each saved edit is kept in the delivery note history."
+              : "Modify header and line items. Use the numbered steps to go back; changes autosave as you work."
+        }
         breadcrumbs={[
           { label: "Documents", href: "/docs" },
           { label, href: `/docs/${type}` },

@@ -20,6 +20,7 @@ import {
   generateJoyInvoices,
   markJoyLoadDeparted,
   recordJoyLoaded,
+  setJoyLoadSalesReps,
   type JoyLoadDocumentPlan,
   type JoyLoadNote,
   type JoyLoadNotes,
@@ -27,6 +28,7 @@ import {
 } from "@/lib/api/joy-dispatch";
 import { ChevronRight, ClipboardList, MapPin, Package, Truck } from "lucide-react";
 import { toast } from "sonner";
+import { SfaSalesRepsField, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 
 function roundQty(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -422,13 +424,14 @@ function WaitingRouteCard({
 }) {
   const router = useRouter();
   const [truck, setTruck] = React.useState("");
+  const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
   return (
     <Card id={`route-${route.warehouseId}`} className={focused ? "min-w-0 ring-2 ring-primary" : "min-w-0"}>
       <CardHeader className="space-y-1">
         <CardTitle>{placeLabel(route.warehouseName)}</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {route.orderCount} order{route.orderCount === 1 ? "" : "s"} · picked from {placeLabel(dispatchName)}
+          {route.orderCount} order{route.orderCount === 1 ? "" : "s"} · picked from {placeLabel(route.sourceWarehouseName || dispatchName)}
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -462,6 +465,11 @@ function WaitingRouteCard({
           </p>
         ) : canLoad ? (
           <div className="flex flex-wrap items-end gap-3">
+            <div className="w-full max-w-md space-y-1">
+              <Label htmlFor={`load-reps-${route.warehouseId}`}>Sales reps</Label>
+              <SfaSalesRepsField id={`load-reps-${route.warehouseId}`} value={salesReps} onChange={setSalesReps} disabled={busy} />
+              <p className="text-xs text-muted-foreground">From OdaFlow SFA. Reps on these orders are already listed.</p>
+            </div>
             <div className="w-56 space-y-1">
               <Label>Truck</Label>
               <select
@@ -482,7 +490,10 @@ function WaitingRouteCard({
               disabled={!truck || busy}
               onClick={() => {
                 setBusy(true);
-                void createJoyLoadNote({ warehouseId: route.warehouseId, truck })
+                void createJoyLoadNote({
+                  warehouseId: route.warehouseId, truck, sourceWarehouseId: route.sourceWarehouseId,
+                  salesRepIds: salesReps.map((rep) => rep.id),
+                })
                   .then((note) => {
                     toast.success(`Loader note ${note.number} created for ${note.truck}.`);
                     router.push(loaderNotePath(note.id));
@@ -529,7 +540,7 @@ function LoadingNoteCard({
     <Card id={`note-${note.id}`} className="min-w-0">
       <LoadNoteHeader
         note={note}
-        routeHint={`Picked from ${placeLabel(dispatchName || note.fulfilmentWarehouseName)}`}
+        routeHint={`Picked from ${placeLabel(note.fulfilmentFromOrder ? note.fulfilmentWarehouseName : dispatchName || note.fulfilmentWarehouseName)}`}
       />
       <CardContent className="space-y-4">
         <OrderRoster orders={ordersOnNote(note)} />
@@ -1315,7 +1326,7 @@ function JoyRouteLoadsInner() {
           <Section key="waiting" id="step-load" title="Choose a truck" empty="No approved orders are waiting for a truck.">
             {waiting.map((route) => (
               <WaitingRouteCard
-                key={route.warehouseId}
+                key={`${route.warehouseId}|${route.sourceWarehouseId ?? ""}`}
                 route={route}
                 trucks={data.trucks}
                 busyTrucks={data.busyTrucks}
@@ -1323,6 +1334,7 @@ function JoyRouteLoadsInner() {
                 dispatchName={data.dispatchWarehouseName}
                 focused={route.warehouseId === focusWarehouse}
                 activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
+                  (!route.sourceWarehouseId || !note.fulfilmentWarehouseId || note.fulfilmentWarehouseId === route.sourceWarehouseId) &&
                   (note.status === "OPEN" || note.status === "AWAITING_FINANCE" || note.status === "INVOICING"))}
               />
             ))}
@@ -1362,7 +1374,7 @@ function JoyRouteLoadsInner() {
       {!financeView && (
         <p className="text-sm text-muted-foreground">
           {openedRoute
-            ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order. Pick stock from ${placeLabel(data.dispatchWarehouseName)}.`
+            ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order. Pick stock from ${placeLabel(openedRoute.sourceWarehouseName || data.dispatchWarehouseName)}.`
             : `Choose a route and a truck. Open the loader note to confirm what was picked against what was ordered.`}
         </p>
       )}
@@ -1379,10 +1391,56 @@ export function JoyRouteLoads() {
   );
 }
 
+function LoadNoteSalesReps({ note, canEdit, onSaved }: { note: JoyLoadNote; canEdit: boolean; onSaved: () => Promise<void> }) {
+  const saved = React.useMemo(() => note.salesReps ?? [], [note.salesReps]);
+  const [reps, setReps] = React.useState<PickedSalesRep[]>(saved);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => setReps(saved), [saved]);
+  const dirty = reps.map((rep) => rep.id).join("|") !== saved.map((rep) => rep.id).join("|");
+  const editable = canEdit && note.status !== "CANCELLED";
+  return (
+    <section className="space-y-2 rounded-md border p-3" aria-labelledby="loader-note-reps">
+      <h2 id="loader-note-reps" className="text-sm font-medium">Sales reps</h2>
+      {editable ? (
+        <div className="flex flex-wrap items-start gap-3">
+          <div className="w-full max-w-md">
+            <SfaSalesRepsField id="loader-note-rep-search" value={reps} onChange={setReps} disabled={busy} />
+          </div>
+          {dirty && (
+            <div className="flex gap-2">
+              <Button
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void setJoyLoadSalesReps(note.id, reps.map((rep) => rep.id))
+                    .then(async () => {
+                      toast.success("Sales reps saved. The loader note PDF now shows them.");
+                      await onSaved();
+                    })
+                    .catch((error) => toast.error(errorMessage(error, "Could not save the sales reps")))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Save reps
+              </Button>
+              <Button variant="outline" disabled={busy} onClick={() => setReps(saved)}>Undo</Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          {saved.length ? saved.map((rep) => [rep.name, rep.phone].filter(Boolean).join(" · ")).join(", ") : "No sales rep on this load."}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function JoyLoaderNote({ noteId }: { noteId: string }) {
   const router = useRouter();
   const canLoad = useHasPermission("inventory.write");
   const canFinance = useHasPermission("finance.write");
+  const canSell = useHasPermission("sales.write");
   const [data, setData] = React.useState<JoyLoadNotes | null>(null);
 
   const reload = React.useCallback(async () => {
@@ -1437,6 +1495,7 @@ export function JoyLoaderNote({ noteId }: { noteId: string }) {
         </div>
         <p className="text-sm text-muted-foreground">{truckStage(note)}</p>
       </div>
+      <LoadNoteSalesReps note={note} canEdit={canLoad || canSell} onSaved={reload} />
       {note.status === "OPEN" ? (
         <LoadingNoteCard
           note={note}

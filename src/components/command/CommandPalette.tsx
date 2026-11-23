@@ -41,6 +41,7 @@ import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { searchErpApi, type ErpSearchHit } from "@/lib/api/erp-search";
 import { isRecordListHref, recordHref } from "@/lib/nav/record-destination";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
+import { STOCK_CORRECTION_HREF, STOCK_CORRECTION_KEYWORDS, useStockCorrectionAccess } from "@/lib/inventory/stock-correction";
 import * as Icons from "lucide-react";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -181,9 +182,20 @@ export function CommandPalette() {
   }, [navParams, sidebarLayout]);
 
   // Flatten sidebar to nav items for the palette (memoized, won't change unless sidebar changes)
+  const { canCorrect: canCorrectStock } = useStockCorrectionAccess();
   const navItems = React.useMemo(
-    () => flattenNavSectionsToCommandItems(visibleSections, COMMAND_NAV_FALLBACK_ITEMS),
-    [visibleSections]
+    () => flattenNavSectionsToCommandItems(visibleSections, [
+      ...COMMAND_NAV_FALLBACK_ITEMS,
+      ...(canCorrectStock ? [{
+        id: "nav-stock-correction",
+        label: "Stock correction (damage, loss, recount)",
+        group: "nav" as const,
+        href: STOCK_CORRECTION_HREF,
+        keywords: STOCK_CORRECTION_KEYWORDS,
+        icon: "ShieldAlert",
+      }] : []),
+    ]),
+    [visibleSections, canCorrectStock]
   );
 
   // All non-nav items

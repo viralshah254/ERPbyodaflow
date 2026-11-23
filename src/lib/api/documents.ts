@@ -234,6 +234,7 @@ type BackendDocumentDetail = {
   odaflowCustomerName?: string;
   deliveryAddress?: string;
   shipToSiteId?: string;
+  sourceWarehouseId?: string;
   joyRoute?: JoyRouteSnapshot;
   createdAt?: string;
 };
@@ -316,6 +317,8 @@ export type DocumentDraftPayload = {
   branchId?: string;
   partyId?: string;
   warehouseId?: string;
+  /** Route sales order: store to pick from. Blank means the dispatch store. */
+  sourceWarehouseId?: string;
   joyRouteOrder?: JoyRouteOrderInput;
   /** Customer price tag / price list used for sales lines. */
   priceListId?: string;
@@ -362,6 +365,8 @@ export type DocumentDraftPayload = {
   linesAreTaxInclusive?: boolean;
   outputTemplateId?: string;
   odaflowMappingCorrections?: import("@/lib/odaflow-mapping-corrections").OdaflowMappingCorrectionsPayload;
+  /** Delivery note edits: why the note changed. */
+  editReason?: string;
 };
 
 export type PurchaseOrderLookupOption = {
@@ -675,6 +680,7 @@ function mapDocumentDetail(
     ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
     ...(payload.deliveryAddress ? { deliveryAddress: payload.deliveryAddress } : {}),
     ...(payload.shipToSiteId ? { shipToSiteId: payload.shipToSiteId } : {}),
+    ...(payload.sourceWarehouseId ? { sourceWarehouseId: payload.sourceWarehouseId } : {}),
     ...(payload.joyRoute ? { joyRoute: payload.joyRoute } : {}),
     ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };
@@ -960,6 +966,28 @@ export async function amendDeliveryNoteDispatchApi(
     method: "POST",
     body: payload,
   });
+}
+
+export type DeliveryNoteRevision = {
+  id: string;
+  revision: number;
+  kind: "ORIGINAL" | "EDIT" | "DISPATCH_AMEND";
+  reason?: string;
+  editedBy?: string;
+  editedByName?: string;
+  editedAt: string;
+  statusAtEdit?: string;
+  total?: number;
+  lines: Array<{ lineId: string; productId?: string; name: string; quantity: number; unit?: string; amount?: number }>;
+  changes: Array<{ field: string; from?: string; to?: string }>;
+};
+
+export async function fetchDeliveryNoteRevisionsApi(deliveryNoteId: string): Promise<DeliveryNoteRevision[]> {
+  requireLiveApi("Delivery note history");
+  const res = await apiRequest<{ items: DeliveryNoteRevision[] }>(
+    `/api/documents/delivery-note/${deliveryNoteId}/revisions`
+  );
+  return res.items ?? [];
 }
 
 export async function confirmDeliveryPodApi(

@@ -1,8 +1,9 @@
 "use client";
 
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
-import { fetchJoyOrderRoute, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
+import { fetchJoyOrderRoute, type CollectionRoute } from "@/lib/api/joy-route-orders";
 import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
+import type { PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -14,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { DocumentStepper } from "@/components/docs/DocumentStepper";
 import { getDocTypeConfig } from "@/config/documents";
@@ -625,6 +627,9 @@ export function DocumentCreateWizard({
   const lineByLine = usesSalesLayout && operatingProfile.lineItemLayout === "line_by_line";
   const skipEmptyQuantities = sheetFinishedGoods || lineByLine;
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
+  /** Delivery note edits save once with a reason, so each save is one entry in its edit history. */
+  const deliveryNoteEdit = isEditMode && type === "delivery-note";
+  const [editReason, setEditReason] = React.useState("");
   const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
     () => (skipEmptyQuantities ? lines.filter((line) => line.qty > 0) : lines),
@@ -807,9 +812,7 @@ export function DocumentCreateWizard({
     key: string; routes: CollectionRoute[]; defaultRouteId?: string; saved?: boolean; error?: string;
   }>();
   const activeRouteLookup = routeLookup?.key === routeLookupKey ? routeLookup : undefined;
-  const [routeSelection, setRouteSelection] = React.useState<{
-    key: string; routeId: string; collector?: RouteCollector;
-  }>();
+  const [routeSelection, setRouteSelection] = React.useState<{ key: string; routeId: string }>();
   const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
   const availableDeliveryRoutes = React.useMemo(() => {
     if (!joyRouteOrderEnabled || !activeRouteLookup || activeRouteLookup.error) return [];
@@ -823,7 +826,25 @@ export function DocumentCreateWizard({
   }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse]);
   const activeCollectionRoute = availableDeliveryRoutes.find((route) =>
     route.id === (manualRoute?.routeId ?? activeRouteLookup?.defaultRouteId));
-  const routeCollector = manualRoute ? manualRoute.collector : activeCollectionRoute?.collectors[0];
+  const [routeSalesRep, setRouteSalesRep] = React.useState<PickedSalesRep | null>(null);
+  const [routeTillChoice, setRouteTillChoice] = React.useState("");
+  const routeTills = React.useMemo(
+    () => [...new Set(activeCollectionRoute?.collectors.map((row) => row.tillNumber).filter(Boolean))],
+    [activeCollectionRoute],
+  );
+  const routeTill = routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "";
+  /** Route orders: store the whole order is picked from. Blank means the dispatch store. */
+  const [routeSourceChoice, setRouteSourceStoreId] = React.useState("");
+  const routeSourceStoreId = routeSourceChoice === activeCollectionRoute?.id ? "" : routeSourceChoice;
+  const routeDispatchStore = React.useMemo(() => {
+    const stores = fieldOptions.warehouse ?? [];
+    return stores.find((store) => store.id === operatingProfile.dispatchWarehouseId)
+      ?? stores.find((store) => /^dispatch\b/i.test(store.label) && !/damage/i.test(store.label));
+  }, [fieldOptions.warehouse, operatingProfile.dispatchWarehouseId]);
+  const routeSourceStores = React.useMemo(
+    () => (fieldOptions.warehouse ?? []).filter((store) => store.id !== routeDispatchStore?.id),
+    [fieldOptions.warehouse, routeDispatchStore?.id],
+  );
 
   React.useEffect(() => {
     if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
@@ -1550,9 +1571,14 @@ export function DocumentCreateWizard({
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
         warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
-        ...(joyRouteOrderEnabled && routeCollector ? {
-          joyRouteOrder: { deliveryDate: routeDeliveryDate, salesRepId: routeCollector.salesRepId, tillNumber: routeCollector.tillNumber },
+        ...(joyRouteOrderEnabled && activeCollectionRoute ? {
+          joyRouteOrder: {
+            deliveryDate: routeDeliveryDate,
+            ...(routeSalesRep ? { salesRepId: routeSalesRep.id } : {}),
+            ...(routeTill ? { tillNumber: routeTill } : {}),
+          },
         } : {}),
+        ...(joyRouteOrderEnabled && routeSourceStoreId ? { sourceWarehouseId: routeSourceStoreId } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1638,8 +1664,10 @@ export function DocumentCreateWizard({
       selectedDeliverySite,
       joyRouteOrderEnabled,
       activeCollectionRoute,
-      routeCollector,
+      routeSalesRep,
+      routeTill,
       routeDeliveryDate,
+      routeSourceStoreId,
       baseCurrency,
       form,
       billableLines,
@@ -1661,7 +1689,7 @@ export function DocumentCreateWizard({
 
   const persistEditDraft = React.useCallback(
     (immediate = false) => {
-      if (!salesLayoutReady || explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
+      if (!salesLayoutReady || explicitSheetEdit || deliveryNoteEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
       const doSave = () => {
         if (isOdaflowFmcgEdit && odaflowBaselineRef.current) {
           const baseline = odaflowBaselineRef.current;
@@ -1685,7 +1713,7 @@ export function DocumentCreateWizard({
       }
       editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
     },
-    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, salesLayoutReady, type]
+    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, deliveryNoteEdit, isOdaflowFmcgEdit, lines, salesLayoutReady, type]
   );
 
   const persistWizardProgress = React.useCallback(
@@ -1720,8 +1748,8 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeDeliveryDate || (activeCollectionRoute.collectors.length > 0 && !routeCollector))) {
-      toast.error(activeCollectionRoute?.collectors.length ? "Choose a sales rep and till." : "Choose a delivery date and route.");
+    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeDeliveryDate || (routeTills.length > 0 && !routeTill))) {
+      toast.error(activeCollectionRoute && routeDeliveryDate ? "Choose a till." : "Choose a delivery date and route.");
       return true;
     }
     if (!routeDeliveryStore || joyRouteOrderEnabled) return false;
@@ -1732,7 +1760,7 @@ export function DocumentCreateWizard({
     });
     toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
-  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeCollector, routeDeliveryDate]);
+  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeTills.length, routeTill, routeDeliveryDate]);
 
   const goToStep = React.useCallback(
     async (targetStep: number) => {
@@ -2050,6 +2078,7 @@ export function DocumentCreateWizard({
       const payload = {
         ...buildDraftPayload(),
         ...(corrections ? { odaflowMappingCorrections: corrections } : {}),
+        ...(deliveryNoteEdit ? { editReason: editReason.trim() } : {}),
       };
       const patched = await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
       toast.success(`${label} updated.`);
@@ -2066,7 +2095,7 @@ export function DocumentCreateWizard({
       allowLeaveRef.current = true;
       router.push(`/docs/${type}/${existingDocument.id}`);
     },
-    [buildDraftPayload, existingDocument, invoiceCopyFile, label, router, type]
+    [buildDraftPayload, deliveryNoteEdit, editReason, existingDocument, invoiceCopyFile, label, router, type]
   );
 
   const confirmOdaflowCorrectionReasons = React.useCallback(
@@ -2130,6 +2159,10 @@ export function DocumentCreateWizard({
     }
     try {
       if (isEditMode && existingDocument) {
+        if (deliveryNoteEdit && !editReason.trim()) {
+          toast.error("Give a reason for this edit. It is kept in the delivery note history.");
+          return;
+        }
         const mappingChanges = buildOdaflowChangePreview();
         if (mappingChanges) {
           const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
@@ -2609,6 +2642,7 @@ export function DocumentCreateWizard({
         </div>
       )}
       {explicitSheetEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. Customer defaults are not changed.</p> : null}
+      {deliveryNoteEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. You give a reason when you save, and the delivery note keeps each saved version in its edit history.</p> : null}
       <DocumentStepper
         step={step}
         maxStepReached={maxStepReached}
@@ -2874,15 +2908,15 @@ export function DocumentCreateWizard({
                   routes={availableDeliveryRoutes}
                   route={activeCollectionRoute}
                   savedRoute={activeRouteLookup?.saved}
-                  onRouteChange={(routeId) => setRouteSelection({
-                    key: routeLookupKey,
-                    routeId,
-                    collector: activeRouteLookup?.routes.find((row) => row.id === routeId)?.collectors[0],
-                  })}
-                  collector={routeCollector}
-                  onCollectorChange={(collector) => setRouteSelection({
-                    key: routeLookupKey, routeId: activeCollectionRoute?.id ?? "", collector,
-                  })}
+                  onRouteChange={(routeId) => setRouteSelection({ key: routeLookupKey, routeId })}
+                  salesRep={routeSalesRep}
+                  onSalesRepChange={setRouteSalesRep}
+                  tillNumber={routeTill}
+                  onTillChange={setRouteTillChoice}
+                  sourceStores={routeSourceStores}
+                  sourceStoreId={routeSourceStoreId}
+                  onSourceStoreChange={setRouteSourceStoreId}
+                  dispatchStoreLabel={routeDispatchStore?.label ?? "DISPATCH"}
                   hasCustomer={!!selectedPartyId}
                   loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
                   error={activeRouteLookup?.error}
@@ -3248,10 +3282,20 @@ export function DocumentCreateWizard({
                     </p>
                   </div>
                 ) : null}
-                {joyRouteOrderEnabled && routeCollector && (
+                {joyRouteOrderEnabled ? (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Pick from store</span>
+                    <p className="font-medium">
+                      {routeSourceStores.find((store) => store.id === routeSourceStoreId)?.label ?? routeDispatchStore?.label ?? "DISPATCH"}
+                    </p>
+                  </div>
+                ) : null}
+                {joyRouteOrderEnabled && activeCollectionRoute && (
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Delivery and collection</span>
-                    <p className="font-medium">{routeDeliveryDate} · {routeCollector.salesRep} · Till {routeCollector.tillNumber}</p>
+                    <p className="font-medium">
+                      {[routeDeliveryDate, routeSalesRep?.name ?? "No sales rep yet", routeTill ? `Till ${routeTill}` : ""].filter(Boolean).join(" · ")}
+                    </p>
                   </div>
                 )}
                 {type === "delivery-note" ? (
@@ -3373,6 +3417,23 @@ export function DocumentCreateWizard({
         </>
       )}
 
+      {deliveryNoteEdit && step === 3 ? (
+        <Card>
+          <CardContent className="space-y-2 pt-4">
+            <Label htmlFor="delivery-note-edit-reason">Reason for this edit</Label>
+            <Textarea
+              id="delivery-note-edit-reason"
+              value={editReason}
+              onChange={(e) => setEditReason(e.target.value)}
+              placeholder="For example: customer reduced the order by phone"
+              rows={2}
+              className="max-w-3xl"
+            />
+            <p className="text-xs text-muted-foreground">Required. Shown in the delivery note edit history with your name and the time.</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="flex justify-between">
         <div className="flex gap-2">
           {step > 1 && (
@@ -3402,7 +3463,7 @@ export function DocumentCreateWizard({
               Next
             </Button>
           ) : step === 3 ? (
-            <Button onClick={() => void onSubmit()} disabled={submitting}>
+            <Button onClick={() => void onSubmit()} disabled={submitting || (deliveryNoteEdit && !editReason.trim())}>
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
           ) : null}

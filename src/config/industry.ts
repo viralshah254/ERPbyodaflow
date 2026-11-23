@@ -10,6 +10,11 @@ export const FMCG_SELLING_TEMPLATE_IDS = [
   FMCG_BAKERY_TEMPLATE_ID,
 ] as const;
 
+/** Bakery invoices and posts without a signed or stamped delivery note. */
+export function requiresStampedDeliveryNote(templateId?: string | null): boolean {
+  return canonicalIndustryTemplateId(templateId) !== FMCG_BAKERY_TEMPLATE_ID;
+}
+
 /** Manufacturer and bakery catalogues split finished goods, raw materials, packaging, and semi-finished. */
 export function isPlantCatalogueTemplate(templateId?: string | null): boolean {
   const id = canonicalIndustryTemplateId(templateId);
