@@ -42,14 +42,26 @@ export async function fetchPartySitesApi(params?: {
   partyId?: string;
   status?: string;
   limit?: number;
-}): Promise<{ items: PartySiteRow[] }> {
+  search?: string;
+  cursor?: string | null;
+}): Promise<{ items: PartySiteRow[]; nextCursor: string | null }> {
   requireLiveApi("party sites");
   const qs = new URLSearchParams();
   if (params?.partyId) qs.set("partyId", params.partyId);
   if (params?.status) qs.set("status", params.status);
   if (params?.limit) qs.set("limit", String(params.limit));
+  if (params?.search) qs.set("search", params.search);
+  if (params?.cursor) qs.set("cursor", params.cursor);
   const query = qs.toString();
-  return apiRequest<{ items: PartySiteRow[] }>(`/api/party-sites${query ? `?${query}` : ""}`);
+  const data = await apiRequest<{ items: PartySiteRow[]; nextCursor?: string | null }>(
+    `/api/party-sites${query ? `?${query}` : ""}`
+  );
+  return { items: data.items ?? [], nextCursor: data.nextCursor ?? null };
+}
+
+export async function fetchPartySiteApi(id: string): Promise<PartySiteRow> {
+  requireLiveApi("party site");
+  return apiRequest<PartySiteRow>(`/api/party-sites/${id}`);
 }
 
 export async function createPartySiteApi(payload: PartySitePayload): Promise<{ id: string }> {

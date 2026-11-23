@@ -112,6 +112,10 @@ export function DocumentProductPickerSheet({
   const [highlight, setHighlight] = React.useState(0);
   const [addedIds, setAddedIds] = React.useState<Set<string>>(new Set());
   const listRef = React.useRef<HTMLDivElement | null>(null);
+  const contentRef = React.useRef<HTMLDivElement | null>(null);
+  const [dragOffset, setDragOffset] = React.useState({ x: 0, y: 0 });
+  const dragOffsetRef = React.useRef(dragOffset);
+  dragOffsetRef.current = dragOffset;
   const sentinelRef = React.useRef<HTMLDivElement | null>(null);
   const searchRef = React.useRef<HTMLInputElement | null>(null);
   const loadGen = React.useRef(0);
@@ -137,6 +141,7 @@ export function DocumentProductPickerSheet({
     setHasMore(false);
     setHighlight(0);
     setAddedIds(new Set());
+    setDragOffset({ x: 0, y: 0 });
     const focusId = window.setTimeout(() => searchRef.current?.focus(), 30);
     return () => window.clearTimeout(focusId);
   }, [open, productFilter, plantCatalogue, sheetFinishedGoods]);
@@ -229,6 +234,7 @@ export function DocumentProductPickerSheet({
     const root = listRef.current;
     const sentinel = sentinelRef.current;
     if (!open || !root || !sentinel || !hasMore || loading || loadingMore) return;
+    if (typeof IntersectionObserver === "undefined") return;
     const obs = new IntersectionObserver(
       (entries) => {
         if (!entries.some((entry) => entry.isIntersecting)) return;
@@ -320,20 +326,61 @@ export function DocumentProductPickerSheet({
 
   const showChips = !debouncedSearch && groupOptions.length > 0;
 
+  const beginDrag = (event: React.PointerEvent) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origin = dragOffsetRef.current;
+    const panel = contentRef.current?.getBoundingClientRect();
+    const width = panel?.width ?? 480;
+    const height = panel?.height ?? 320;
+    const move = (pointer: PointerEvent) => {
+      const margin = 8;
+      const nextX = origin.x + pointer.clientX - startX;
+      const nextY = origin.y + pointer.clientY - startY;
+      const maxX = Math.max(0, (window.innerWidth - width) / 2 - margin);
+      const maxY = Math.max(0, (window.innerHeight - height) / 2 - margin);
+      setDragOffset({
+        x: Math.min(maxX, Math.max(-maxX, nextX)),
+        y: Math.min(maxY, Math.max(-maxY, nextY)),
+      });
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", stop);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", stop);
+  };
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
         <Dialog.Content
+          ref={contentRef}
           className={cn(
-            "fixed left-1/2 top-1/2 z-50 flex h-[min(85vh,40rem)] w-[calc(100%-2rem)] max-w-3xl -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-hidden rounded-lg border bg-background p-5 shadow-lg",
-            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95"
+            "fixed left-1/2 top-1/2 z-50 flex h-[min(85vh,40rem)] w-[calc(100%-2rem)] max-w-3xl flex-col gap-3 overflow-hidden rounded-lg border bg-background p-5 shadow-lg",
+            "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0"
           )}
+          style={{ transform: `translate(calc(-50% + ${dragOffset.x}px), calc(-50% + ${dragOffset.y}px))` }}
           onOpenAutoFocus={(e) => {
             e.preventDefault();
             searchRef.current?.focus();
           }}
         >
+          <button
+            type="button"
+            className="flex w-full cursor-grab items-center justify-center gap-1.5 rounded-md border border-dashed border-border/70 bg-muted/30 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 active:cursor-grabbing"
+            aria-label="Drag to move this panel"
+            onPointerDown={beginDrag}
+          >
+            <Icons.GripHorizontal className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            Drag to move
+          </button>
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
               <Dialog.Title className="text-lg font-semibold">Add products</Dialog.Title>

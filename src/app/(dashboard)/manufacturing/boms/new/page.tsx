@@ -191,7 +191,7 @@ export default function NewBomPage() {
         ...(outputWarehouseId ? { outputWarehouseId } : {}),
       });
       toast.success(`${terms.formulaTitle} ${bom.code ?? bom.id} created.`);
-      router.push(`/manufacturing/boms/${encodeURIComponent(bom.id)}`);
+      router.push(`/manufacturing/boms/${encodeURIComponent(bom.id)}?edit=1`);
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : "Failed to create BOM.");
     } finally {

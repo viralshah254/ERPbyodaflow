@@ -79,16 +79,6 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
         requiresPermissions: ["manufacturing.bom.read"],
       },
       {
-        key: "manufacturing-recipe-governance",
-        label: "Recipe governance",
-        href: "/manufacturing/recipe-governance",
-        icon: "GitBranch",
-        moduleKey: "manufacturing",
-        requiresFlags: ["bomMrpWorkOrders"],
-        requiresPermissions: ["manufacturing.bom.read"],
-        requiresTemplates: ["fmcg-bakery"],
-      },
-      {
         key: "manufacturing-formula-governance",
         label: "Formula governance",
         href: "/manufacturing/recipe-governance",

@@ -8,10 +8,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 type Recipe = { id: string; code?: string; name: string; version?: string; lifecycle: string; isActive: boolean };
 type Context = { contract: string; recipes: Recipe[]; requests: ChangeRecord[]; hasMore: boolean; recipesHasMore: boolean };
 export default function RecipeGovernancePage() {
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const router = useRouter();
+  const bakery = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
+  React.useEffect(() => { if (bakery) router.replace("/manufacturing/boms"); }, [bakery, router]);
+  if (bakery) return <PageLayout title="Recipes" description="Recipes are edited directly. Every change is kept in the recipe's version history."><p role="status" className="text-sm text-muted-foreground">Opening the recipe library…</p></PageLayout>;
+  return <ReleaseGovernance />;
+}
+
+function ReleaseGovernance() {
   const orgId = useAuthStore((s) => s.org?.orgId), permissions = useAuthStore((s) => s.permissions);
   const [data, setData] = React.useState<Context | null>(null), [error, setError] = React.useState(""), [loading, setLoading] = React.useState(true), [busy, setBusy] = React.useState(false);
   const [recipeId, setRecipeId] = React.useState(""), [search, setSearch] = React.useState(""), [reason, setReason] = React.useState(""), [evidence, setEvidence] = React.useState("");

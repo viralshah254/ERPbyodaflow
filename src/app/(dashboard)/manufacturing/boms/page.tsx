@@ -24,6 +24,8 @@ import type { FilterChip } from "@/components/ui/filter-chips";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { cn } from "@/lib/utils";
 import * as Icons from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID } from "@/config/industry";
 
 import { BomPilotHelp } from "@/components/manufacturing/BomPilotHelp";
 
@@ -40,6 +42,10 @@ type BomRow = {
   version: string;
   type: "bom" | "formula" | "disassembly";
   isActive: boolean;
+  lifecycle?: ManufacturingBom["lifecycle"];
+  componentCount?: number;
+  updatedAt?: string;
+  lastChangedByName?: string;
 };
 
 const TYPE_OPTIONS = [
@@ -55,6 +61,14 @@ const STATUS_OPTIONS = [
   { label: "Inactive", value: "inactive" },
 ];
 
+const BAKERY_STATUS_OPTIONS = [
+  { label: "In production", value: "active" },
+  { label: "Inactive", value: "inactive" },
+  { label: "Unapplied drafts", value: "drafts" },
+  { label: "Earlier copies", value: "earlier" },
+  { label: "Everything", value: "" },
+];
+
 function toRow(b: ManufacturingBom): BomRow {
   return {
     id: b.id,
@@ -65,9 +79,13 @@ function toRow(b: ManufacturingBom): BomRow {
       : b.finishedProductName ?? b.finishedProductId,
     quantity: b.quantity,
     uom: b.uom,
-    version: b.version,
+    version: b.revisionNo ? String(b.revisionNo) : b.version,
     type: b.type,
     isActive: b.isActive,
+    lifecycle: b.lifecycle,
+    componentCount: b.componentCount,
+    updatedAt: b.updatedAt,
+    lastChangedByName: b.lastChangedByName,
   };
 }
 
@@ -77,13 +95,16 @@ export default function BomsPage() {
   const terminology = useTerminology();
   const templateId = useOrgContextStore((state) => state.templateId);
   const terms = productionTerms(templateId);
+  const bakery = canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
+  const releaseFlow = canonicalIndustryTemplateId(templateId) === "fmcg-manufacturer";
+  const statusOptions = bakery ? BAKERY_STATUS_OPTIONS : STATUS_OPTIONS;
   const bomLabel = t("bom", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
 
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("");
-  const [statusFilter, setStatusFilter] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState(() => (canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID ? "active" : ""));
   const [rows, setRows] = React.useState<BomRow[]>([]);
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState("");
@@ -111,7 +132,7 @@ export default function BomsPage() {
           cursor: String(offset),
           search: debouncedSearch.trim() || undefined,
           type: typeFilter || undefined,
-          status: (statusFilter as "" | "active" | "inactive") || undefined,
+          status: (statusFilter as "" | "active" | "inactive" | "drafts" | "earlier") || undefined,
         });
         if (requestId !== requestSequence.current) return;
         setRows(page.items.map(toRow));
@@ -159,23 +180,23 @@ export default function BomsPage() {
       const opt = TYPE_OPTIONS.find((o) => o.value === typeFilter);
       chips.push({ id: "type", label: "Type", value: opt?.label ?? typeFilter });
     }
-    if (statusFilter) {
-      const opt = STATUS_OPTIONS.find((o) => o.value === statusFilter);
+    if (statusFilter && !(bakery && statusFilter === "active")) {
+      const opt = statusOptions.find((o) => o.value === statusFilter);
       chips.push({ id: "status", label: "Status", value: opt?.label ?? statusFilter });
     }
     if (search.trim()) chips.push({ id: "q", label: "Search", value: search.trim() });
     return chips;
-  }, [typeFilter, statusFilter, search]);
+  }, [typeFilter, statusFilter, search, bakery, statusOptions]);
 
   const handleClearFilters = () => {
     setSearch("");
     setTypeFilter("");
-    setStatusFilter("");
+    setStatusFilter(bakery ? "active" : "");
   };
 
   const handleRemoveFilterChip = (id: string) => {
     if (id === "type") setTypeFilter("");
-    if (id === "status") setStatusFilter("");
+    if (id === "status") setStatusFilter(bakery ? "active" : "");
     if (id === "q") setSearch("");
   };
 
@@ -214,8 +235,31 @@ export default function BomsPage() {
           </span>
         ),
       },
-      { id: "version", header: "Version", accessor: "version" as keyof BomRow },
       {
+        id: "ingredients",
+        header: "Ingredients",
+        accessor: (r: BomRow) => <span className="tabular-nums text-sm">{r.componentCount ?? "—"}</span>,
+      },
+      {
+        id: "version",
+        header: "Version",
+        accessor: (r: BomRow) => <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs tabular-nums">v{r.version}</span>,
+      },
+      {
+        id: "changed",
+        header: "Last changed",
+        accessor: (r: BomRow) => {
+          const at = r.updatedAt ? new Date(r.updatedAt) : null;
+          if (!at || Number.isNaN(at.getTime())) return <span className="text-muted-foreground">—</span>;
+          return (
+            <span className="block text-sm" title={at.toLocaleString()}>
+              {formatDistanceToNow(at, { addSuffix: true })}
+              {r.lastChangedByName && <span className="block text-xs text-muted-foreground">{r.lastChangedByName}</span>}
+            </span>
+          );
+        },
+      },
+      ...(bakery ? [] : [{
         id: "type",
         header: "Type",
         accessor: (r: BomRow) => {
@@ -225,21 +269,22 @@ export default function BomsPage() {
             r.type === "disassembly" ? "Disassembly" : r.type === "formula" ? "Formula" : "BOM";
           return <Badge variant={variant}>{label}</Badge>;
         },
-      },
+      }]),
       {
         id: "status",
         header: "Status",
-        accessor: (r: BomRow) => (
-          <Badge
-            variant={r.isActive ? "outline" : "secondary"}
-            className={cn(!r.isActive && "opacity-70")}
-          >
-            {r.isActive ? "Active" : "Inactive"}
-          </Badge>
-        ),
+        accessor: (r: BomRow) => {
+          const state = r.lifecycle === "RETIRED" ? "Earlier copy" : r.lifecycle === "DRAFT" && !r.isActive ? "Draft" : r.isActive ? (bakery ? "In production" : "Active") : "Inactive";
+          const tone = state === "In production" || state === "Active" ? "bg-emerald-500" : state === "Draft" ? "bg-amber-500" : "bg-muted-foreground";
+          return (
+            <span className={cn("inline-flex items-center gap-1.5 text-sm", tone === "bg-muted-foreground" && "text-muted-foreground")}>
+              <span className={cn("size-1.5 rounded-full", tone)} aria-hidden />{state}
+            </span>
+          );
+        },
       },
     ],
-    []
+    [bakery]
   );
 
   return (
@@ -250,7 +295,7 @@ export default function BomsPage() {
           { id: "search", target: "[data-bom-search]", title: "Find the recipe you need", description: "Search by BOM code, recipe name or finished product. This only filters the library; it does not change a recipe.", instruction: "Enter a search term, then continue. Clear it later to see all recipes.", complete: search.trim().length > 0 && !initialLoading && !tableBusy && !loadError },
           { id: "filters", target: "[data-bom-filters]", title: "Choose a recipe type or status", description: "BOM assembles components, Formula describes batch production, and Disassembly describes a reverse process. Active and inactive are availability filters, not revision approval states.", instruction: "Select a type or status. You can clear the filters afterwards.", complete: !!typeFilter || !!statusFilter },
           { id: "records", target: "[data-bom-records]", title: rows.length ? "Compare output and version" : "No matching recipes", description: rows.length ? "Batch output is the quantity and unit this recipe defines. Check the finished product, version and active status before opening a code or row. Counts here reflect this page, not the entire library." : "Try clearing the search or changing the filters. An empty result does not mean the library has no recipes." },
-          { id: "next", target: "[data-bom-next]", title: canWrite ? "Open a record or create a BOM" : "Review an existing BOM", description: canWrite ? "New BOM defines the product and batch output first. Add components on the record after creating it. Recipe governance manages revisions; MRP is for material planning." : "Open a recipe code to inspect components and routing. Your current access does not allow creating or editing BOMs. Recipe governance and MRP are related workspaces." },
+          { id: "next", target: "[data-bom-next]", title: canWrite ? "Open a record or create a BOM" : "Review an existing BOM", description: canWrite ? "New BOM defines the product and batch output first. Add components on the record after creating it. Open a recipe and choose Edit to change it; every save is kept in its version history. MRP is for material planning." : "Open a recipe code to inspect components and routing. Your current access does not allow creating or editing BOMs." },
         ]} />}
         description={`A ${terms.formula} says what goes into a finished product and how much one batch makes. Link a routing to describe the production steps.`}
         breadcrumbs={[{ label: areaLabel, href: "/manufacturing/boms" }, { label: terms.formulasTitle }]}
@@ -258,9 +303,11 @@ export default function BomsPage() {
         showCommandHint
         actions={
           <div className="flex flex-wrap gap-2" data-bom-next>
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/manufacturing/recipe-governance">{terms.governance}</Link>
-            </Button>
+            {releaseFlow && (
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/manufacturing/recipe-governance">{terms.governance}</Link>
+              </Button>
+            )}
             <Button variant="outline" size="sm" asChild>
               <Link href="/manufacturing/mrp">MRP</Link>
             </Button>
@@ -304,7 +351,7 @@ export default function BomsPage() {
               id: "status",
               label: "Status",
               triggerClassName: "w-[140px]",
-              options: STATUS_OPTIONS,
+              options: statusOptions,
               value: statusFilter,
               onChange: setStatusFilter,
             },

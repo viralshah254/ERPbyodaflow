@@ -4,7 +4,7 @@ import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { fetchJoyOrderRoute, type CollectionRoute } from "@/lib/api/joy-route-orders";
 import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
 import type { PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
-import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
+import { fetchPartySiteApi, fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
@@ -192,7 +193,7 @@ function getDefaultValues(baseCurrency: string): FormValues {
 }
 
 const SHIP_TO_MAIN_ID = "__main__";
-const SHIP_TO_RESULT_LIMIT = 60;
+const SHIP_TO_PAGE_SIZE = 10;
 
 function shipToOption(site: PartySiteRow) {
   const description = [site.address?.line1, site.address?.city, site.address?.region].filter(Boolean).join(", ");
@@ -201,14 +202,6 @@ function shipToOption(site: PartySiteRow) {
     label: site.code ? `${site.name} · ${site.code}` : site.name,
     description: description || undefined,
   };
-}
-
-function siteMatchesQuery(site: PartySiteRow, query: string) {
-  const haystack = [site.name, site.code, site.address?.line1, site.address?.line2, site.address?.city, site.address?.region]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
 }
 
 function fieldIdToKey(id: string): keyof FormValues {
@@ -590,7 +583,7 @@ export function DocumentCreateWizard({
   const operatingProfile = useOperatingProfile(currentOrgId);
   /** Route dispatch: the sales order's store is the delivery route the goods are going to. */
   const routeDeliveryStore = operatingProfile.routeDispatch && type === "sales-order";
-  const joyRouteOrderEnabled = routeDeliveryStore && !isEditMode && operatingProfile.routeCollectionsEnabled;
+  const joyRouteOrderEnabled = routeDeliveryStore && operatingProfile.routeCollectionsEnabled;
   const config = getDocTypeConfig(type);
   const requiredPartyLabel = config?.createFormSections.find((section) => section.id === "header")?.fields.find((field) => field.required && (field.id === "customer" || field.id === "supplier"))?.label;
   const label = config ? t(config.termKey, terminology) : type;
@@ -755,36 +748,52 @@ export function DocumentCreateWizard({
   const watchedBranch = form.watch("branch");
   const selectedPartyId = form.watch("party");
   const showShipTo = ["sales-order", "invoice", "delivery-note"].includes(type);
-  const [deliverySites, setDeliverySites] = React.useState<{ partyId: string; rows: PartySiteRow[] }>();
   const [deliverySiteError, setDeliverySiteError] = React.useState("");
   const [deliverySiteSelection, setDeliverySiteSelection] = React.useState<{ partyId: string; id: string | null }>();
+  const shipToPartyRef = React.useRef(selectedPartyId);
+  shipToPartyRef.current = selectedPartyId;
+  const shipToCacheRef = React.useRef<Map<string, PartySiteRow>>(new Map());
+  const [resolvedShipTo, setResolvedShipTo] = React.useState<{ partyId: string; site: PartySiteRow } | null>(null);
   const selectedDeliverySite = deliverySiteSelection?.partyId === selectedPartyId
     ? deliverySiteSelection?.id
     : existingDocument?.partyId === selectedPartyId ? existingDocument?.shipToSiteId : undefined;
-  const deliverySiteRows = React.useMemo(() => {
-    if (!deliverySites || deliverySites.partyId !== selectedPartyId) return [];
-    return deliverySites.rows;
-  }, [deliverySites, selectedPartyId]);
-  const shipToLoading = Boolean(selectedPartyId) && isApiConfigured() && deliverySites?.partyId !== selectedPartyId && !deliverySiteError;
+  const pickedShipTo = resolvedShipTo && resolvedShipTo.partyId === selectedPartyId && resolvedShipTo.site.id === selectedDeliverySite
+    ? resolvedShipTo.site
+    : undefined;
   const selectedShipToOption = React.useMemo(() => {
     if (!selectedDeliverySite) return { id: SHIP_TO_MAIN_ID, label: "Customer’s main address" };
-    const site = deliverySiteRows.find((row) => row.id === selectedDeliverySite);
-    return site ? shipToOption(site) : { id: selectedDeliverySite, label: "Saved delivery location" };
-  }, [deliverySiteRows, selectedDeliverySite]);
+    if (pickedShipTo) return shipToOption(pickedShipTo);
+    return { id: selectedDeliverySite, label: "Saved delivery location" };
+  }, [pickedShipTo, selectedDeliverySite]);
   const loadShipToOptions = React.useCallback(async (query: string, page?: { cursor: string | null }) => {
-    const q = query.trim().toLowerCase();
-    const matched = deliverySiteRows.filter((site) => !q || siteMatchesQuery(site, q));
-    const start = page?.cursor ? Number(page.cursor) : 0;
-    const options = matched.slice(start, start + SHIP_TO_RESULT_LIMIT).map(shipToOption);
-    const mainLabel = "Customer’s main address";
-    if (start === 0 && (!q || mainLabel.toLowerCase().includes(q))) {
-      options.unshift({ id: SHIP_TO_MAIN_ID, label: mainLabel, description: "Address on the customer record" });
+    const partyId = selectedPartyId;
+    if (!partyId || !isApiConfigured()) return { options: [], nextCursor: null };
+    const cursor = page?.cursor && page.cursor !== "0" ? page.cursor : undefined;
+    try {
+      const result = await fetchPartySitesApi({
+        partyId,
+        status: "ACTIVE",
+        search: query.trim() || undefined,
+        limit: SHIP_TO_PAGE_SIZE,
+        cursor,
+      });
+      if (shipToPartyRef.current !== partyId) return { options: [], nextCursor: null };
+      for (const site of result.items) shipToCacheRef.current.set(site.id, site);
+      setDeliverySiteError("");
+      const options = result.items.map(shipToOption);
+      const mainLabel = "Customer’s main address";
+      const q = query.trim().toLowerCase();
+      if (!cursor && (!q || mainLabel.toLowerCase().includes(q))) {
+        options.unshift({ id: SHIP_TO_MAIN_ID, label: mainLabel, description: "Address on the customer record" });
+      }
+      return { options, nextCursor: result.nextCursor };
+    } catch {
+      if (shipToPartyRef.current === partyId) setDeliverySiteError("Delivery locations could not load.");
+      return { options: [], nextCursor: null };
     }
-    const next = start + SHIP_TO_RESULT_LIMIT;
-    return { options, nextCursor: next < matched.length ? String(next) : null };
-  }, [deliverySiteRows]);
+  }, [selectedPartyId]);
   const selectedSiteAddress = selectedDeliverySite
-    ? deliverySiteRows.find((site) => site.id === selectedDeliverySite)?.address
+    ? pickedShipTo?.address
     : selectedPartyDetail?.id === selectedPartyId ? selectedPartyDetail?.address : undefined;
   const shipToPreview = selectedSiteAddress && [
     selectedSiteAddress.line1, selectedSiteAddress.line2, selectedSiteAddress.city,
@@ -794,18 +803,36 @@ export function DocumentCreateWizard({
     deliverySiteSelection?.id !== (existingDocument?.shipToSiteId ?? null);
 
   React.useEffect(() => {
-    if (!showShipTo || !selectedPartyId || !isApiConfigured()) return;
-    let active = true;
+    shipToCacheRef.current.clear();
+    setResolvedShipTo(null);
     setDeliverySiteError("");
-    void fetchPartySitesApi({ partyId: selectedPartyId, status: "ACTIVE", limit: 2000 })
-      .then(({ items }) => { if (active) setDeliverySites({ partyId: selectedPartyId, rows: items }); })
-      .catch(() => { if (active) setDeliverySiteError("Delivery locations could not load."); });
+  }, [selectedPartyId]);
+
+  React.useEffect(() => {
+    if (!showShipTo || !selectedPartyId || !selectedDeliverySite || !isApiConfigured()) return;
+    const cached = shipToCacheRef.current.get(selectedDeliverySite);
+    if (cached?.partyId === selectedPartyId) {
+      setResolvedShipTo({ partyId: selectedPartyId, site: cached });
+      return;
+    }
+    const partyId = selectedPartyId;
+    const siteId = selectedDeliverySite;
+    let active = true;
+    void fetchPartySiteApi(siteId)
+      .then((site) => {
+        if (!active || shipToPartyRef.current !== partyId || site.partyId !== partyId) return;
+        shipToCacheRef.current.set(site.id, site);
+        setResolvedShipTo({ partyId, site });
+      })
+      .catch(() => {});
     return () => { active = false; };
-  }, [showShipTo, selectedPartyId]);
+  }, [showShipTo, selectedPartyId, selectedDeliverySite]);
 
   const watchedWarehouse = form.watch("warehouse");
   const orderDate = form.watch("date");
-  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string>();
+  const [deliveryDateOverride, setDeliveryDateOverride] = React.useState<string | undefined>(
+    () => (mode === "edit" ? existingDocument?.joyRoute?.deliveryDate?.slice(0, 10) : undefined),
+  );
   const routeDeliveryDate = deliveryDateOverride ?? orderDate;
   const routeLookupKey = JSON.stringify([selectedPartyId, selectedDeliverySite, routeDeliveryDate]);
   const [routeLookup, setRouteLookup] = React.useState<{
@@ -815,26 +842,68 @@ export function DocumentCreateWizard({
   const [routeSelection, setRouteSelection] = React.useState<{ key: string; routeId: string }>();
   const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
   const availableDeliveryRoutes = React.useMemo(() => {
-    if (!joyRouteOrderEnabled || !activeRouteLookup || activeRouteLookup.error) return [];
-    const configured = new Map(activeRouteLookup.routes.map((route) => [route.id, route]));
-    for (const warehouse of fieldOptions.warehouse ?? []) {
-      if (!configured.has(warehouse.id) && !/dispatch/i.test(warehouse.label)) {
-        configured.set(warehouse.id, { id: warehouse.id, name: warehouse.label, collectors: [] });
+    if (!joyRouteOrderEnabled) return [];
+    const configured = new Map<string, CollectionRoute>();
+    if (activeRouteLookup && !activeRouteLookup.error) {
+      for (const route of activeRouteLookup.routes ?? []) configured.set(route.id, route);
+      for (const warehouse of fieldOptions.warehouse ?? []) {
+        if (!configured.has(warehouse.id) && !/dispatch/i.test(warehouse.label)) {
+          configured.set(warehouse.id, { id: warehouse.id, name: warehouse.label, collectors: [] });
+        }
       }
     }
+    const savedRouteId = isEditMode ? existingDocument?.warehouseId?.trim() : "";
+    if (savedRouteId && !configured.has(savedRouteId)) {
+      configured.set(savedRouteId, {
+        id: savedRouteId,
+        name: existingDocument?.joyRoute?.routeName || savedRouteId,
+        collectors: [],
+      });
+    }
     return [...configured.values()];
-  }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse]);
-  const activeCollectionRoute = availableDeliveryRoutes.find((route) =>
-    route.id === (manualRoute?.routeId ?? activeRouteLookup?.defaultRouteId));
-  const [routeSalesRep, setRouteSalesRep] = React.useState<PickedSalesRep | null>(null);
-  const [routeTillChoice, setRouteTillChoice] = React.useState("");
+  }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse, isEditMode, existingDocument?.warehouseId, existingDocument?.joyRoute?.routeName]);
+  /** Keep the order's route until the operator picks a different one. */
+  const editRouteHoldRef = React.useRef<string | null>(
+    mode === "edit" ? existingDocument?.warehouseId?.trim() || null : null,
+  );
+  const heldRouteId = editRouteHoldRef.current?.trim() || undefined;
+  const chosenRouteId = manualRoute ? manualRoute.routeId : (heldRouteId || activeRouteLookup?.defaultRouteId);
+  const activeCollectionRoute = availableDeliveryRoutes.find((route) => route.id === chosenRouteId);
+  const [routeSalesRep, setRouteSalesRep] = React.useState<PickedSalesRep | null>(() => {
+    const saved = mode === "edit" ? existingDocument?.joyRoute : undefined;
+    return saved?.salesRepId && saved.salesRep
+      ? { id: saved.salesRepId, name: saved.salesRep, phone: saved.salesRepPhone }
+      : null;
+  });
+  const [routeTillChoice, setRouteTillChoice] = React.useState(
+    () => (mode === "edit" ? existingDocument?.joyRoute?.tillNumber ?? "" : ""),
+  );
   const routeTills = React.useMemo(
     () => [...new Set(activeCollectionRoute?.collectors.map((row) => row.tillNumber).filter(Boolean))],
     [activeCollectionRoute],
   );
-  const routeTill = routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "";
+  const routeKnownToLookup = Boolean(
+    activeCollectionRoute &&
+    activeRouteLookup &&
+    !activeRouteLookup.error &&
+    (activeRouteLookup.routes ?? []).some((route) => route.id === activeCollectionRoute.id),
+  );
+  const routeTill = routeKnownToLookup
+    ? (routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "")
+    : routeTillChoice;
+  const routeReadyForSave = Boolean(
+    activeCollectionRoute && (
+      (isEditMode && existingDocument?.joyRoute) ||
+      (activeRouteLookup && !activeRouteLookup.error && (
+        routeKnownToLookup ||
+        (fieldOptions.warehouse ?? []).some((warehouse) => warehouse.id === activeCollectionRoute.id)
+      ))
+    ),
+  );
   /** Route orders: store the whole order is picked from. Blank means the dispatch store. */
-  const [routeSourceChoice, setRouteSourceStoreId] = React.useState("");
+  const [routeSourceChoice, setRouteSourceStoreId] = React.useState(
+    () => (mode === "edit" ? existingDocument?.sourceWarehouseId ?? "" : ""),
+  );
   const routeSourceStoreId = routeSourceChoice === activeCollectionRoute?.id ? "" : routeSourceChoice;
   const routeDispatchStore = React.useMemo(() => {
     const stores = fieldOptions.warehouse ?? [];
@@ -849,8 +918,15 @@ export function DocumentCreateWizard({
   React.useEffect(() => {
     if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
     let active = true;
-    fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite)
-      .then((result) => { if (active) setRouteLookup({ key: routeLookupKey, ...result }); })
+    void Promise.resolve(fetchJoyOrderRoute(selectedPartyId, routeDeliveryDate, selectedDeliverySite))
+      .then((result) => {
+        if (active) setRouteLookup({
+          key: routeLookupKey,
+          routes: result?.routes ?? [],
+          defaultRouteId: result?.defaultRouteId,
+          saved: result?.saved,
+        });
+      })
       .catch((error) => {
         if (active) setRouteLookup({ key: routeLookupKey, routes: [], error: error.message || "Could not load delivery routes." });
       });
@@ -858,8 +934,10 @@ export function DocumentCreateWizard({
   }, [joyRouteOrderEnabled, routeLookupKey, selectedPartyId, routeDeliveryDate, selectedDeliverySite]);
 
   React.useEffect(() => {
-    if (joyRouteOrderEnabled) form.setValue("warehouse", activeCollectionRoute?.id ?? "");
-  }, [joyRouteOrderEnabled, form, activeCollectionRoute?.id]);
+    if (!joyRouteOrderEnabled) return;
+    if (activeCollectionRoute?.id) form.setValue("warehouse", activeCollectionRoute.id);
+    else if (!isEditMode) form.setValue("warehouse", "");
+  }, [joyRouteOrderEnabled, isEditMode, form, activeCollectionRoute?.id]);
 
 
   React.useEffect(() => {
@@ -916,6 +994,16 @@ export function DocumentCreateWizard({
     editHydratedRef.current = false;
     skipEditAutosaveRef.current = true;
     const doc = existingDocument;
+    editRouteHoldRef.current = doc.warehouseId?.trim() || null;
+    setRouteSelection(undefined);
+    setDeliveryDateOverride(doc.joyRoute?.deliveryDate?.slice(0, 10));
+    setRouteSourceStoreId(doc.sourceWarehouseId ?? "");
+    setRouteTillChoice(doc.joyRoute?.tillNumber ?? "");
+    setRouteSalesRep(
+      doc.joyRoute?.salesRepId && doc.joyRoute.salesRep
+        ? { id: doc.joyRoute.salesRepId, name: doc.joyRoute.salesRep, phone: doc.joyRoute.salesRepPhone }
+        : null,
+    );
     setRepriceExistingRevision(0);
     previousPricingParty.current = doc.partyId ?? "";
     allowLeaveRef.current = false;
@@ -1344,10 +1432,9 @@ export function DocumentCreateWizard({
     setPricingByProductId((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing])) }));
   }, []);
 
-  /** Fetch packaging / pricing for SKUs added via the product picker (beyond the initial cache page). */
+  /** Fetch packaging / pricing for products added from search or browse. */
   const handleProductsAdded = React.useCallback(
     (productIds: string[]) => {
-      if (sheetFinishedGoods) return;
       const isPurchasingDoc =
         type === "bill" ||
         type === "purchase-order" ||
@@ -1356,6 +1443,13 @@ export function DocumentCreateWizard({
         type === "purchase-credit-note" ||
         type === "purchase-debit-note";
       if (isPurchasingDoc) return;
+      if (sheetFinishedGoods) {
+        if (!isApiConfigured()) return;
+        const missing = productIds.filter((id) => packagingByProductId[id] === undefined);
+        if (!missing.length) return;
+        void fetchDocumentProductDataApi(missing).then(handleDocumentProductData).catch(() => {});
+        return;
+      }
       const missing = productIds.filter(
         (id) => packagingByProductId[id] === undefined || pricingByProductId[id] === undefined
       );
@@ -1381,7 +1475,7 @@ export function DocumentCreateWizard({
         })
         .catch(() => {});
     },
-    [packagingByProductId, pricingByProductId, type, sheetFinishedGoods]
+    [handleDocumentProductData, packagingByProductId, pricingByProductId, type, sheetFinishedGoods]
   );
 
   const handlePoSelect = React.useCallback(
@@ -1570,15 +1664,17 @@ export function DocumentCreateWizard({
         branchId: form.getValues("branch") || undefined,
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
-        warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
-        ...(joyRouteOrderEnabled && activeCollectionRoute ? {
+        warehouseId: joyRouteOrderEnabled
+          ? (activeCollectionRoute?.id || (isEditMode ? form.getValues("warehouse") || undefined : undefined))
+          : form.getValues("warehouse") || undefined,
+        ...(joyRouteOrderEnabled && routeReadyForSave && (activeCollectionRoute?.id || form.getValues("warehouse")) ? {
           joyRouteOrder: {
             deliveryDate: routeDeliveryDate,
             ...(routeSalesRep ? { salesRepId: routeSalesRep.id } : {}),
             ...(routeTill ? { tillNumber: routeTill } : {}),
           },
         } : {}),
-        ...(joyRouteOrderEnabled && routeSourceStoreId ? { sourceWarehouseId: routeSourceStoreId } : {}),
+        ...(joyRouteOrderEnabled && (isEditMode || routeSourceStoreId) ? { sourceWarehouseId: routeSourceStoreId } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1663,7 +1759,9 @@ export function DocumentCreateWizard({
       hasDeliverySiteChange,
       selectedDeliverySite,
       joyRouteOrderEnabled,
+      isEditMode,
       activeCollectionRoute,
+      routeReadyForSave,
       routeSalesRep,
       routeTill,
       routeDeliveryDate,
@@ -2663,7 +2761,7 @@ export function DocumentCreateWizard({
             ) : null}
           </CardHeader>
           <CardContent className="pt-2 pb-4">
-            {!headerStepReady ? (
+            {!branchWarehouseReady ? (
               <div className="mb-4 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                 <Icons.Loader2 className="h-4 w-4 shrink-0 animate-spin" />
                 Loading header fields…
@@ -2709,7 +2807,7 @@ export function DocumentCreateWizard({
                 </p>
               </div>
             ) : null}
-            <form className={cn("space-y-4", !headerStepReady && "pointer-events-none opacity-60")}>
+            <form className={cn("space-y-4", !branchWarehouseReady && "pointer-events-none opacity-60")}>
               {type === "grn" && (
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-start gap-2">
@@ -2882,19 +2980,23 @@ export function DocumentCreateWizard({
                   <Label htmlFor="ship-to-site">Ship to</Label>
                   <AsyncSearchableSelect
                     id="ship-to-site"
-                    value={shipToLoading ? "" : (selectedDeliverySite ?? SHIP_TO_MAIN_ID)}
-                    onValueChange={(id) => setDeliverySiteSelection({
-                      partyId: selectedPartyId,
-                      id: !id || id === SHIP_TO_MAIN_ID ? null : id,
-                    })}
+                    value={selectedDeliverySite ?? SHIP_TO_MAIN_ID}
+                    onValueChange={(id) => {
+                      const siteId = !id || id === SHIP_TO_MAIN_ID ? null : id;
+                      setDeliverySiteSelection({ partyId: selectedPartyId, id: siteId });
+                      if (!siteId) {
+                        setResolvedShipTo(null);
+                        return;
+                      }
+                      const site = shipToCacheRef.current.get(siteId);
+                      if (site?.partyId === selectedPartyId) setResolvedShipTo({ partyId: selectedPartyId, site });
+                    }}
                     loadOptions={loadShipToOptions}
-                    selectedOption={shipToLoading ? null : selectedShipToOption}
-                    placeholder={shipToLoading ? "Loading branches…" : "Customer’s main address"}
+                    selectedOption={selectedShipToOption}
+                    placeholder="Customer’s main address"
                     searchPlaceholder="Search branch name, code, or town"
                     emptyMessage="No branches match that search."
-                    disabled={shipToLoading}
-                    searchDebounceMs={0}
-                    reloadToken={`${selectedPartyId}:${deliverySiteRows.length}`}
+                    reloadToken={selectedPartyId}
                     recentStorageKey={`lookup:recent-ship-to:${selectedPartyId}`}
                   />
                   {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}
@@ -2908,7 +3010,10 @@ export function DocumentCreateWizard({
                   routes={availableDeliveryRoutes}
                   route={activeCollectionRoute}
                   savedRoute={activeRouteLookup?.saved}
-                  onRouteChange={(routeId) => setRouteSelection({ key: routeLookupKey, routeId })}
+                  onRouteChange={(routeId) => {
+                    editRouteHoldRef.current = null;
+                    setRouteSelection({ key: routeLookupKey, routeId });
+                  }}
                   salesRep={routeSalesRep}
                   onSalesRepChange={setRouteSalesRep}
                   tillNumber={routeTill}
@@ -2918,6 +3023,7 @@ export function DocumentCreateWizard({
                   onSourceStoreChange={setRouteSourceStoreId}
                   dispatchStoreLabel={routeDispatchStore?.label ?? "DISPATCH"}
                   hasCustomer={!!selectedPartyId}
+                  captions={!isEditMode}
                   loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
                   error={activeRouteLookup?.error}
                 />
@@ -3018,7 +3124,7 @@ export function DocumentCreateWizard({
       )}
 
       {step === 2 && (
-        <Card className="relative overflow-hidden">
+        <Card className="relative">
           {linesLoadingUiActive ? (
             <>
               <div
@@ -3200,15 +3306,22 @@ export function DocumentCreateWizard({
             /> : null}
             </div>
             {fmcgOrg && effectiveTaxConfig ? (
-              <div className="mt-4 rounded-lg border p-3 text-sm">
-                <p className="font-medium">
-                  Tax: {effectiveTaxConfig.name} ({effectiveTaxConfig.rate}%{" "}
-                  {effectiveTaxConfig.pricesAreTaxInclusive ? "inclusive" : "exclusive"})
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  The tax tag sets whether prices include VAT. Each product keeps its own rate (16% or 0%).
-                  Change the tag to switch exclusive / inclusive. Manage tags under Pricing → Tax tags.
-                </p>
+              <div className="mt-4 flex items-center gap-1 text-sm">
+                <span>{effectiveTaxConfig.name}</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex rounded p-1 text-muted-foreground hover:text-foreground"
+                      aria-label="About this tax tag"
+                    >
+                      <Icons.Info className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-80 p-3 text-xs leading-relaxed text-muted-foreground">
+                    The tax tag sets whether prices include VAT. Each product keeps its own rate (16% or 0%). Change the tag to switch exclusive or inclusive. Manage tags under Pricing, Tax tags.
+                  </PopoverContent>
+                </Popover>
               </div>
             ) : (
               <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-3">
@@ -3434,7 +3547,7 @@ export function DocumentCreateWizard({
         </Card>
       ) : null}
 
-      <div className="flex justify-between">
+      <div className="sticky bottom-0 z-30 -mx-4 flex justify-between border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex gap-2">
           {step > 1 && (
             <Button

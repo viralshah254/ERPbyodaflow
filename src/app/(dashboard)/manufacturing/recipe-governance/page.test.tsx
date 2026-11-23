@@ -4,6 +4,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 const mocks = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock("@/lib/api/client", () => ({ apiRequest: mocks.request }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
+vi.mock("@/stores/orgContextStore", () => ({ useOrgContextStore: (select: (s: unknown) => unknown) => select({ templateId: "fmcg-manufacturer" }) }));
 vi.mock("@/stores/auth-store", () => ({ useAuthStore: (select: (s: unknown) => unknown) => select({ org: { orgId: "synthetic" }, user: { userId: "maker" }, permissions: ["manufacturing.bom.read", "manufacturing.write", "manufacturing.production.approve"] }) }));
 vi.mock("@/components/layout/page-layout", () => ({ PageLayout: ({ title, children }: { title: string; children: React.ReactNode }) => <main className="mx-auto min-h-screen max-w-[1500px] bg-background p-4 text-foreground sm:p-6"><p className="mb-2 text-xs text-muted-foreground">SYNTHETIC QA PREVIEW · NO CLIENT DATA</p><h1 className="mb-5 text-2xl font-semibold">{title}</h1>{children}</main> }));
 import Page from "./page";

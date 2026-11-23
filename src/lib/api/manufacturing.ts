@@ -35,11 +35,86 @@ export type ManufacturingBom = {
   lifecycle?: "DRAFT" | "EFFECTIVE" | "RETIRED" | "LEGACY";
   releaseChangeId?: string;
   parentRevisionId?: string;
+  /** Current entry in the recipe's version history. */
+  revisionNo?: number;
+  lastChangedByName?: string;
+  updatedAt?: string;
+  componentCount?: number;
   routeId?: string;
   outputWarehouseId?: string;
   outputWarehouseName?: string;
   items: ManufacturingBomItem[];
 };
+
+export type RecipeRevisionChange = {
+  kind: "added" | "removed" | "changed" | "header";
+  productId?: string;
+  field: string;
+  from?: string | number | boolean | null;
+  to?: string | number | boolean | null;
+};
+
+export type RecipeSnapshotItem = {
+  lineId?: string;
+  productId: string;
+  quantity: number;
+  uom?: string;
+  isOptional?: boolean;
+  scrapFactor?: number;
+  scrapFactorMode?: "RATIO" | "PERCENT";
+  unitCost?: number;
+  warehouseId?: string;
+};
+
+export type RecipeRevision = {
+  id: string;
+  revisionNo: number;
+  effectiveFrom: string;
+  source: "CREATED" | "BASELINE" | "EDIT" | "RESTORE" | "APPLIED_DRAFT";
+  note?: string;
+  changedByName?: string;
+  batchCost: number | null;
+  unpricedLines: number;
+  restoredFromRevisionNo?: number;
+  isCurrent: boolean;
+  changes: RecipeRevisionChange[];
+  snapshot: { name?: string; quantity?: number; uom?: string; routeId?: string; outputWarehouseId?: string; items: RecipeSnapshotItem[] };
+};
+
+export type RecipeOtherRecord = {
+  id: string;
+  code?: string;
+  name: string;
+  version?: string;
+  lifecycle: string;
+  isActive: boolean;
+  pendingDraft: boolean;
+  updatedAt?: string;
+  componentCount: number;
+};
+
+export type RecipeHistory = {
+  recipeId: string;
+  currentRevisionNo: number;
+  historyStarted: boolean;
+  revisions: RecipeRevision[];
+  productNames: Record<string, { name?: string; sku?: string }>;
+  warehouseNames: Record<string, string>;
+  otherRecords: RecipeOtherRecord[];
+};
+
+export async function fetchRecipeHistory(id: string): Promise<RecipeHistory> {
+  return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}/revisions`);
+}
+
+export async function restoreRecipeRevision(id: string, revisionNo: number, note?: string): Promise<ManufacturingBom> {
+  return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}/revisions/${revisionNo}/restore`, { method: "POST", body: { note } });
+}
+
+/** Bakery: put an old draft or earlier copy into production. Returns the recipe that is now live. */
+export async function makeRecipeCurrent(id: string): Promise<{ id: string; merged: boolean }> {
+  return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}/make-current`, { method: "POST" });
+}
 
 export type ManufacturingRoute = {
   id: string;
@@ -204,7 +279,7 @@ export type FetchManufacturingBomsOpts = {
   search?: string;
   direction?: string;
   type?: string;
-  status?: "" | "active" | "inactive";
+  status?: "" | "active" | "inactive" | "drafts" | "earlier";
   productId?: string;
   activeOnly?: boolean;
   includeItems?: boolean;
@@ -229,8 +304,7 @@ export async function fetchManufacturingBomsPage(
   if (opts?.search?.trim()) params.set("search", opts.search.trim());
   if (opts?.direction) params.set("direction", opts.direction);
   if (opts?.type) params.set("type", opts.type);
-  if (opts?.status === "active") params.set("status", "active");
-  if (opts?.status === "inactive") params.set("status", "inactive");
+  if (opts?.status) params.set("status", opts.status);
   if (opts?.productId) params.set("productId", opts.productId);
   if (opts?.activeOnly) params.set("activeOnly", "true");
   if (opts?.includeItems) params.set("includeItems", "true");
@@ -303,7 +377,7 @@ export async function createManufacturingBom(payload: {
   return apiRequest("/api/manufacturing/boms", { method: "POST", body: payload });
 }
 
-export async function updateManufacturingBom(id: string, payload: Partial<ManufacturingBom>): Promise<ManufacturingBom> {
+export async function updateManufacturingBom(id: string, payload: Omit<Partial<ManufacturingBom>, "routeId"> & { routeId?: string | null; changeNote?: string }): Promise<ManufacturingBom> {
   return apiRequest(`/api/manufacturing/boms/${encodeURIComponent(id)}`, { method: "PATCH", body: payload });
 }
 

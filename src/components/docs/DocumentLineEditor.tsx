@@ -277,6 +277,7 @@ export function DocumentLineEditor({
   onCatalogReadyChange,
   onDocumentProductData,
 }: DocumentLineEditorProps) {
+  const inlineCatalogue = lineByLine && !fmcgOrg;
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
@@ -304,11 +305,6 @@ export function DocumentLineEditor({
   const browsePagingRef = React.useRef(false);
   /** Inline sales sheet: next catalogue page, or null once every finished good is loaded. */
   const [sheetCursor, setSheetCursor] = React.useState<string | null>(null);
-  const [sheetLoadingMore, setSheetLoadingMore] = React.useState(false);
-  const [sheetLoadError, setSheetLoadError] = React.useState(false);
-  const [sheetSearching, setSheetSearching] = React.useState(false);
-  const sheetSentinelRef = React.useRef<HTMLDivElement | null>(null);
-  const sheetPagingRef = React.useRef(false);
   const sheetGenerationRef = React.useRef(0);
 
   React.useEffect(() => {
@@ -402,7 +398,7 @@ export function DocumentLineEditor({
   }, [variantsByProductId]);
 
   React.useEffect(() => {
-    if (!fmcgOrg || !isApiConfigured() || sheetFinishedGoods) return;
+    if (!fmcgOrg || !isApiConfigured()) return;
     const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))];
     for (const productId of productIds) {
       ensureVariantsLoaded(productId);
@@ -414,7 +410,7 @@ export function DocumentLineEditor({
         })
         .catch(() => {});
     }
-  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId, sheetFinishedGoods]);
+  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId]);
 
   const catalogueLinesRef = React.useRef(lines);
   catalogueLinesRef.current = lines;
@@ -436,8 +432,6 @@ export function DocumentLineEditor({
     setBrowseHasMore(false);
     browsePagingRef.current = false;
     setSheetCursor(null);
-    setSheetLoadError(false);
-    sheetPagingRef.current = false;
     sheetGenerationRef.current += 1;
     let nextSheetCursor: string | null = null;
     const load = sheetFinishedGoods
@@ -542,24 +536,6 @@ export function DocumentLineEditor({
       return [...(prev ?? []), ...added.filter((row) => !ids.has(row.id))];
     });
   }, []);
-
-  const loadMoreSheet = React.useCallback(async () => {
-    if (!sheetFinishedGoods || sheetCursor == null || sheetPagingRef.current) return;
-    const generation = sheetGenerationRef.current;
-    sheetPagingRef.current = true;
-    setSheetLoadingMore(true);
-    setSheetLoadError(false);
-    try {
-      const page = await fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, cursor: sheetCursor });
-      await appendSheetProducts(page.items, generation);
-      if (generation === sheetGenerationRef.current) setSheetCursor(page.nextCursor);
-    } catch {
-      if (generation === sheetGenerationRef.current) setSheetLoadError(true);
-    } finally {
-      sheetPagingRef.current = false;
-      setSheetLoadingMore(false);
-    }
-  }, [appendSheetProducts, packSizeFromName, sheetCursor, sheetFinishedGoods]);
 
   /** CoolCatch: product family. FMCG: product category. */
   const groupOptions = React.useMemo(() => {
@@ -738,7 +714,7 @@ export function DocumentLineEditor({
             }
           }
           const p = item.product;
-          if (!sheetFinishedGoods) ensureVariantsLoaded(p.id);
+          ensureVariantsLoaded(p.id);
           const packaging = packagingByProductId?.[p.id] ?? [];
           // Quantity-sheet rows start in the SKU's own unit, as before batching.
           // A pack (PK/CTN) is an explicit selection, never a timing-dependent default.
@@ -785,7 +761,7 @@ export function DocumentLineEditor({
       if (focusId && focusQty) setPendingQtyFocusId(focusId);
       if (created.length) onProductsAdded?.(created.map((l) => l.productId));
 
-      if (isApiConfigured() && !sheetFinishedGoods) {
+      if (isApiConfigured()) {
         for (const newLine of created) {
           void fetchProductApi(newLine.productId)
             .then((full) => {
@@ -827,19 +803,6 @@ export function DocumentLineEditor({
       fmcgCatalogByProductId,
     ]
   );
-
-  React.useEffect(() => {
-    if (!sheetFinishedGoods || !sheetCatalogReady || (packSizeFromName && !fmcgCatalogByProductId)) return;
-    if (!filteredProducts?.length) return;
-    const existingIds = new Set(lines.map((line) => line.productId));
-    const missingProducts = filteredProducts.filter((product) => !existingIds.has(product.id));
-    if (!missingProducts.length) return;
-    commitProducts(
-      missingProducts.map((product) => ({ product, qty: 0, asNewLine: false })),
-      undefined,
-      false
-    );
-  }, [sheetFinishedGoods, sheetCatalogReady, packSizeFromName, fmcgCatalogByProductId, filteredProducts, lines, commitProducts]);
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -1193,7 +1156,7 @@ export function DocumentLineEditor({
   const showDiscount = !useCostPricing;
 
   React.useEffect(() => {
-    if (!sheetFinishedGoods) lines.forEach((l) => ensureVariantsLoaded(l.productId));
+    lines.forEach((l) => ensureVariantsLoaded(l.productId));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1264,13 +1227,16 @@ export function DocumentLineEditor({
     const timer = window.setTimeout(() => {
       void Promise.all(
         queries.map((search) =>
-          fetchProductsApi({
-            purchasable: sheetFinishedGoods ? undefined : productFilter === "purchasable" ? true : undefined,
-            sellable: productFilter === "sellable" || sheetFinishedGoods ? true : undefined,
-            search,
-            limit: 30,
-            includeStock: false,
-          }).catch(() => [] as ProductRow[])
+          (sheetFinishedGoods
+            ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, search, limit: 30 }).then((page) => page.items)
+            : fetchProductsApi({
+                purchasable: productFilter === "purchasable" ? true : undefined,
+                sellable: productFilter === "sellable" ? true : undefined,
+                search,
+                limit: 30,
+                includeStock: false,
+              })
+          ).catch(() => [] as ProductRow[])
         )
       ).then((pages) => {
         if (cancelled) return;
@@ -1284,7 +1250,7 @@ export function DocumentLineEditor({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [productFilter, searchOpen, searchSplit.stripped, searchSplit.text, sheetFinishedGoods]);
+  }, [packSizeFromName, productFilter, searchOpen, searchSplit.stripped, searchSplit.text, sheetFinishedGoods]);
 
   const browsingCatalogue = lineByLine && fmcgOrg && !queryForList.trim();
   const searchResults = React.useMemo(() => {
@@ -1292,11 +1258,15 @@ export function DocumentLineEditor({
     for (const p of products) byId.set(p.id, p);
     if (remoteSearchKey === searchSplit.text) for (const p of remoteMatches) byId.set(p.id, p);
     const q = queryForList.trim();
+    const finishedOnly = sheetFinishedGoods && packSizeFromName;
     const ranked = preferExactProductIdentifiers([...byId.values()]
-      .filter((p) => inChip(p) && (!q || (remoteSearchKey === searchSplit.text && remoteMatches.some((item) => item.id === p.id)) || productMatchesLineSearch(p, q))), q)
+      .filter((p) => {
+        if (finishedOnly && p.itemRole && p.itemRole !== "FINISHED") return false;
+        return inChip(p) && (!q || (remoteSearchKey === searchSplit.text && remoteMatches.some((item) => item.id === p.id)) || productMatchesLineSearch(p, q));
+      }), q)
       .sort((a, b) => a.name.localeCompare(b.name));
     return browsingCatalogue ? ranked : ranked.slice(0, q ? 40 : 30);
-  }, [browsingCatalogue, inChip, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text]);
+  }, [browsingCatalogue, inChip, packSizeFromName, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text, sheetFinishedGoods]);
 
   React.useEffect(() => {
     setHighlightIndex(0);
@@ -1432,52 +1402,29 @@ export function DocumentLineEditor({
   const displayedLines = React.useMemo(() => {
     if (!sheetFinishedGoods) return lines;
     const productsById = new Map(products.map((product) => [product.id, product]));
-    const candidates = lines.map((line) => ({ name: line.name, sku: line.sku, ...productsById.get(line.productId), line }));
-    if (!searchQuery.trim()) {
-      // Search hits load out of catalogue order. Keep the sheet in item-code order.
-      return candidates
-        .map((p, index) => ({ p, index, code: numericItemCodeSort(p) }))
-        .sort((a, b) => a.code - b.code || a.index - b.index)
-        .map(({ p }) => p.line);
-    }
-    return preferExactProductIdentifiers(candidates.filter((p) => productMatchesSearch(p, searchQuery)), searchQuery).map((p) => p.line);
-  }, [lines, products, searchQuery, sheetFinishedGoods]);
+    return lines
+      .map((line, index) => ({
+        line,
+        index,
+        code: numericItemCodeSort({ sku: line.sku, code: productsById.get(line.productId)?.code }),
+      }))
+      .sort((a, b) => a.code - b.code || a.index - b.index)
+      .map(({ line }) => line);
+  }, [lines, products, sheetFinishedGoods]);
 
   React.useEffect(() => {
     const query = searchQuery.trim();
-    if (!sheetFinishedGoods || !sheetCatalogReady || sheetCursor == null || !query || !isApiConfigured()) {
-      setSheetSearching(false);
-      return;
-    }
+    if (!sheetFinishedGoods || !sheetCatalogReady || sheetCursor == null || !query || !isApiConfigured()) return;
     const generation = sheetGenerationRef.current;
-    let cancelled = false;
-    setSheetSearching(true);
     const timer = window.setTimeout(() => {
       void fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, search: query, limit: 30 })
         .then((page) => appendSheetProducts(page.items, generation))
-        .catch(() => {})
-        .finally(() => { if (!cancelled) setSheetSearching(false); });
+        .catch(() => {});
     }, 250);
     return () => {
-      cancelled = true;
       window.clearTimeout(timer);
     };
   }, [appendSheetProducts, packSizeFromName, searchQuery, sheetCatalogReady, sheetCursor, sheetFinishedGoods]);
-
-  const sheetHasMore = sheetFinishedGoods && sheetCursor != null;
-  React.useEffect(() => {
-    if (!sheetHasMore || sheetLoadingMore || sheetLoadError || searchQuery.trim()) return;
-    const sentinel = sheetSentinelRef.current;
-    if (!sentinel || typeof IntersectionObserver === "undefined") return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) void loadMoreSheet();
-      },
-      { rootMargin: "200px" }
-    );
-    obs.observe(sentinel);
-    return () => obs.disconnect();
-  }, [sheetHasMore, sheetLoadingMore, sheetLoadError, searchQuery, loadMoreSheet, lines.length]);
 
   const moveFieldFocus = (lineId: string, field: "qty" | "price", dir: -1 | 1) => {
     const idx = displayedLines.findIndex((l) => l.id === lineId);
@@ -1510,18 +1457,12 @@ export function DocumentLineEditor({
   };
 
   const onEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (lineByLine) return;
+    if (inlineCatalogue) return;
     if (event.key !== "Enter" || !event.shiftKey) return;
     if (productPickerOpen) return;
     if (document.querySelector("[data-radix-select-content]")) return;
     event.preventDefault();
-    if (sheetFinishedGoods) {
-      const target = event.target as HTMLInputElement;
-      if (target.dataset.lineId) moveFieldFocus(target.dataset.lineId, "qty", 1);
-      else editorRef.current?.querySelector<HTMLInputElement>("[data-line-qty]")?.focus();
-      return;
-    }
-    if (fmcgOrg && !swapLineId) {
+    if (sheetFinishedGoods || (fmcgOrg && !swapLineId)) {
       setProductPickerOpen(true);
       return;
     }
@@ -1541,12 +1482,14 @@ export function DocumentLineEditor({
     if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      if (!inlineCatalogue && !searchQuery.trim()) return;
       setSearchOpen(true);
       setHighlightIndex((i) => searchOpen ? Math.min(i + 1, Math.max(searchResults.length - 1, 0)) : 0);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      if (!inlineCatalogue && !searchQuery.trim()) return;
       setSearchOpen(true);
       setHighlightIndex((i) => Math.max(i - 1, 0));
       return;
@@ -1569,31 +1512,8 @@ export function DocumentLineEditor({
   const swapLine = swapLineId ? lines.find((l) => l.id === swapLineId) : undefined;
 
   const composer = (
-      <div data-line-composer className={cn("relative space-y-2", lineByLine && "rounded-lg border bg-muted/20 p-3")}>
-        {sheetFinishedGoods ? (
-          <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">Active finished goods are listed below, and more load as you scroll. Enter the quantities sold; leave the others at 0. Prices and totals update automatically.</p>
-            <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); editorRef.current?.querySelector<HTMLInputElement>("[data-line-qty]")?.focus(); } }} aria-label="Filter finished goods" placeholder="Find name, product code, SKU or barcode" className="max-w-lg" />
-            <p className="text-xs text-muted-foreground">{lines.length} products{sheetHasMore ? " loaded" : ""} · {lines.filter((line) => line.qty > 0).length} selected · Enter or arrow keys move between quantities.</p>
-          </div>
-        ) : fmcgOrg && !lineByLine && !swapLineId ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setProductPickerOpen(true)}
-              disabled={productListLoading}
-            >
-              Add products
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Select several products, set the quantity on each row, then add the lines.
-              <span className="mx-1.5">·</span>
-              <kbd className="rounded border px-1 py-0.5 font-mono text-[10px]">Shift+Enter</kbd>
-            </p>
-          </div>
-        ) : (
-        <div className="flex items-center gap-2">
+      <div data-line-composer className={cn("relative space-y-2", inlineCatalogue && "rounded-lg border bg-muted/20 p-3")}>
+        <div className={cn("flex items-center gap-2", !inlineCatalogue && "max-w-md")}>
           <div className="relative min-w-0 flex-1">
             <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -1606,23 +1526,23 @@ export function DocumentLineEditor({
                 const value = e.target.value;
                 setSearchQuery(value);
                 if (!value.trim()) setCategoryChip(null);
-                setSearchOpen(!lineByLine || fmcgOrg || Boolean(value.trim()));
+                setSearchOpen(inlineCatalogue || Boolean(value.trim()));
               }}
               onFocus={() => {
-                if (!lineByLine || fmcgOrg || searchQuery.trim()) setSearchOpen(true);
+                if (inlineCatalogue || searchQuery.trim()) setSearchOpen(true);
               }}
               onKeyDown={onSearchKeyDown}
               autoComplete="off"
               enterKeyHint={lineByLine ? "next" : undefined}
               aria-label="Search products to add"
-              role={lineByLine ? "combobox" : undefined}
-              aria-autocomplete={lineByLine ? "list" : undefined}
+              role="combobox"
+              aria-autocomplete="list"
               aria-expanded={searchOpen}
               aria-controls={searchOpen ? searchResultsId : undefined}
-              aria-activedescendant={lineByLine && searchOpen && searchResults[highlightIndex] ? `${searchResultsId}-${highlightIndex}` : undefined}
+              aria-activedescendant={searchOpen && searchResults[highlightIndex] ? `${searchResultsId}-${highlightIndex}` : undefined}
             />
           </div>
-          {!lineByLine ? (
+          {!inlineCatalogue ? (
             <Button
               type="button"
               variant="outline"
@@ -1635,8 +1555,7 @@ export function DocumentLineEditor({
             </Button>
           ) : null}
         </div>
-        )}
-        {lineByLine ? (
+        {inlineCatalogue ? (
           <p className="text-xs text-muted-foreground">Scroll the list to find a product. Enter the quantity on the right, then select it. Tick several to add them together.</p>
         ) : sheetFinishedGoods || (fmcgOrg && !swapLineId) ? null : (
         <p className="text-xs text-muted-foreground">
@@ -1650,13 +1569,13 @@ export function DocumentLineEditor({
             Replacing {swapLine.name}. Pick a product, or press Escape to keep it.
           </p>
         ) : null}
-        {searchOpen && !sheetFinishedGoods && (lineByLine || !fmcgOrg || swapLineId) ? (
-          <div className="overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-sm">
+        {searchOpen ? (
+          <div className={cn("absolute left-0 top-full z-40 mt-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg", inlineCatalogue ? "right-0" : "w-full max-w-md")}>
           <div
             ref={searchListRef}
             id={searchResultsId}
-            role={lineByLine ? "listbox" : undefined}
-            aria-label={lineByLine ? "Matching products" : undefined}
+            role="listbox"
+            aria-label="Matching products"
             className="max-h-72 overflow-y-auto"
           >
             {showChips ? (
@@ -1686,9 +1605,9 @@ export function DocumentLineEditor({
             {searchResults.length === 0 ? (
               <p role="status" className="p-3 text-sm text-muted-foreground">No products match.</p>
             ) : (
-              <ul role={lineByLine ? "presentation" : undefined}>
+              <ul role="presentation">
                 {searchResults.map((p, index) => (
-                  <li key={p.id} role={lineByLine ? "presentation" : undefined} className="flex items-center gap-2 pl-2 pr-2">
+                  <li key={p.id} role="presentation" className="flex items-center gap-2 pl-2 pr-2">
                     {!swapLineId ? (
                       <Checkbox
                         className="mt-0"
@@ -1700,10 +1619,10 @@ export function DocumentLineEditor({
                     ) : null}
                     <button
                       type="button"
-                      id={lineByLine ? `${searchResultsId}-${index}` : undefined}
-                      role={lineByLine ? "option" : undefined}
-                      aria-selected={lineByLine ? index === highlightIndex : undefined}
-                      tabIndex={lineByLine ? -1 : undefined}
+                      id={`${searchResultsId}-${index}`}
+                      role="option"
+                      aria-selected={index === highlightIndex}
+                      tabIndex={-1}
                       className={cn(
                         "flex min-w-0 flex-1 items-start gap-3 px-3 py-2 text-left",
                         index === highlightIndex ? "bg-muted" : "hover:bg-muted/60"
@@ -1805,9 +1724,9 @@ export function DocumentLineEditor({
   return (
     <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
       <Label>{lineItemsLabel}</Label>
-      {!lineByLine ? composer : null}
+      {!inlineCatalogue ? composer : null}
 
-      {!sheetFinishedGoods && !lineByLine && <DocumentProductPickerSheet
+      {!inlineCatalogue && <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         sheetFinishedGoods={sheetFinishedGoods}
@@ -1830,13 +1749,14 @@ export function DocumentLineEditor({
           <Button type="button" variant="outline" onClick={() => setCatalogRetry((n) => n + 1)}>Retry catalogue</Button>
         </div>
       ) : null}
-      {sheetFinishedGoods && lines.length > 0 && displayedLines.length === 0 ? <p role="status">{sheetSearching ? "Searching finished goods…" : "No finished goods match this search. Clear the filter to see all products; entered quantities are retained."}</p> : null}
       {lines.length === 0 ? (
-        lineByLine ? composer : <p className="text-sm text-muted-foreground">
-          {sheetFinishedGoods ? (productListLoading ? "Loading finished goods…" : catalogError ? "Catalogue unavailable." : "No active finished goods are configured.") : fmcgOrg
-            ? "No lines yet. Add products to build this order."
-            : "No lines yet. Search above to add the first product."}
-        </p>
+        inlineCatalogue ? composer : sheetFinishedGoods || fmcgOrg ? (
+          <div className="flex items-center justify-center py-10" role="img" aria-label="No products selected">
+            <Icons.PackageOpen className="h-9 w-9 text-muted-foreground/70" aria-hidden />
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">No lines yet. Search above to add the first product.</p>
+        )
       ) : (
         <div className="min-w-0 space-y-2">
           <div className="min-w-0 overflow-hidden rounded-md border">
@@ -1906,9 +1826,7 @@ export function DocumentLineEditor({
                             "line-clamp-2 text-left text-sm font-medium leading-snug hover:underline",
                             CAPS_ON_PRODUCT_CLASS
                           )}
-                          disabled={sheetFinishedGoods}
                           onClick={() => {
-                            if (sheetFinishedGoods) return;
                             setSwapLineId(l.id);
                             setSearchQuery("");
                             setSearchOpen(true);
@@ -1986,8 +1904,8 @@ export function DocumentLineEditor({
                       variant="ghost"
                       size="sm"
                       className="h-8 w-8 p-0"
-                      aria-label={sheetFinishedGoods ? `Clear quantity for ${l.name}` : `Remove ${l.name}`}
-                      onClick={() => sheetFinishedGoods ? finalizeLineQtyDraft(l.id, "0") : removeLine(l.id)}
+                      aria-label={`Remove ${l.name}`}
+                      onClick={() => removeLine(l.id)}
                     >
                       <Icons.Trash2 className="h-4 w-4" />
                     </Button>
@@ -2086,23 +2004,8 @@ export function DocumentLineEditor({
           })}
               </tbody>
             </LineTable>
-            {sheetHasMore && !searchQuery.trim() ? (
-              <div ref={sheetSentinelRef} role="status" className="border-t px-3 py-3 text-center text-xs text-muted-foreground">
-                {sheetLoadError ? (
-                  <span>
-                    More products could not load.{" "}
-                    <button type="button" className="font-medium text-primary underline" onClick={() => void loadMoreSheet()}>Retry</button>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-2">
-                    {sheetLoadingMore ? <Icons.Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
-                    {sheetLoadingMore ? "Loading more products…" : "Scroll for more products"}
-                  </span>
-                )}
-              </div>
-            ) : null}
           </div>
-          {lineByLine ? composer : null}
+          {inlineCatalogue ? composer : null}
           <div className="mt-4 flex justify-end">
             <dl className="w-full max-w-xs space-y-1.5 text-sm">
               {totalTax > 0 && !linesAreTaxInclusive ? (
