@@ -28,7 +28,9 @@ import {
   resolveFactorToBase,
   type SkuAlternateUom,
 } from "@/lib/products/sku-uom";
-import { updateManufacturingBom, type ManufacturingBom, type ManufacturingBomItem } from "@/lib/api/manufacturing";
+import { updateManufacturingBom, type ManufacturingBom, type ManufacturingBomItem, type RecipeRevisionChange } from "@/lib/api/manufacturing";
+import { diffItems } from "@/lib/manufacturing/recipe-changes";
+import { ChangeChips } from "@/components/manufacturing/recipe-history";
 import { canonicalIndustryTemplateId, FMCG_SELLING_TEMPLATE_IDS } from "@/config/industry";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import type { ProductRow } from "@/lib/types/masters";
@@ -234,6 +236,8 @@ function formatDraftTime(iso: string): string {
   return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
+export type RecipeCostSummary = { total: number; unpriced: number; perOutput?: number };
+
 export function BomComponentEditor({
   bomId,
   savedItems,
@@ -243,6 +247,10 @@ export function BomComponentEditor({
   outputQuantity,
   outputUom,
   onSaved,
+  versioned,
+  extraPayload,
+  extraChanges,
+  onCostSummary,
 }: {
   bomId: string;
   savedItems: ManufacturingBomItem[];
@@ -252,6 +260,12 @@ export function BomComponentEditor({
   outputQuantity?: number;
   outputUom?: string;
   onSaved: (bom: ManufacturingBom) => void;
+  /** Save as the next version with a change preview and an optional note. */
+  versioned?: { nextVersion: number; onDiscard: () => void };
+  /** Recipe header edits (name, batch size) saved in the same version as the components. */
+  extraPayload?: Record<string, unknown>;
+  extraChanges?: RecipeRevisionChange[];
+  onCostSummary?: (summary: RecipeCostSummary) => void;
 }) {
   const templateId = useOrgContextStore((state) => state.templateId);
   const fmcgOrg = (FMCG_SELLING_TEMPLATE_IDS as readonly string[]).includes(canonicalIndustryTemplateId(templateId));
@@ -268,6 +282,7 @@ export function BomComponentEditor({
   const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null);
   const [draftStatus, setDraftStatus] = React.useState<"idle" | "saving" | "saved" | "local">("idle");
   const [saving, setSaving] = React.useState(false);
+  const [changeNote, setChangeNote] = React.useState("");
   const [search, setSearch] = React.useState("");
   const [results, setResults] = React.useState<ProductRow[]>([]);
   const [searching, setSearching] = React.useState(false);
@@ -329,7 +344,8 @@ export function BomComponentEditor({
     };
   }, [bomId, canWrite]);
 
-  const dirty = hydrated && JSON.stringify(lines) !== baselineRef.current;
+  const linesDirty = hydrated && JSON.stringify(lines) !== baselineRef.current;
+  const dirty = linesDirty || Boolean(extraChanges?.length);
 
   React.useEffect(() => {
     if (!hydratedRef.current || !canWrite) return;
@@ -433,7 +449,9 @@ export function BomComponentEditor({
     draftActiveRef.current = false;
     setDraftSavedAt(null);
     setDraftStatus("idle");
-    toast.success("Draft discarded. Showing the saved components.");
+    setChangeNote("");
+    if (versioned) versioned.onDiscard();
+    else toast.success("Draft discarded. Showing the saved components.");
   }
 
   async function saveComponents() {
@@ -456,7 +474,11 @@ export function BomComponentEditor({
     }
     setSaving(true);
     try {
-      const updated = await updateManufacturingBom(bomId, { items: lines.map(toBomItem) });
+      const updated = await updateManufacturingBom(bomId, {
+        ...extraPayload,
+        items: lines.map(toBomItem),
+        ...(versioned && changeNote.trim() ? { changeNote: changeNote.trim() } : {}),
+      });
       const next = updated.items.map(toDraftLine);
       baselineRef.current = JSON.stringify(next);
       savedRef.current = updated.items;
@@ -466,8 +488,9 @@ export function BomComponentEditor({
       draftActiveRef.current = false;
       setDraftSavedAt(null);
       setDraftStatus("idle");
+      setChangeNote("");
       onSaved(updated);
-      toast.success("Components saved.");
+      toast.success(versioned && updated.revisionNo ? `Saved as version ${updated.revisionNo}. The previous version is kept in history.` : "Components saved.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save components.");
     } finally {
@@ -487,6 +510,22 @@ export function BomComponentEditor({
   const unpriced = costs.filter((cost) => cost == null).length;
   const totalCost = costs.reduce<number>((sum, cost) => sum + (cost ?? 0), 0);
   const perOutput = outputQuantity && outputQuantity > 0 ? totalCost / outputQuantity : undefined;
+
+  const pricesLoaded = lines.every((line) => productUnits[line.productId]);
+  React.useEffect(() => {
+    if (hydrated && pricesLoaded) onCostSummary?.({ total: totalCost, unpriced, perOutput });
+  }, [hydrated, pricesLoaded, totalCost, unpriced, perOutput, onCostSummary]);
+
+  const pendingChanges = React.useMemo<RecipeRevisionChange[]>(() => {
+    if (!versioned || !hydrated) return [];
+    const snapshot = (items: ManufacturingBomItem[]) => items.map((item) => ({ ...item, uom: item.uom || "EA" }));
+    return [...(extraChanges ?? []), ...diffItems(snapshot(savedRef.current), snapshot(lines.map(toBomItem)))];
+  }, [versioned, hydrated, lines, extraChanges]);
+  const lineNames = React.useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const item of [...savedRef.current, ...lines]) byId.set(item.productId, item.productName ?? item.productSku ?? item.productId);
+    return { product: (id: string) => byId.get(id) ?? id, warehouse: (id: string) => manufacturingWarehouseLabel(warehouses.find((w) => w.id === id) ?? { id, name: id }) };
+  }, [lines, warehouses]);
 
   return (
     <div>
@@ -745,7 +784,41 @@ export function BomComponentEditor({
         </div>
       )}
 
-      {canWrite && (
+      {canWrite && versioned && (
+        <div className="sticky bottom-0 z-10 space-y-3 border-t bg-card/95 p-4 backdrop-blur supports-[backdrop-filter]:bg-card/80">
+          {pendingChanges.length > 0 ? (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-muted-foreground">Will be saved as version {versioned.nextVersion}</p>
+              <ChangeChips changes={pendingChanges} names={lineNames} limit={8} />
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">Add, remove or change ingredients. Nothing is saved until you choose Save.</p>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <Input
+              value={changeNote}
+              onChange={(event) => setChangeNote(event.target.value)}
+              maxLength={500}
+              placeholder="What changed and why? (optional)"
+              aria-label="Change note"
+              className="h-9 sm:flex-1"
+              disabled={!dirty || saving}
+            />
+            <div className="flex shrink-0 gap-2">
+              <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={discardDraft}>
+                {dirty ? "Discard changes" : "Close editor"}
+              </Button>
+              <Button type="button" size="sm" disabled={!dirty || saving} onClick={() => void saveComponents()}>
+                <Icons.Check className="mr-1.5 h-4 w-4" />
+                {saving ? "Saving…" : `Save as version ${versioned.nextVersion}`}
+              </Button>
+            </div>
+          </div>
+          {linesDirty && draftSavedAt && <p className="text-[11px] text-muted-foreground">Unsaved edits are kept as a draft ({formatDraftTime(draftSavedAt)}) if you leave this page.</p>}
+        </div>
+      )}
+
+      {canWrite && !versioned && (
         <div className="flex flex-col gap-3 border-t p-4 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-xs text-muted-foreground">{draftLabel}</p>
           <div className="flex gap-2">
