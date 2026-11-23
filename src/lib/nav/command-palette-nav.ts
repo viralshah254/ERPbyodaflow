@@ -206,12 +206,17 @@ export const PAYMENT_RECORD_COMMANDS: (CommandItemNav & { _breadcrumb?: string; 
   },
 ];
 
-/** True for record/receive payment, payment receipt, and payments. Not payment matching or payment runs. */
+/** True for record, record/receive payment, payment receipt, and payments. Not payment matching or payment runs. */
 export function paymentRecordingCommands(query: string): typeof PAYMENT_RECORD_COMMANDS {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   if (!tokens.length || !tokens.every((token) => PAYMENT_QUERY_WORDS.has(token))) return [];
   const aboutPayment = tokens.some((token) =>
-    token === "payment" || token === "payments" || token === "receipt" || token === "receipts" || token === "receive"
+    token === "record" ||
+    token === "payment" ||
+    token === "payments" ||
+    token === "receipt" ||
+    token === "receipts" ||
+    token === "receive"
   );
   return aboutPayment ? PAYMENT_RECORD_COMMANDS : [];
 }

@@ -16,7 +16,7 @@ describe("UOM catalog command search", () => {
 
 describe("payment recording command search", () => {
   it("lists the customer receipt first, then the supplier payment", () => {
-    for (const query of ["record payment", "receive payment", "record payment receipt", "payments"]) {
+    for (const query of ["record", "record payment", "receive payment", "record payment receipt", "payments"]) {
       const commands = paymentRecordingCommands(query);
       expect(commands.map((item) => item.label)).toEqual([
         "Record payment from customer",
