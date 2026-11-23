@@ -384,6 +384,8 @@ export type DocumentDetailRecord = {
   /** SFA branch deliver-to. The invoice customer is the supermarket party. */
   deliveryAddress?: string;
   shipToSiteId?: string;
+  /** Route sales order: store the goods are picked from. Blank means the dispatch store. */
+  sourceWarehouseId?: string;
   joyRoute?: JoyRouteSnapshot;
   createdAt?: string;
 };

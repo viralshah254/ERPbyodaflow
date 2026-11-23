@@ -11,6 +11,8 @@ export type OperatingProfile = {
   ready: boolean;
   routeDispatch: boolean;
   routeCollectionsEnabled: boolean;
+  /** Store route trucks load from, when saved in Sales document flow. */
+  dispatchWarehouseId?: string;
   fullCatalogueOrderSheet: boolean;
   lineItemLayout: SalesLineItemLayout;
   productionRecording: "planned" | "record_output";
@@ -36,6 +38,7 @@ export function operatingProfileFromFlow(flow: Partial<SalesDocumentFlowSettings
     ready: true,
     routeDispatch: isRouteDispatchMode(flow.mode),
     routeCollectionsEnabled: flow.routeCollectionsEnabled === true,
+    dispatchWarehouseId: flow.dispatchWarehouseId?.trim() || undefined,
     fullCatalogueOrderSheet: lineItemLayout === "catalogue",
     lineItemLayout,
     productionRecording: flow.productionRecording === "record_output" ? "record_output" : "planned",

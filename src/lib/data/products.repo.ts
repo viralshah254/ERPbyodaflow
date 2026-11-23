@@ -5,7 +5,6 @@
 
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchProductsApi, fetchProductsPageApi } from "@/lib/api/products";
-import { numericItemCodeSort } from "@/lib/products/item-code";
 
 let productsCache: ProductRow[] = [];
 const cacheListeners = new Set<() => void>();
@@ -54,30 +53,35 @@ export async function fetchProductsForDocumentLines(
   return items;
 }
 
-/** Load the full inline sales catalogue, optionally restricted to the finished-goods role. */
-export async function fetchAllFinishedGoods(finishedGoodsOnly = false): Promise<ProductRow[]> {
-  const rows: ProductRow[] = [];
-  let cursor: string | null = "0";
-  const seen = new Set<string>();
-  while (cursor != null) {
-    if (seen.has(cursor)) throw new Error("Product catalogue pagination did not advance.");
-    seen.add(cursor);
-    const result = await fetchProductsPageApi({
-      status: "ACTIVE",
-      ...(finishedGoodsOnly ? { itemRole: "FINISHED" as const } : {}),
-      sellable: true,
-      limit: 100,
-      cursor: cursor ?? "0",
-      includeStock: false,
-    });
-    rows.push(...result.items.filter((row) => !finishedGoodsOnly || row.itemRole === "FINISHED"));
-    if (!result.hasMore) break;
-    if (!result.nextCursor) throw new Error("Product catalogue pagination is incomplete.");
-    cursor = result.nextCursor;
-  }
-  return [...new Map(rows.map((row) => [row.id, row])).values()].sort(
-    (a, b) => numericItemCodeSort(a) - numericItemCodeSort(b) || a.name.localeCompare(b.name)
-  );
+/** Rows per request on the inline sales sheet. More load as the clerk scrolls. */
+export const FINISHED_GOODS_PAGE_SIZE = 10;
+
+/**
+ * One page of the inline sales catalogue in item-code order, optionally restricted to the finished-goods role.
+ * `nextCursor` is null on the last page.
+ */
+export async function fetchFinishedGoodsPage(opts: {
+  finishedGoodsOnly?: boolean;
+  cursor?: string | null;
+  search?: string;
+  limit?: number;
+} = {}): Promise<{ items: ProductRow[]; nextCursor: string | null }> {
+  const result = await fetchProductsPageApi({
+    status: "ACTIVE",
+    ...(opts.finishedGoodsOnly ? { itemRole: "FINISHED" as const } : {}),
+    sellable: true,
+    search: opts.search,
+    limit: opts.limit ?? FINISHED_GOODS_PAGE_SIZE,
+    cursor: opts.cursor ?? "0",
+    includeStock: false,
+    sortBy: "itemCode",
+  });
+  const nextCursor = result.hasMore ? result.nextCursor : null;
+  if (nextCursor != null && nextCursor === (opts.cursor ?? "0")) throw new Error("Product catalogue pagination did not advance.");
+  return {
+    items: result.items.filter((row) => !opts.finishedGoodsOnly || row.itemRole === "FINISHED"),
+    nextCursor,
+  };
 }
 
 /** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */

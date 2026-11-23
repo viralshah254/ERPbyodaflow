@@ -22,11 +22,13 @@ import {
   type InventoryStockRow,
 } from "@/lib/api/inventory-stock";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { STOCK_CORRECTION_HREF, useStockCorrectionAccess } from "@/lib/inventory/stock-correction";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 export default function StockLevelDetailPage() {
   const canWrite = useCanWriteInventory();
+  const stockCorrection = useStockCorrectionAccess();
   const params = useParams();
   const id = params.id as string;
   const [item, setItem] = React.useState<InventoryStockRow | null | undefined>(undefined);
@@ -116,9 +118,14 @@ export default function StockLevelDetailPage() {
             <Button variant="outline" size="sm" asChild>
               <Link href={`/inventory/movements?productId=${encodeURIComponent(item.productId ?? item.sku)}`}>View movements</Link>
             </Button>
-            {canWrite && (
+            {canWrite && !stockCorrection.controlled && (
               <Button size="sm" asChild>
                 <Link href={`/inventory/stock-levels?adjust=${item.id}`}>Stock adjustment</Link>
+              </Button>
+            )}
+            {stockCorrection.canCorrect && (
+              <Button size="sm" variant="outline" asChild>
+                <Link href={STOCK_CORRECTION_HREF}>Stock correction</Link>
               </Button>
             )}
           </div>

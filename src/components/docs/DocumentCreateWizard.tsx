@@ -1,8 +1,9 @@
 "use client";
 
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
-import { fetchJoyOrderRoute, type CollectionRoute, type RouteCollector } from "@/lib/api/joy-route-orders";
+import { fetchJoyOrderRoute, type CollectionRoute } from "@/lib/api/joy-route-orders";
 import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
+import type { PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
@@ -807,9 +808,7 @@ export function DocumentCreateWizard({
     key: string; routes: CollectionRoute[]; defaultRouteId?: string; saved?: boolean; error?: string;
   }>();
   const activeRouteLookup = routeLookup?.key === routeLookupKey ? routeLookup : undefined;
-  const [routeSelection, setRouteSelection] = React.useState<{
-    key: string; routeId: string; collector?: RouteCollector;
-  }>();
+  const [routeSelection, setRouteSelection] = React.useState<{ key: string; routeId: string }>();
   const manualRoute = routeSelection?.key === routeLookupKey ? routeSelection : undefined;
   const availableDeliveryRoutes = React.useMemo(() => {
     if (!joyRouteOrderEnabled || !activeRouteLookup || activeRouteLookup.error) return [];
@@ -823,7 +822,25 @@ export function DocumentCreateWizard({
   }, [joyRouteOrderEnabled, activeRouteLookup, fieldOptions.warehouse]);
   const activeCollectionRoute = availableDeliveryRoutes.find((route) =>
     route.id === (manualRoute?.routeId ?? activeRouteLookup?.defaultRouteId));
-  const routeCollector = manualRoute ? manualRoute.collector : activeCollectionRoute?.collectors[0];
+  const [routeSalesRep, setRouteSalesRep] = React.useState<PickedSalesRep | null>(null);
+  const [routeTillChoice, setRouteTillChoice] = React.useState("");
+  const routeTills = React.useMemo(
+    () => [...new Set(activeCollectionRoute?.collectors.map((row) => row.tillNumber).filter(Boolean))],
+    [activeCollectionRoute],
+  );
+  const routeTill = routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "";
+  /** Route orders: store the whole order is picked from. Blank means the dispatch store. */
+  const [routeSourceChoice, setRouteSourceStoreId] = React.useState("");
+  const routeSourceStoreId = routeSourceChoice === activeCollectionRoute?.id ? "" : routeSourceChoice;
+  const routeDispatchStore = React.useMemo(() => {
+    const stores = fieldOptions.warehouse ?? [];
+    return stores.find((store) => store.id === operatingProfile.dispatchWarehouseId)
+      ?? stores.find((store) => /^dispatch\b/i.test(store.label) && !/damage/i.test(store.label));
+  }, [fieldOptions.warehouse, operatingProfile.dispatchWarehouseId]);
+  const routeSourceStores = React.useMemo(
+    () => (fieldOptions.warehouse ?? []).filter((store) => store.id !== routeDispatchStore?.id),
+    [fieldOptions.warehouse, routeDispatchStore?.id],
+  );
 
   React.useEffect(() => {
     if (!joyRouteOrderEnabled || !selectedPartyId || !routeDeliveryDate) return;
@@ -1550,9 +1567,14 @@ export function DocumentCreateWizard({
         partyId: form.getValues("party") || undefined,
         ...(showShipTo && hasDeliverySiteChange ? { shipToSiteId: selectedDeliverySite ?? null } : {}),
         warehouseId: joyRouteOrderEnabled ? activeCollectionRoute?.id : form.getValues("warehouse") || undefined,
-        ...(joyRouteOrderEnabled && routeCollector ? {
-          joyRouteOrder: { deliveryDate: routeDeliveryDate, salesRepId: routeCollector.salesRepId, tillNumber: routeCollector.tillNumber },
+        ...(joyRouteOrderEnabled && activeCollectionRoute ? {
+          joyRouteOrder: {
+            deliveryDate: routeDeliveryDate,
+            ...(routeSalesRep ? { salesRepId: routeSalesRep.id } : {}),
+            ...(routeTill ? { tillNumber: routeTill } : {}),
+          },
         } : {}),
+        ...(joyRouteOrderEnabled && routeSourceStoreId ? { sourceWarehouseId: routeSourceStoreId } : {}),
         priceListId: (() => {
           // Snapshot price tag on FMCG sales docs only — seafood keeps CoolCatch daily pricing.
           if (!fmcgOrg) return undefined;
@@ -1638,8 +1660,10 @@ export function DocumentCreateWizard({
       selectedDeliverySite,
       joyRouteOrderEnabled,
       activeCollectionRoute,
-      routeCollector,
+      routeSalesRep,
+      routeTill,
       routeDeliveryDate,
+      routeSourceStoreId,
       baseCurrency,
       form,
       billableLines,
@@ -1720,8 +1744,8 @@ export function DocumentCreateWizard({
   }, [step]);
 
   const rejectMissingDeliveryWarehouse = React.useCallback(() => {
-    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeDeliveryDate || (activeCollectionRoute.collectors.length > 0 && !routeCollector))) {
-      toast.error(activeCollectionRoute?.collectors.length ? "Choose a sales rep and till." : "Choose a delivery date and route.");
+    if (joyRouteOrderEnabled && (!activeCollectionRoute || !routeDeliveryDate || (routeTills.length > 0 && !routeTill))) {
+      toast.error(activeCollectionRoute && routeDeliveryDate ? "Choose a till." : "Choose a delivery date and route.");
       return true;
     }
     if (!routeDeliveryStore || joyRouteOrderEnabled) return false;
@@ -1732,7 +1756,7 @@ export function DocumentCreateWizard({
     });
     toast.error("Select the route warehouse. That store is the route this order is going to.");
     return true;
-  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeCollector, routeDeliveryDate]);
+  }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeTills.length, routeTill, routeDeliveryDate]);
 
   const goToStep = React.useCallback(
     async (targetStep: number) => {
@@ -2874,15 +2898,15 @@ export function DocumentCreateWizard({
                   routes={availableDeliveryRoutes}
                   route={activeCollectionRoute}
                   savedRoute={activeRouteLookup?.saved}
-                  onRouteChange={(routeId) => setRouteSelection({
-                    key: routeLookupKey,
-                    routeId,
-                    collector: activeRouteLookup?.routes.find((row) => row.id === routeId)?.collectors[0],
-                  })}
-                  collector={routeCollector}
-                  onCollectorChange={(collector) => setRouteSelection({
-                    key: routeLookupKey, routeId: activeCollectionRoute?.id ?? "", collector,
-                  })}
+                  onRouteChange={(routeId) => setRouteSelection({ key: routeLookupKey, routeId })}
+                  salesRep={routeSalesRep}
+                  onSalesRepChange={setRouteSalesRep}
+                  tillNumber={routeTill}
+                  onTillChange={setRouteTillChoice}
+                  sourceStores={routeSourceStores}
+                  sourceStoreId={routeSourceStoreId}
+                  onSourceStoreChange={setRouteSourceStoreId}
+                  dispatchStoreLabel={routeDispatchStore?.label ?? "DISPATCH"}
                   hasCustomer={!!selectedPartyId}
                   loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
                   error={activeRouteLookup?.error}
@@ -3248,10 +3272,20 @@ export function DocumentCreateWizard({
                     </p>
                   </div>
                 ) : null}
-                {joyRouteOrderEnabled && routeCollector && (
+                {joyRouteOrderEnabled ? (
+                  <div className="space-y-1">
+                    <span className="text-muted-foreground">Pick from store</span>
+                    <p className="font-medium">
+                      {routeSourceStores.find((store) => store.id === routeSourceStoreId)?.label ?? routeDispatchStore?.label ?? "DISPATCH"}
+                    </p>
+                  </div>
+                ) : null}
+                {joyRouteOrderEnabled && activeCollectionRoute && (
                   <div className="space-y-1">
                     <span className="text-muted-foreground">Delivery and collection</span>
-                    <p className="font-medium">{routeDeliveryDate} · {routeCollector.salesRep} · Till {routeCollector.tillNumber}</p>
+                    <p className="font-medium">
+                      {[routeDeliveryDate, routeSalesRep?.name ?? "No sales rep yet", routeTill ? `Till ${routeTill}` : ""].filter(Boolean).join(" · ")}
+                    </p>
                   </div>
                 )}
                 {type === "delivery-note" ? (

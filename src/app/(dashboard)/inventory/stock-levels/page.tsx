@@ -60,6 +60,7 @@ import {
   importOpeningStockApi,
 } from "@/lib/api/import-export";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { STOCK_CORRECTION_HREF, useStockCorrectionAccess } from "@/lib/inventory/stock-correction";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { formatMoney } from "@/lib/money";
@@ -104,6 +105,9 @@ export default function StockLevelsPage() {
   const searchParams = useSearchParams();
   const deepLinkHandledRef = React.useRef(false);
   const canWrite = useCanWriteInventory();
+  const stockCorrection = useStockCorrectionAccess();
+  /** Bakery orgs change stock only through admin stock corrections. */
+  const canAdjust = canWrite && !stockCorrection.controlled;
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const templateId = useOrgContextStore((s) => s.templateId);
   const fmcg = isFmcgOrg(templateId);
@@ -266,13 +270,13 @@ export default function StockLevelsPage() {
         })
         .catch(() => undefined);
     }
-    if (action === "stockIn" && canWrite) {
+    if (action === "stockIn" && canAdjust) {
       setStockInOpen(true);
       setStockInQty("");
       setStockInReason(fmcg ? "Opening / production putaway" : "Opening stock");
     }
     router.replace("/inventory/stock-levels", { scroll: false });
-  }, [searchParams, canWrite, fmcg, router]);
+  }, [searchParams, canAdjust, fmcg, router]);
 
   const openStockIn = () => {
     setStockInOpen(true);
@@ -609,13 +613,17 @@ export default function StockLevelsPage() {
               icon: "Eye",
               onClick: (e) => { e?.stopPropagation?.(); openStockDetail(row); },
             },
-            ...(canWrite
+            ...(canAdjust
               ? [
                   {
                     label: "Adjust Stock",
                     icon: "Edit" as const,
                     onClick: (e?: React.MouseEvent) => { e?.stopPropagation?.(); openAdjust(row); },
                   },
+                ]
+              : []),
+            ...(canWrite
+              ? [
                   {
                     label: "Transfer",
                     icon: "ArrowLeftRight" as const,
@@ -671,7 +679,15 @@ export default function StockLevelsPage() {
               <Icons.Download className="mr-2 h-4 w-4" />
               Export
             </Button>
-            {canWrite && (
+            {stockCorrection.canCorrect && (
+              <Button variant="outline" asChild>
+                <Link href={STOCK_CORRECTION_HREF}>
+                  <Icons.ShieldAlert className="mr-2 h-4 w-4" />
+                  Stock correction
+                </Link>
+              </Button>
+            )}
+            {canAdjust && (
               <>
                 <input
                   ref={openingStockInputRef}
@@ -709,7 +725,7 @@ export default function StockLevelsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_VIEWPORT_CLASS}>
-      {fmcg && !initialLoading && stockItems.length === 0 && canWrite ? (
+      {fmcg && !initialLoading && stockItems.length === 0 && canAdjust ? (
         <div className="shrink-0 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
           <p className="font-medium flex items-start gap-2">
             <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />

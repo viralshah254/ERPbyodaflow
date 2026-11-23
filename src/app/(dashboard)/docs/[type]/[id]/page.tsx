@@ -123,6 +123,8 @@ import { ODAFLOW_SALES_REP_ROLE, odaflowBuyerTypeLabel } from "@/lib/odaflow/cha
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { isRouteDispatchMode } from "@/lib/api/sales-document-flow";
 import { fetchJoyLoadNoteForDeliveryNote, fetchJoyLoadNoteForOrder } from "@/lib/api/joy-dispatch";
+import { setJoyOrderSalesRep } from "@/lib/api/joy-route-orders";
+import { EditableSalesRep } from "@/components/sales/SfaSalesRepPicker";
 import {
   FmcgPackagingConversionBlocker,
   packagingMissingLineLabel,
@@ -494,6 +496,7 @@ export default function DocViewPage() {
   const [warehouseOptions, setWarehouseOptions] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseTaskLink, setWarehouseTaskLink] = React.useState<{ label: string; href: string } | null>(null);
   const [deliveryNoteWarehouseLabel, setDeliveryNoteWarehouseLabel] = React.useState<string | null>(null);
+  const [sourceWarehouseLabel, setSourceWarehouseLabel] = React.useState<string | null>(null);
   const [podSheetOpen, setPodSheetOpen] = React.useState(false);
   const [signedPodSheetOpen, setSignedPodSheetOpen] = React.useState(false);
   const [signedPodFile, setSignedPodFile] = React.useState<File | null>(null);
@@ -1294,14 +1297,19 @@ export default function DocViewPage() {
         if (cancelled) return;
         const m = opts.find((o) => o.id === document?.warehouseId);
         setDeliveryNoteWarehouseLabel(m?.label ?? document?.warehouseId ?? null);
+        const source = document?.sourceWarehouseId;
+        setSourceWarehouseLabel(source ? opts.find((o) => o.id === source)?.label ?? source : null);
       })
       .catch(() => {
-        if (!cancelled) setDeliveryNoteWarehouseLabel(document?.warehouseId ?? null);
+        if (!cancelled) {
+          setDeliveryNoteWarehouseLabel(document?.warehouseId ?? null);
+          setSourceWarehouseLabel(document?.sourceWarehouseId ?? null);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [type, document?.warehouseId, routeDispatch]);
+  }, [type, document?.warehouseId, document?.sourceWarehouseId, routeDispatch]);
 
   React.useEffect(() => {
     if (!odaflowApprovalOpen || !needsRouteWarehouse) return;
@@ -2474,8 +2482,25 @@ export default function DocViewPage() {
               ...(document.joyRoute ? [
                 { label: "Delivery route", value: document.joyRoute.routeName },
                 { label: "Delivery date", value: document.joyRoute.deliveryDate },
-                { label: "Sales rep", value: document.joyRoute.salesRep },
-                { label: "M-Pesa till", value: document.joyRoute.tillNumber },
+                {
+                  label: "Sales rep",
+                  value: (
+                    <EditableSalesRep
+                      id="order-sales-rep"
+                      value={document.joyRoute.salesRepId && document.joyRoute.salesRep
+                        ? { id: document.joyRoute.salesRepId, name: document.joyRoute.salesRep, phone: document.joyRoute.salesRepPhone }
+                        : null}
+                      canEdit={type === "sales-order" && canWrite && document.status !== "CANCELLED"}
+                      onSave={async (rep) => {
+                        const { joyRoute } = await setJoyOrderSalesRep(document.id, rep?.id ?? "");
+                        setDocument((prev) => (prev ? { ...prev, joyRoute } : prev));
+                        toast.success(rep ? `Sales rep set to ${rep.name}.` : "Sales rep removed.");
+                      }}
+                    />
+                  ),
+                },
+                { label: "M-Pesa till", value: document.joyRoute.tillNumber || "—" },
+                { label: "Pick from store", value: sourceWarehouseLabel ?? "DISPATCH" },
               ] : []),
               ...(type === "sales-order" && routeDispatch && !document.joyRoute
                 ? [
@@ -2486,8 +2511,8 @@ export default function DocViewPage() {
                         : "Not selected",
                     },
                     {
-                      label: "Fulfilment warehouse",
-                      value: "DISPATCH",
+                      label: "Pick from store",
+                      value: sourceWarehouseLabel ?? "DISPATCH",
                     },
                   ]
                 : []),

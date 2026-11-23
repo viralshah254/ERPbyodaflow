@@ -29,7 +29,8 @@ import { productionTerms } from "@/lib/manufacturing/production-language";
 import { storeDisplayName } from "@/lib/warehouse/store-label";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
-import { useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
+import { useCanWriteInventory, useCanWriteManufacturing, useHasPermission } from "@/lib/rbac/use-write-guard";
+import { transferPrefillHref } from "@/lib/warehouse/transfer-prefill";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { toastStockMoveError } from "@/lib/inventory/opening-cost-notice";
@@ -61,6 +62,24 @@ function canChangeStores(order: { status: string; producedQuantity: number; mate
   return !order.materialLines.some((line) => line.issuedQuantity > 1e-9 || line.returnedQuantity > 1e-9 || line.consumedQuantity > 1e-9);
 }
 
+/** The finished output of a completed batch, ready to open as a transfer out of its output store. */
+function outputTransfer(order: ManufacturingWorkOrder, storeNames: Record<string, string>) {
+  const produced = order.outputLines.filter((line) => line.producedQuantity > 1e-9 && line.warehouseId);
+  const main = produced.find((line) => line.productId === order.productId) ?? produced[0];
+  if (!main) return null;
+  const lines = produced.filter((line) => line.warehouseId === main.warehouseId);
+  const quantity = (n: number) => Number(n.toFixed(3)).toLocaleString();
+  return {
+    href: transferPrefillHref({
+      fromWarehouseId: main.warehouseId,
+      lines: lines.map((line) => ({ productId: line.productId, quantity: line.producedQuantity })),
+      reference: order.number,
+    }),
+    storeName: storeDisplayName(main.warehouseId, main.warehouseName, storeNames),
+    summary: lines.map((line) => `${quantity(line.producedQuantity)} ${line.uom ?? ""} ${line.productName?.trim() || line.sku || "product"}`.replace(/\s+/g, " ").trim()).join(", "),
+  };
+}
+
 export default function WorkOrderDetailPage() {
   const params = useParams();
   const rawId = params.id as string;
@@ -74,6 +93,8 @@ export default function WorkOrderDetailPage() {
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
   const canApprove = useHasPermission("manufacturing.production.approve");
+  const canTransfer = useCanWriteInventory();
+  const [transferOfferOpen, setTransferOfferOpen] = React.useState(false);
   const [varianceReason, setVarianceReason] = React.useState("");
   const [wasteQuantity, setWasteQuantity] = React.useState("");
   const [wasteReason, setWasteReason] = React.useState("");
@@ -225,6 +246,7 @@ export default function WorkOrderDetailPage() {
                 : "Cancelled."
       );
       if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
+      if (action === "complete" && next.status === "COMPLETED" && canTransfer) setTransferOfferOpen(true);
       if (action === "reopen") window.setTimeout(() => document.getElementById("prepare-batch")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
@@ -246,6 +268,7 @@ export default function WorkOrderDetailPage() {
   }
 
   const productName = order?.productName?.trim() || order?.productId || "";
+  const transfer = order?.status === "COMPLETED" && canTransfer ? outputTransfer(order, storeNames) : null;
   const productBarcode = order?.productBarcode?.trim();
 
   return (
@@ -308,7 +331,7 @@ export default function WorkOrderDetailPage() {
                 ) : null}
               </div>
             ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives the output into the selected store. That store has to be a shelf store, or the quantity shows as 0. Plants that use quality control hold the lot until QC accepts it. Do not add the output again with a stock adjustment.</p></div>{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives the output into the selected store. That store has to be a shelf store, or the quantity shows as 0. Plants that use quality control hold the lot until QC accepts it. Do not add the output again with a stock adjustment.</p></div><div className="flex flex-wrap gap-2">{transfer && <Button variant="outline" asChild><Link href={transfer.href}><Icons.ArrowLeftRight className="mr-2 h-4 w-4" />Move to another store</Link></Button>}{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div></div>
             {canWrite && order.status === "DRAFT" && <div id="prepare-batch"><WorkOrderPreparation order={order} restartToken={restartToken} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} /></div>}
             {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
             <Card data-tutorial-hint="work-order-lifecycle">
@@ -562,6 +585,15 @@ export default function WorkOrderDetailPage() {
           </>
         )}
       </div>
+      <ConfirmDialog
+        open={transferOfferOpen && Boolean(transfer)}
+        onOpenChange={setTransferOfferOpen}
+        title="Move the output to another store?"
+        description={transfer ? `${transfer.summary} went into ${transfer.storeName}. Open a transfer with these quantities filled in? You can skip this and transfer later.` : undefined}
+        confirmLabel="Open transfer"
+        cancelLabel="Not now"
+        onConfirm={() => { if (transfer) router.push(transfer.href); }}
+      />
       <ConfirmDialog
         open={pendingAction !== null}
         onOpenChange={(open) => { if (!open) setPendingAction(null); }}

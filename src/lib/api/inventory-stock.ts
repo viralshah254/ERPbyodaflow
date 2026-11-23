@@ -203,6 +203,9 @@ export async function createStockAdjustmentApi(payload: {
   warehouseId?: string;
   quantityDelta: number;
   reason?: string;
+  /** Bakery stock corrections: required by the backend. */
+  reasonCode?: StockCorrectionReasonCode;
+  note?: string;
 }): Promise<{ id: string; number: string }> {
   requireLiveApi("Inventory stock adjustment");
   const line = payload.stockLevelId
@@ -216,9 +219,32 @@ export async function createStockAdjustmentApi(payload: {
     method: "POST",
     body: {
       reason: payload.reason,
+      ...(payload.reasonCode ? { reasonCode: payload.reasonCode, note: payload.note } : {}),
       lines: [line],
     },
   });
+}
+
+export type StockCorrectionReasonCode = "BREAKAGE" | "SPOILED" | "MISSING" | "RECOUNT" | "FOUND" | "OTHER";
+export type StockCorrectionEntry = {
+  id: string;
+  number: string;
+  date: string;
+  reasonCode?: StockCorrectionReasonCode;
+  reason?: string;
+  createdByName?: string;
+  storeName: string;
+  lines: Array<{ productName: string; quantityDelta: number; quantityBefore?: number; quantityAfter?: number; uom?: string }>;
+};
+
+/** Admin only. The latest stock corrections with who, where and why. */
+export async function fetchStockCorrectionsApi(): Promise<{
+  controlled: boolean;
+  reasons: Array<{ code: StockCorrectionReasonCode; label: string }>;
+  items: StockCorrectionEntry[];
+}> {
+  requireLiveApi("Stock corrections");
+  return apiRequest("/api/inventory/stock-corrections");
 }
 
 // ─── Franchise network stock aggregate ───────────────────────────────────────

@@ -234,6 +234,7 @@ type BackendDocumentDetail = {
   odaflowCustomerName?: string;
   deliveryAddress?: string;
   shipToSiteId?: string;
+  sourceWarehouseId?: string;
   joyRoute?: JoyRouteSnapshot;
   createdAt?: string;
 };
@@ -316,6 +317,8 @@ export type DocumentDraftPayload = {
   branchId?: string;
   partyId?: string;
   warehouseId?: string;
+  /** Route sales order: store to pick from. Blank means the dispatch store. */
+  sourceWarehouseId?: string;
   joyRouteOrder?: JoyRouteOrderInput;
   /** Customer price tag / price list used for sales lines. */
   priceListId?: string;
@@ -675,6 +678,7 @@ function mapDocumentDetail(
     ...(payload.odaflowCustomerName ? { odaflowCustomerName: payload.odaflowCustomerName } : {}),
     ...(payload.deliveryAddress ? { deliveryAddress: payload.deliveryAddress } : {}),
     ...(payload.shipToSiteId ? { shipToSiteId: payload.shipToSiteId } : {}),
+    ...(payload.sourceWarehouseId ? { sourceWarehouseId: payload.sourceWarehouseId } : {}),
     ...(payload.joyRoute ? { joyRoute: payload.joyRoute } : {}),
     ...(payload.createdAt ? { createdAt: payload.createdAt } : {}),
   };

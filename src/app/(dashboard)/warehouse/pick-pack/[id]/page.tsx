@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useStockCorrectionAccess } from "@/lib/inventory/stock-correction";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { PageShell } from "@/components/layout/page-shell";
@@ -230,6 +231,7 @@ export default function PickPackDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const canWrite = useCanWriteInventory();
+  const { controlled: stockCorrectionControlled } = useStockCorrectionAccess();
   const templateId = useOrgContextStore((s) => s.templateId);
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   // Prefer industryCategory so FMCG orgs never see seafood kg copy if templateId is stale.
@@ -1152,7 +1154,7 @@ export default function PickPackDetailPage() {
                   </span>
                 ) : null}
                 <div className="flex flex-wrap gap-2 pt-1">
-                  {canWrite ? (
+                  {canWrite && !stockCorrectionControlled ? (
                     <Button variant="secondary" size="sm" asChild>
                       <Link
                         href={buildStockLevelsHref({

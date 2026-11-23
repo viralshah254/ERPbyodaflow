@@ -13,9 +13,12 @@ const api = vi.hoisted(() => ({
     orderCount: number;
     orders: Array<{ id: string; number: string; customerName: string; branchName: string; orderedAt?: string; lines: [] }>;
     products: Array<{ productId: string; sku?: string; name: string; orderedQty: number }>;
+    salesReps?: Array<{ id: string; name: string; phone?: string }>;
   }>,
   notes: [] as Array<Record<string, unknown>>,
+  trucks: [] as string[],
   allocate: vi.fn(),
+  create: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(location.search),
@@ -26,11 +29,16 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
   fetchJoyLoadNotes: async () => ({
     notes: api.notes,
     waiting: api.waiting,
-    trucks: [],
+    trucks: api.trucks,
     busyTrucks: [],
     dispatchWarehouseName: "DISPATCH - DISPATCH WAREHOUSE",
   }),
   allocateJoyLoad: (...args: unknown[]) => api.allocate(...args),
+  createJoyLoadNote: (...args: unknown[]) => api.create(...args),
+}));
+vi.mock("@/lib/api/sfa-sales-reps", () => ({
+  fetchSfaSalesReps: vi.fn().mockResolvedValue({ reps: [], areas: [] }),
+  createSfaSalesRep: vi.fn(),
 }));
 afterEach(() => {
   cleanup();
@@ -39,6 +47,8 @@ afterEach(() => {
   api.waiting = [];
   api.notes = [];
   api.allocate.mockReset();
+  api.create.mockReset();
+  api.trucks = [];
   navigation.push.mockReset();
 });
 
@@ -273,4 +283,27 @@ it("opens dispatch by default and links to Finance Review", async () => {
   expect(await screen.findByRole("heading", { name: "Choose a truck" })).toBeVisible();
   expect(screen.queryByRole("heading", { name: "Loads awaiting finance" })).toBeNull();
   expect(screen.getByRole("link", { name: /Finance Review/ })).toHaveAttribute("href", "?step=finance");
+});
+
+it("starts a route's loader note with the reps on its orders and sends them when the note is created", async () => {
+  access.write = true;
+  api.trucks = ["KDA 123A"];
+  api.waiting = [{
+    warehouseId: "meru",
+    warehouseName: "MERU - EMBU",
+    orderCount: 1,
+    orders: [{ id: "so-2", number: "500013", customerName: "Shop", branchName: "", lines: [] }],
+    products: [{ productId: "p2", sku: "1", name: "JOY QUEEN CAKES 4PCS (135 GMS)", orderedQty: 12 }],
+    salesReps: [{ id: "sfa-ann", name: "Ann Wanjiku", phone: "+254711000001" }, { id: "sfa-ben", name: "Ben Otieno" }],
+  }];
+  api.create.mockResolvedValue({ id: "note-1", number: "LN-1", truck: "KDA 123A" });
+  render(<JoyRouteLoads />);
+  const reps = await screen.findByRole("list", { name: "Chosen sales reps" });
+  expect(reps).toHaveTextContent("Ann Wanjiku");
+  fireEvent.click(screen.getByRole("button", { name: "Remove Ben Otieno" }));
+  fireEvent.change(screen.getByDisplayValue("Choose a truck"), { target: { value: "KDA 123A" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create loading note" }));
+  await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
+    warehouseId: "meru", truck: "KDA 123A", salesRepIds: ["sfa-ann"],
+  })));
 });

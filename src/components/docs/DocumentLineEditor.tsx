@@ -22,12 +22,12 @@ import type { ProductPackaging, ProductPrice } from "@/lib/products/pricing-type
 import {
   listProducts,
   getProductById,
-  fetchAllFinishedGoods,
+  fetchFinishedGoodsPage,
   fetchProductsForDocumentLines,
   setProductsCache,
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
-import { displayItemCode } from "@/lib/products/item-code";
+import { displayItemCode, numericItemCodeSort } from "@/lib/products/item-code";
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchProductApi, fetchProductsApi, fetchProductsPageApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
@@ -302,6 +302,14 @@ export function DocumentLineEditor({
   const searchListRef = React.useRef<HTMLDivElement | null>(null);
   const browseSentinelRef = React.useRef<HTMLDivElement | null>(null);
   const browsePagingRef = React.useRef(false);
+  /** Inline sales sheet: next catalogue page, or null once every finished good is loaded. */
+  const [sheetCursor, setSheetCursor] = React.useState<string | null>(null);
+  const [sheetLoadingMore, setSheetLoadingMore] = React.useState(false);
+  const [sheetLoadError, setSheetLoadError] = React.useState(false);
+  const [sheetSearching, setSheetSearching] = React.useState(false);
+  const sheetSentinelRef = React.useRef<HTMLDivElement | null>(null);
+  const sheetPagingRef = React.useRef(false);
+  const sheetGenerationRef = React.useRef(0);
 
   React.useEffect(() => {
     if (!fmcgOrg || !swapLineId) return;
@@ -427,7 +435,17 @@ export function DocumentLineEditor({
     setBrowseCursor(null);
     setBrowseHasMore(false);
     browsePagingRef.current = false;
-    const load = sheetFinishedGoods ? fetchAllFinishedGoods(packSizeFromName) : fetchProductsForDocumentLines(productFilter);
+    setSheetCursor(null);
+    setSheetLoadError(false);
+    sheetPagingRef.current = false;
+    sheetGenerationRef.current += 1;
+    let nextSheetCursor: string | null = null;
+    const load = sheetFinishedGoods
+      ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName }).then((page) => {
+          nextSheetCursor = page.nextCursor;
+          return page.items;
+        })
+      : fetchProductsForDocumentLines(productFilter);
     load
       .then(async (rows) => {
         if (sheetFinishedGoods && isApiConfigured()) {
@@ -449,6 +467,7 @@ export function DocumentLineEditor({
                 })
               : rows;
           setFilteredProducts(sorted);
+          setSheetCursor(sheetFinishedGoods ? nextSheetCursor : null);
           setSheetCatalogReady(sheetFinishedGoods);
           const canBrowse = lineByLine && fmcgOrg && !sheetFinishedGoods && rows.length >= 100;
           setBrowseCursor(canBrowse ? String(rows.length) : null);
@@ -503,6 +522,44 @@ export function DocumentLineEditor({
       setBrowseLoading(false);
     }
   }, [browseCursor, browseHasMore, fmcgOrg, lineByLine, productFilter, sheetFinishedGoods]);
+
+  const filteredProductsRef = React.useRef(filteredProducts);
+  filteredProductsRef.current = filteredProducts;
+
+  /** Add sheet rows after their packaging and prices are known, so a new row never shows an unpriced total. */
+  const appendSheetProducts = React.useCallback(async (rows: ProductRow[], generation: number) => {
+    const seen = new Set((filteredProductsRef.current ?? []).map((row) => row.id));
+    const added = rows.filter((row) => !seen.has(row.id));
+    if (!added.length) return;
+    if (isApiConfigured()) {
+      const data = await fetchDocumentProductDataApi(added.map((row) => row.id));
+      if (generation !== sheetGenerationRef.current) return;
+      documentDataCallbackRef.current?.(data);
+    }
+    if (generation !== sheetGenerationRef.current) return;
+    setFilteredProducts((prev) => {
+      const ids = new Set((prev ?? []).map((row) => row.id));
+      return [...(prev ?? []), ...added.filter((row) => !ids.has(row.id))];
+    });
+  }, []);
+
+  const loadMoreSheet = React.useCallback(async () => {
+    if (!sheetFinishedGoods || sheetCursor == null || sheetPagingRef.current) return;
+    const generation = sheetGenerationRef.current;
+    sheetPagingRef.current = true;
+    setSheetLoadingMore(true);
+    setSheetLoadError(false);
+    try {
+      const page = await fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, cursor: sheetCursor });
+      await appendSheetProducts(page.items, generation);
+      if (generation === sheetGenerationRef.current) setSheetCursor(page.nextCursor);
+    } catch {
+      if (generation === sheetGenerationRef.current) setSheetLoadError(true);
+    } finally {
+      sheetPagingRef.current = false;
+      setSheetLoadingMore(false);
+    }
+  }, [appendSheetProducts, packSizeFromName, sheetCursor, sheetFinishedGoods]);
 
   /** CoolCatch: product family. FMCG: product category. */
   const groupOptions = React.useMemo(() => {
@@ -1373,11 +1430,54 @@ export function DocumentLineEditor({
   };
 
   const displayedLines = React.useMemo(() => {
-    if (!sheetFinishedGoods || !searchQuery.trim()) return lines;
+    if (!sheetFinishedGoods) return lines;
     const productsById = new Map(products.map((product) => [product.id, product]));
     const candidates = lines.map((line) => ({ name: line.name, sku: line.sku, ...productsById.get(line.productId), line }));
+    if (!searchQuery.trim()) {
+      // Search hits load out of catalogue order. Keep the sheet in item-code order.
+      return candidates
+        .map((p, index) => ({ p, index, code: numericItemCodeSort(p) }))
+        .sort((a, b) => a.code - b.code || a.index - b.index)
+        .map(({ p }) => p.line);
+    }
     return preferExactProductIdentifiers(candidates.filter((p) => productMatchesSearch(p, searchQuery)), searchQuery).map((p) => p.line);
   }, [lines, products, searchQuery, sheetFinishedGoods]);
+
+  React.useEffect(() => {
+    const query = searchQuery.trim();
+    if (!sheetFinishedGoods || !sheetCatalogReady || sheetCursor == null || !query || !isApiConfigured()) {
+      setSheetSearching(false);
+      return;
+    }
+    const generation = sheetGenerationRef.current;
+    let cancelled = false;
+    setSheetSearching(true);
+    const timer = window.setTimeout(() => {
+      void fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, search: query, limit: 30 })
+        .then((page) => appendSheetProducts(page.items, generation))
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setSheetSearching(false); });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [appendSheetProducts, packSizeFromName, searchQuery, sheetCatalogReady, sheetCursor, sheetFinishedGoods]);
+
+  const sheetHasMore = sheetFinishedGoods && sheetCursor != null;
+  React.useEffect(() => {
+    if (!sheetHasMore || sheetLoadingMore || sheetLoadError || searchQuery.trim()) return;
+    const sentinel = sheetSentinelRef.current;
+    if (!sentinel || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) void loadMoreSheet();
+      },
+      { rootMargin: "200px" }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [sheetHasMore, sheetLoadingMore, sheetLoadError, searchQuery, loadMoreSheet, lines.length]);
 
   const moveFieldFocus = (lineId: string, field: "qty" | "price", dir: -1 | 1) => {
     const idx = displayedLines.findIndex((l) => l.id === lineId);
@@ -1472,9 +1572,9 @@ export function DocumentLineEditor({
       <div data-line-composer className={cn("relative space-y-2", lineByLine && "rounded-lg border bg-muted/20 p-3")}>
         {sheetFinishedGoods ? (
           <div className="space-y-2">
-            <p className="text-sm text-muted-foreground">All active finished goods are listed below. Enter the quantities sold; leave the others at 0. Prices and totals update automatically.</p>
+            <p className="text-sm text-muted-foreground">Active finished goods are listed below, and more load as you scroll. Enter the quantities sold; leave the others at 0. Prices and totals update automatically.</p>
             <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); editorRef.current?.querySelector<HTMLInputElement>("[data-line-qty]")?.focus(); } }} aria-label="Filter finished goods" placeholder="Find name, product code, SKU or barcode" className="max-w-lg" />
-            <p className="text-xs text-muted-foreground">{lines.length} products · {lines.filter((line) => line.qty > 0).length} selected · Enter or arrow keys move between quantities.</p>
+            <p className="text-xs text-muted-foreground">{lines.length} products{sheetHasMore ? " loaded" : ""} · {lines.filter((line) => line.qty > 0).length} selected · Enter or arrow keys move between quantities.</p>
           </div>
         ) : fmcgOrg && !lineByLine && !swapLineId ? (
           <div className="flex flex-wrap items-center gap-3">
@@ -1730,10 +1830,10 @@ export function DocumentLineEditor({
           <Button type="button" variant="outline" onClick={() => setCatalogRetry((n) => n + 1)}>Retry catalogue</Button>
         </div>
       ) : null}
-      {sheetFinishedGoods && lines.length > 0 && displayedLines.length === 0 ? <p role="status">No finished goods match this search. Clear the filter to see all products; entered quantities are retained.</p> : null}
+      {sheetFinishedGoods && lines.length > 0 && displayedLines.length === 0 ? <p role="status">{sheetSearching ? "Searching finished goods…" : "No finished goods match this search. Clear the filter to see all products; entered quantities are retained."}</p> : null}
       {lines.length === 0 ? (
         lineByLine ? composer : <p className="text-sm text-muted-foreground">
-          {sheetFinishedGoods ? (productListLoading ? "Loading all finished goods…" : catalogError ? "Catalogue unavailable." : "No active finished goods are configured.") : fmcgOrg
+          {sheetFinishedGoods ? (productListLoading ? "Loading finished goods…" : catalogError ? "Catalogue unavailable." : "No active finished goods are configured.") : fmcgOrg
             ? "No lines yet. Add products to build this order."
             : "No lines yet. Search above to add the first product."}
         </p>
@@ -1986,6 +2086,21 @@ export function DocumentLineEditor({
           })}
               </tbody>
             </LineTable>
+            {sheetHasMore && !searchQuery.trim() ? (
+              <div ref={sheetSentinelRef} role="status" className="border-t px-3 py-3 text-center text-xs text-muted-foreground">
+                {sheetLoadError ? (
+                  <span>
+                    More products could not load.{" "}
+                    <button type="button" className="font-medium text-primary underline" onClick={() => void loadMoreSheet()}>Retry</button>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2">
+                    {sheetLoadingMore ? <Icons.Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : null}
+                    {sheetLoadingMore ? "Loading more products…" : "Scroll for more products"}
+                  </span>
+                )}
+              </div>
+            ) : null}
           </div>
           {lineByLine ? composer : null}
           <div className="mt-4 flex justify-end">
