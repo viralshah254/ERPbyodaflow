@@ -277,6 +277,7 @@ export function DocumentLineEditor({
   onCatalogReadyChange,
   onDocumentProductData,
 }: DocumentLineEditorProps) {
+  const inlineCatalogue = lineByLine && !fmcgOrg;
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
@@ -1456,7 +1457,7 @@ export function DocumentLineEditor({
   };
 
   const onEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (lineByLine) return;
+    if (inlineCatalogue) return;
     if (event.key !== "Enter" || !event.shiftKey) return;
     if (productPickerOpen) return;
     if (document.querySelector("[data-radix-select-content]")) return;
@@ -1481,12 +1482,14 @@ export function DocumentLineEditor({
     if (event.nativeEvent.isComposing) return;
     if (event.key === "ArrowDown") {
       event.preventDefault();
+      if (!inlineCatalogue && !searchQuery.trim()) return;
       setSearchOpen(true);
       setHighlightIndex((i) => searchOpen ? Math.min(i + 1, Math.max(searchResults.length - 1, 0)) : 0);
       return;
     }
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      if (!inlineCatalogue && !searchQuery.trim()) return;
       setSearchOpen(true);
       setHighlightIndex((i) => Math.max(i - 1, 0));
       return;
@@ -1509,8 +1512,8 @@ export function DocumentLineEditor({
   const swapLine = swapLineId ? lines.find((l) => l.id === swapLineId) : undefined;
 
   const composer = (
-      <div data-line-composer className={cn("relative space-y-2", lineByLine && "rounded-lg border bg-muted/20 p-3")}>
-        <div className="flex items-center gap-2">
+      <div data-line-composer className={cn("relative space-y-2", inlineCatalogue && "rounded-lg border bg-muted/20 p-3")}>
+        <div className={cn("flex items-center gap-2", !inlineCatalogue && "max-w-md")}>
           <div className="relative min-w-0 flex-1">
             <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -1523,10 +1526,10 @@ export function DocumentLineEditor({
                 const value = e.target.value;
                 setSearchQuery(value);
                 if (!value.trim()) setCategoryChip(null);
-                setSearchOpen(lineByLine || Boolean(value.trim()));
+                setSearchOpen(inlineCatalogue || Boolean(value.trim()));
               }}
               onFocus={() => {
-                if (lineByLine || searchQuery.trim()) setSearchOpen(true);
+                if (inlineCatalogue || searchQuery.trim()) setSearchOpen(true);
               }}
               onKeyDown={onSearchKeyDown}
               autoComplete="off"
@@ -1539,7 +1542,7 @@ export function DocumentLineEditor({
               aria-activedescendant={searchOpen && searchResults[highlightIndex] ? `${searchResultsId}-${highlightIndex}` : undefined}
             />
           </div>
-          {!lineByLine ? (
+          {!inlineCatalogue ? (
             <Button
               type="button"
               variant="outline"
@@ -1552,7 +1555,7 @@ export function DocumentLineEditor({
             </Button>
           ) : null}
         </div>
-        {lineByLine ? (
+        {inlineCatalogue ? (
           <p className="text-xs text-muted-foreground">Scroll the list to find a product. Enter the quantity on the right, then select it. Tick several to add them together.</p>
         ) : sheetFinishedGoods || (fmcgOrg && !swapLineId) ? null : (
         <p className="text-xs text-muted-foreground">
@@ -1567,7 +1570,7 @@ export function DocumentLineEditor({
           </p>
         ) : null}
         {searchOpen ? (
-          <div className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg">
+          <div className={cn("absolute left-0 top-full z-40 mt-1 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-lg", inlineCatalogue ? "right-0" : "w-full max-w-md")}>
           <div
             ref={searchListRef}
             id={searchResultsId}
@@ -1721,9 +1724,9 @@ export function DocumentLineEditor({
   return (
     <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
       <Label>{lineItemsLabel}</Label>
-      {!lineByLine ? composer : null}
+      {!inlineCatalogue ? composer : null}
 
-      {!lineByLine && <DocumentProductPickerSheet
+      {!inlineCatalogue && <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         sheetFinishedGoods={sheetFinishedGoods}
@@ -1747,7 +1750,7 @@ export function DocumentLineEditor({
         </div>
       ) : null}
       {lines.length === 0 ? (
-        lineByLine ? composer : sheetFinishedGoods || fmcgOrg ? (
+        inlineCatalogue ? composer : sheetFinishedGoods || fmcgOrg ? (
           <div className="flex items-center justify-center py-10" role="img" aria-label="No products selected">
             <Icons.PackageOpen className="h-9 w-9 text-muted-foreground/70" aria-hidden />
           </div>
@@ -2002,7 +2005,7 @@ export function DocumentLineEditor({
               </tbody>
             </LineTable>
           </div>
-          {lineByLine ? composer : null}
+          {inlineCatalogue ? composer : null}
           <div className="mt-4 flex justify-end">
             <dl className="w-full max-w-xs space-y-1.5 text-sm">
               {totalTax > 0 && !linesAreTaxInclusive ? (

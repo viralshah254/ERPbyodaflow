@@ -39,7 +39,7 @@ it("moves from product to quantity and back to a fresh product search with Enter
   render(<LineByLineForm />);
   const search = () => screen.getByRole("combobox", { name: "Search products to add" });
   await waitFor(() => expect(search()).toBeEnabled());
-  expect(screen.queryByRole("button", { name: /Add products|Browse/ })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Browse" })).toBeInTheDocument();
   fireEvent.change(search(), { target: { value: "Queen" } });
   fireEvent.keyDown(search(), { key: "Enter" });
 
@@ -62,21 +62,7 @@ it("moves from product to quantity and back to a fresh product search with Enter
   expect(within(quantity.closest("tr")!).getByText("KES 100.00")).toBeInTheDocument();
 });
 
-it("lists products on focus and loads the next page while scrolling", async () => {
-  api.configured = true;
-  const first = Array.from({ length: 100 }, (_, i) => ({
-    id: `p-${i}`,
-    sku: String(i),
-    code: String(i),
-    name: `Product ${String(i).padStart(3, "0")}`,
-    unit: "PCS",
-    productType: "FINISHED" as const,
-    itemRole: "FINISHED" as const,
-  }));
-  const next = [{ id: "p-100", sku: "100", code: "100", name: "Product 100", unit: "PCS", productType: "FINISHED" as const, itemRole: "FINISHED" as const }];
-  vi.mocked(fetchProductsPageApi)
-    .mockResolvedValueOnce({ items: first, hasMore: true, nextCursor: "100", limit: 100, offset: 0 } as never)
-    .mockResolvedValue({ items: next, hasMore: false, nextCursor: null, limit: 100, offset: 100 } as never);
+it("keeps the catalogue closed until Browse is opened", async () => {
   function LineByLineForm() {
     const [lines, setLines] = React.useState<DocumentLine[]>([]);
     return (
@@ -94,21 +80,10 @@ it("lists products on focus and loads the next page while scrolling", async () =
   const search = screen.getByRole("combobox", { name: "Search products to add" });
   await waitFor(() => expect(search).toBeEnabled());
   fireEvent.focus(search);
-  expect(await screen.findByRole("option", { name: /Product 000/ }, { timeout: 8_000 })).toBeInTheDocument();
-  await waitFor(() => {
-    expect(
-      screen.queryByRole("option", { name: /Product 100/ }) ??
-      screen.queryByRole("button", { name: "Load more products" }) ??
-      screen.queryByText("Load more products")
-    ).toBeTruthy();
-  }, { timeout: 8_000 });
-  const more =
-    screen.queryByRole("button", { name: "Load more products" }) ??
-    screen.queryByText("Load more products");
-  if (more) fireEvent.click(more);
-  expect(await screen.findByRole("option", { name: /Product 100/ }, { timeout: 8_000 })).toBeInTheDocument();
-  expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ cursor: "100", sellable: true, limit: 100, includeStock: false }));
-}, 20_000);
+  expect(screen.queryByRole("option", { name: /Queen cakes/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+  expect(await screen.findByRole("dialog", { name: "Add products" })).toBeInTheDocument();
+});
 
 it("adds the quantity typed beside the product", async () => {
   function LineByLineForm() {
