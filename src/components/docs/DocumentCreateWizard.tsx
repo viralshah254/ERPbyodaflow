@@ -4,7 +4,7 @@ import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { fetchJoyOrderRoute, type CollectionRoute } from "@/lib/api/joy-route-orders";
 import { JoyOrderRouteFields } from "./JoyOrderRouteFields";
 import type { PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
-import { fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
+import { fetchPartySiteApi, fetchPartySitesApi, type PartySiteRow } from "@/lib/api/party-sites";
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -193,7 +193,7 @@ function getDefaultValues(baseCurrency: string): FormValues {
 }
 
 const SHIP_TO_MAIN_ID = "__main__";
-const SHIP_TO_RESULT_LIMIT = 60;
+const SHIP_TO_PAGE_SIZE = 10;
 
 function shipToOption(site: PartySiteRow) {
   const description = [site.address?.line1, site.address?.city, site.address?.region].filter(Boolean).join(", ");
@@ -202,14 +202,6 @@ function shipToOption(site: PartySiteRow) {
     label: site.code ? `${site.name} · ${site.code}` : site.name,
     description: description || undefined,
   };
-}
-
-function siteMatchesQuery(site: PartySiteRow, query: string) {
-  const haystack = [site.name, site.code, site.address?.line1, site.address?.line2, site.address?.city, site.address?.region]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
 }
 
 function fieldIdToKey(id: string): keyof FormValues {
@@ -756,36 +748,52 @@ export function DocumentCreateWizard({
   const watchedBranch = form.watch("branch");
   const selectedPartyId = form.watch("party");
   const showShipTo = ["sales-order", "invoice", "delivery-note"].includes(type);
-  const [deliverySites, setDeliverySites] = React.useState<{ partyId: string; rows: PartySiteRow[] }>();
   const [deliverySiteError, setDeliverySiteError] = React.useState("");
   const [deliverySiteSelection, setDeliverySiteSelection] = React.useState<{ partyId: string; id: string | null }>();
+  const shipToPartyRef = React.useRef(selectedPartyId);
+  shipToPartyRef.current = selectedPartyId;
+  const shipToCacheRef = React.useRef<Map<string, PartySiteRow>>(new Map());
+  const [resolvedShipTo, setResolvedShipTo] = React.useState<{ partyId: string; site: PartySiteRow } | null>(null);
   const selectedDeliverySite = deliverySiteSelection?.partyId === selectedPartyId
     ? deliverySiteSelection?.id
     : existingDocument?.partyId === selectedPartyId ? existingDocument?.shipToSiteId : undefined;
-  const deliverySiteRows = React.useMemo(() => {
-    if (!deliverySites || deliverySites.partyId !== selectedPartyId) return [];
-    return deliverySites.rows;
-  }, [deliverySites, selectedPartyId]);
-  const shipToLoading = Boolean(selectedPartyId) && isApiConfigured() && deliverySites?.partyId !== selectedPartyId && !deliverySiteError;
+  const pickedShipTo = resolvedShipTo && resolvedShipTo.partyId === selectedPartyId && resolvedShipTo.site.id === selectedDeliverySite
+    ? resolvedShipTo.site
+    : undefined;
   const selectedShipToOption = React.useMemo(() => {
     if (!selectedDeliverySite) return { id: SHIP_TO_MAIN_ID, label: "Customer’s main address" };
-    const site = deliverySiteRows.find((row) => row.id === selectedDeliverySite);
-    return site ? shipToOption(site) : { id: selectedDeliverySite, label: "Saved delivery location" };
-  }, [deliverySiteRows, selectedDeliverySite]);
+    if (pickedShipTo) return shipToOption(pickedShipTo);
+    return { id: selectedDeliverySite, label: "Saved delivery location" };
+  }, [pickedShipTo, selectedDeliverySite]);
   const loadShipToOptions = React.useCallback(async (query: string, page?: { cursor: string | null }) => {
-    const q = query.trim().toLowerCase();
-    const matched = deliverySiteRows.filter((site) => !q || siteMatchesQuery(site, q));
-    const start = page?.cursor ? Number(page.cursor) : 0;
-    const options = matched.slice(start, start + SHIP_TO_RESULT_LIMIT).map(shipToOption);
-    const mainLabel = "Customer’s main address";
-    if (start === 0 && (!q || mainLabel.toLowerCase().includes(q))) {
-      options.unshift({ id: SHIP_TO_MAIN_ID, label: mainLabel, description: "Address on the customer record" });
+    const partyId = selectedPartyId;
+    if (!partyId || !isApiConfigured()) return { options: [], nextCursor: null };
+    const cursor = page?.cursor && page.cursor !== "0" ? page.cursor : undefined;
+    try {
+      const result = await fetchPartySitesApi({
+        partyId,
+        status: "ACTIVE",
+        search: query.trim() || undefined,
+        limit: SHIP_TO_PAGE_SIZE,
+        cursor,
+      });
+      if (shipToPartyRef.current !== partyId) return { options: [], nextCursor: null };
+      for (const site of result.items) shipToCacheRef.current.set(site.id, site);
+      setDeliverySiteError("");
+      const options = result.items.map(shipToOption);
+      const mainLabel = "Customer’s main address";
+      const q = query.trim().toLowerCase();
+      if (!cursor && (!q || mainLabel.toLowerCase().includes(q))) {
+        options.unshift({ id: SHIP_TO_MAIN_ID, label: mainLabel, description: "Address on the customer record" });
+      }
+      return { options, nextCursor: result.nextCursor };
+    } catch {
+      if (shipToPartyRef.current === partyId) setDeliverySiteError("Delivery locations could not load.");
+      return { options: [], nextCursor: null };
     }
-    const next = start + SHIP_TO_RESULT_LIMIT;
-    return { options, nextCursor: next < matched.length ? String(next) : null };
-  }, [deliverySiteRows]);
+  }, [selectedPartyId]);
   const selectedSiteAddress = selectedDeliverySite
-    ? deliverySiteRows.find((site) => site.id === selectedDeliverySite)?.address
+    ? pickedShipTo?.address
     : selectedPartyDetail?.id === selectedPartyId ? selectedPartyDetail?.address : undefined;
   const shipToPreview = selectedSiteAddress && [
     selectedSiteAddress.line1, selectedSiteAddress.line2, selectedSiteAddress.city,
@@ -795,14 +803,30 @@ export function DocumentCreateWizard({
     deliverySiteSelection?.id !== (existingDocument?.shipToSiteId ?? null);
 
   React.useEffect(() => {
-    if (!showShipTo || !selectedPartyId || !isApiConfigured()) return;
-    let active = true;
+    shipToCacheRef.current.clear();
+    setResolvedShipTo(null);
     setDeliverySiteError("");
-    void fetchPartySitesApi({ partyId: selectedPartyId, status: "ACTIVE", limit: 2000 })
-      .then(({ items }) => { if (active) setDeliverySites({ partyId: selectedPartyId, rows: items }); })
-      .catch(() => { if (active) setDeliverySiteError("Delivery locations could not load."); });
+  }, [selectedPartyId]);
+
+  React.useEffect(() => {
+    if (!showShipTo || !selectedPartyId || !selectedDeliverySite || !isApiConfigured()) return;
+    const cached = shipToCacheRef.current.get(selectedDeliverySite);
+    if (cached?.partyId === selectedPartyId) {
+      setResolvedShipTo({ partyId: selectedPartyId, site: cached });
+      return;
+    }
+    const partyId = selectedPartyId;
+    const siteId = selectedDeliverySite;
+    let active = true;
+    void fetchPartySiteApi(siteId)
+      .then((site) => {
+        if (!active || shipToPartyRef.current !== partyId || site.partyId !== partyId) return;
+        shipToCacheRef.current.set(site.id, site);
+        setResolvedShipTo({ partyId, site });
+      })
+      .catch(() => {});
     return () => { active = false; };
-  }, [showShipTo, selectedPartyId]);
+  }, [showShipTo, selectedPartyId, selectedDeliverySite]);
 
   const watchedWarehouse = form.watch("warehouse");
   const orderDate = form.watch("date");
@@ -2670,7 +2694,7 @@ export function DocumentCreateWizard({
             ) : null}
           </CardHeader>
           <CardContent className="pt-2 pb-4">
-            {!headerStepReady ? (
+            {!branchWarehouseReady ? (
               <div className="mb-4 flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                 <Icons.Loader2 className="h-4 w-4 shrink-0 animate-spin" />
                 Loading header fields…
@@ -2716,7 +2740,7 @@ export function DocumentCreateWizard({
                 </p>
               </div>
             ) : null}
-            <form className={cn("space-y-4", !headerStepReady && "pointer-events-none opacity-60")}>
+            <form className={cn("space-y-4", !branchWarehouseReady && "pointer-events-none opacity-60")}>
               {type === "grn" && (
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-start gap-2">
@@ -2889,19 +2913,23 @@ export function DocumentCreateWizard({
                   <Label htmlFor="ship-to-site">Ship to</Label>
                   <AsyncSearchableSelect
                     id="ship-to-site"
-                    value={shipToLoading ? "" : (selectedDeliverySite ?? SHIP_TO_MAIN_ID)}
-                    onValueChange={(id) => setDeliverySiteSelection({
-                      partyId: selectedPartyId,
-                      id: !id || id === SHIP_TO_MAIN_ID ? null : id,
-                    })}
+                    value={selectedDeliverySite ?? SHIP_TO_MAIN_ID}
+                    onValueChange={(id) => {
+                      const siteId = !id || id === SHIP_TO_MAIN_ID ? null : id;
+                      setDeliverySiteSelection({ partyId: selectedPartyId, id: siteId });
+                      if (!siteId) {
+                        setResolvedShipTo(null);
+                        return;
+                      }
+                      const site = shipToCacheRef.current.get(siteId);
+                      if (site?.partyId === selectedPartyId) setResolvedShipTo({ partyId: selectedPartyId, site });
+                    }}
                     loadOptions={loadShipToOptions}
-                    selectedOption={shipToLoading ? null : selectedShipToOption}
-                    placeholder={shipToLoading ? "Loading branches…" : "Customer’s main address"}
+                    selectedOption={selectedShipToOption}
+                    placeholder="Customer’s main address"
                     searchPlaceholder="Search branch name, code, or town"
                     emptyMessage="No branches match that search."
-                    disabled={shipToLoading}
-                    searchDebounceMs={0}
-                    reloadToken={`${selectedPartyId}:${deliverySiteRows.length}`}
+                    reloadToken={selectedPartyId}
                     recentStorageKey={`lookup:recent-ship-to:${selectedPartyId}`}
                   />
                   {shipToPreview && <p className="text-xs text-muted-foreground">{shipToPreview}</p>}

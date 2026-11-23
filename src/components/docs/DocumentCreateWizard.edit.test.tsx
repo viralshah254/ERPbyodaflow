@@ -41,7 +41,10 @@ vi.mock("@/lib/api/sfa-sales-reps", () => ({
   fetchSfaSalesReps: vi.fn().mockResolvedValue({ reps: [{ id: "sfa-ann", name: "Ann Wanjiku", phone: "+254711000001" }], areas: [] }),
   createSfaSalesRep: vi.fn(),
 }));
-vi.mock("@/lib/api/party-sites", () => ({ fetchPartySitesApi: vi.fn().mockResolvedValue({ items: [] }) }));
+vi.mock("@/lib/api/party-sites", () => ({
+  fetchPartySitesApi: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+  fetchPartySiteApi: vi.fn(),
+}));
 vi.mock("@/components/ui/select", () => ({
   Select: ({ children, value, onValueChange }: any) => <select value={value ?? ""} onChange={(event) => onValueChange?.(event.target.value)}>{children}</select>,
   SelectTrigger: () => null, SelectValue: () => null,
