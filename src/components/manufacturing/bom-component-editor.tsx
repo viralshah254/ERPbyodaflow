@@ -12,6 +12,7 @@ import {
   manufacturingWarehouseLabel,
 } from "@/components/manufacturing/manufacturing-warehouse-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/docs/DocumentProductPickerSheet";
 import {
   deleteDocumentDraftApi,
@@ -97,6 +98,11 @@ function formatQuantity(value: number): string {
 type DraftPayload = { lines: ComponentDraftLine[]; savedAt: string };
 
 const DRAFT_DEBOUNCE_MS = 700;
+
+const ADD_INGREDIENT_HINT =
+  `Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. ` +
+  `Leave the store on ${MANUFACTURING_DEFER_STORE_LABEL} unless this ingredient must always come from one store. ` +
+  "Units list only what the product can be measured in; add more under the product's Packaging tab.";
 
 function draftType(bomId: string): string {
   return `bom-components:${bomId}`;
@@ -490,7 +496,7 @@ export function BomComponentEditor({
       setDraftStatus("idle");
       setChangeNote("");
       onSaved(updated);
-      toast.success(versioned && updated.revisionNo ? `Saved as version ${updated.revisionNo}. The previous version is kept in history.` : "Components saved.");
+      toast.success(versioned && updated.revisionNo ? `Saved as version ${updated.revisionNo}. Production uses this recipe now; the previous version stays in history.` : "Components saved.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to save components.");
     } finally {
@@ -603,13 +609,28 @@ export function BomComponentEditor({
                 </div>
               )}
             </div>
-            <Button type="button" variant="outline" size="sm" className="shrink-0" disabled={!hydrated} onClick={() => setPickerOpen(true)}>
-              Browse
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-9 w-9 text-muted-foreground"
+                    aria-label="How to add ingredients"
+                  >
+                    <Icons.CircleHelp className="h-4 w-4" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="max-w-sm text-sm leading-relaxed text-muted-foreground">
+                  {ADD_INGREDIENT_HINT}
+                </PopoverContent>
+              </Popover>
+              <Button type="button" variant="outline" size="sm" disabled={!hydrated} onClick={() => setPickerOpen(true)}>
+                Browse
+              </Button>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. {`Leave the store on ${MANUFACTURING_DEFER_STORE_LABEL} unless this ingredient must always come from one store.`} Units list only what the product can be measured in; add more under the product&apos;s Packaging tab.
-          </p>
         </div>
       )}
 
@@ -617,7 +638,7 @@ export function BomComponentEditor({
         <TableHeader>
           <TableRow>
             <TableHead>Product</TableHead>
-            <TableHead className="w-28">Qty</TableHead>
+            <TableHead className="min-w-[9.5rem] w-[9.5rem]">Qty</TableHead>
             <TableHead className="w-36">UOM</TableHead>
             <TableHead className="w-32">Cost / unit (excl. VAT)</TableHead>
             <TableHead className="w-28 text-right">Line cost</TableHead>
@@ -657,17 +678,17 @@ export function BomComponentEditor({
                       </span>
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="min-w-[9.5rem] align-top">
                     {canWrite ? (
                       <Input
-                        className="h-8 tabular-nums"
+                        className="h-8 w-full min-w-[8.5rem] tabular-nums text-sm"
                         inputMode="decimal"
                         aria-label={`Quantity for ${line.productName ?? line.productSku ?? "component"}`}
                         value={line.quantity}
                         onChange={(event) => updateLine(line.id, { quantity: event.target.value })}
                       />
                     ) : (
-                      line.quantity
+                      <span className="tabular-nums text-sm">{line.quantity}</span>
                     )}
                   </TableCell>
                   <TableCell>
