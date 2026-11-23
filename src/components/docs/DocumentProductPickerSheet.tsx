@@ -338,8 +338,8 @@ export function DocumentProductPickerSheet({
             <div className="space-y-1">
               <Dialog.Title className="text-lg font-semibold">Add products</Dialog.Title>
               <Dialog.Description className="text-sm text-muted-foreground">
-                Click a product to add it. The dialog stays open so you can add the next one.
-                {fmcgOrg ? " Set the quantity on the row before you click." : ""}
+                Click a row or its checkbox to select products, then use Add lines. The dialog stays open so you can keep browsing.
+                {fmcgOrg ? " Set quantity on each row before you add." : ""}
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -439,26 +439,32 @@ export function DocumentProductPickerSheet({
                   return (
                     <li
                       key={p.id}
+                      role="option"
+                      aria-selected={checked}
                       className={cn(
-                        "flex items-center gap-2 border-b px-2 py-2 last:border-b-0",
+                        "flex cursor-pointer items-center gap-2 border-b px-2 py-2 last:border-b-0 hover:bg-muted/30",
                         index === highlight && "bg-muted/60",
+                        checked && "bg-muted/20",
                         justAdded && "bg-primary/10"
                       )}
+                      onMouseEnter={() => setHighlight(index)}
+                      onClick={(event) => {
+                        const target = event.target instanceof Element ? event.target : null;
+                        if (target?.closest("[data-stop-row-click]")) return;
+                        toggle(p);
+                      }}
                     >
-                      <Checkbox
-                        checked={checked}
-                        onCheckedChange={() => toggle(p)}
-                        aria-label={`Select ${p.name}`}
-                      />
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => addOne(p, false)}
-                        onMouseEnter={() => setHighlight(index)}
-                      >
+                      <div data-stop-row-click="" className="shrink-0">
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={() => toggle(p)}
+                          aria-label={`Select ${p.name}`}
+                        />
+                      </div>
+                      <div className="min-w-0 flex-1 text-left">
                         <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
                         <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
-                      </button>
+                      </div>
                       {priceLabel?.(p) ? (
                         <span className="hidden shrink-0 text-sm tabular-nums sm:block">
                           {priceLabel(p)}
@@ -466,6 +472,7 @@ export function DocumentProductPickerSheet({
                       ) : null}
                       <span className="shrink-0 text-xs text-muted-foreground">Qty</span>
                       <Input
+                        data-stop-row-click=""
                         className="h-8 w-16 shrink-0 tabular-nums"
                         inputMode="decimal"
                         aria-label={`Quantity for ${p.name}`}
@@ -478,6 +485,7 @@ export function DocumentProductPickerSheet({
                       {onOrder ? (
                         <Button
                           type="button"
+                          data-stop-row-click=""
                           variant="ghost"
                           size="sm"
                           className="shrink-0 px-2 text-xs"
@@ -518,7 +526,7 @@ export function DocumentProductPickerSheet({
 
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs text-muted-foreground">
-              {selectedCount === 0 ? "Click a row to add it" : `${selectedCount} selected`}
+              {selectedCount === 0 ? "Select rows, then Add lines" : `${selectedCount} selected`}
               {selectedCount > 0 ? (
                 <button
                   type="button"
