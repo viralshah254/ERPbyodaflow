@@ -6,7 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import {
+  MANUFACTURING_DEFER_STORE_LABEL,
+  ManufacturingWarehouseSelect,
+  manufacturingWarehouseLabel,
+} from "@/components/manufacturing/manufacturing-warehouse-select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DocumentProductPickerSheet, type CatalogAddItem } from "@/components/docs/DocumentProductPickerSheet";
 import {
@@ -105,27 +109,6 @@ function scrapPercentFromStored(scrapFactor?: number, mode?: "RATIO" | "PERCENT"
   const ratio = mode === "RATIO" ? scrapFactor : mode === "PERCENT" ? scrapFactor / 100 : scrapFactor >= 1 ? scrapFactor / 100 : scrapFactor;
   const percent = Math.round(ratio * 10000) / 100;
   return percent > 0 ? String(percent) : "";
-}
-
-function warehouseOptionLabel(warehouse: WarehouseOption): string {
-  const code = warehouse.code?.trim();
-  return code && code.toLowerCase() !== warehouse.name.trim().toLowerCase() ? `${code} — ${warehouse.name}` : warehouse.name;
-}
-
-const WORK_ORDER_STORE = "__none__";
-const WORK_ORDER_STORE_LABEL = "Choose on work order";
-const WORK_ORDER_STORE_OPTION: AsyncSearchableSelectOption = {
-  id: WORK_ORDER_STORE,
-  label: WORK_ORDER_STORE_LABEL,
-  description: "No fixed store. Pick the input stores when you start each work order.",
-};
-
-function storeOptions(warehouses: WarehouseOption[], query: string): AsyncSearchableSelectOption[] {
-  const needle = query.trim().toLowerCase();
-  const stores = warehouses
-    .map((warehouse) => ({ id: warehouse.id, label: warehouseOptionLabel(warehouse) }))
-    .filter((option) => !needle || option.label.toLowerCase().includes(needle));
-  return needle ? stores : [WORK_ORDER_STORE_OPTION, ...stores];
 }
 
 function toDraftLine(item: ManufacturingBomItem): ComponentDraftLine {
@@ -586,7 +569,7 @@ export function BomComponentEditor({
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. Leave the store on Choose on work order unless this ingredient must always come from one store. Units list only what the product can be measured in; add more under the product&apos;s Packaging tab.
+            Search and press Enter to add the next product. Set quantity, unit, cost, store, and scrap on the row. {`Leave the store on ${MANUFACTURING_DEFER_STORE_LABEL} unless this ingredient must always come from one store.`} Units list only what the product can be measured in; add more under the product&apos;s Packaging tab.
           </p>
         </div>
       )}
@@ -691,19 +674,15 @@ export function BomComponentEditor({
                   <TableCell className="text-right tabular-nums">{cost != null ? formatAmount(cost) : "—"}</TableCell>
                   <TableCell>
                     {canWrite ? (
-                      <AsyncSearchableSelect
-                        value={line.warehouseId || WORK_ORDER_STORE}
-                        selectedOption={store ? { id: store.id, label: warehouseOptionLabel(store) } : WORK_ORDER_STORE_OPTION}
-                        onValueChange={(value) => updateLine(line.id, { warehouseId: value === WORK_ORDER_STORE ? "" : value })}
-                        loadOptions={async (query) => storeOptions(warehouses, query)}
-                        searchDebounceMs={0}
-                        placeholder={WORK_ORDER_STORE_LABEL}
-                        searchPlaceholder="Find a store"
-                        emptyMessage="No store matches."
-                        triggerClassName="h-8"
+                      <ManufacturingWarehouseSelect
+                        kind="input"
+                        compact
+                        value={line.warehouseId}
+                        warehouses={warehouses}
+                        onValueChange={(warehouseId) => updateLine(line.id, { warehouseId })}
                       />
                     ) : (
-                      store ? warehouseOptionLabel(store) : WORK_ORDER_STORE_LABEL
+                      store ? manufacturingWarehouseLabel(store) : MANUFACTURING_DEFER_STORE_LABEL
                     )}
                   </TableCell>
                   <TableCell>

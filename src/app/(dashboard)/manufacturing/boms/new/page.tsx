@@ -36,6 +36,11 @@ import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
 import { BomPilotHelp } from "@/components/manufacturing/BomPilotHelp";
+import {
+  MANUFACTURING_DEFER_STORE_LABEL,
+  ManufacturingWarehouseSelect,
+  manufacturingWarehouseLabel,
+} from "@/components/manufacturing/manufacturing-warehouse-select";
 
 function pickKgUomCode(codes: string[]): string | undefined {
   const norm = codes.map((c) => ({ raw: c, u: c.toUpperCase().replace(/\s+/g, "") }));
@@ -314,19 +319,17 @@ export default function NewBomPage() {
               </div>
               <div className="space-y-2" data-bom-warehouse>
                 <Label htmlFor="bom-warehouse">Output warehouse <span className="text-muted-foreground">(optional)</span></Label>
-                <Select value={outputWarehouseId || "__none__"} onValueChange={(value) => setOutputWarehouseId(value === "__none__" ? "" : value)}>
-                  <SelectTrigger id="bom-warehouse">
-                    <SelectValue placeholder="Where finished goods are received" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Choose later on the work order</SelectItem>
-                    {warehouses.map((warehouse) => (
-                      <SelectItem key={warehouse.id} value={warehouse.id}>
-                        {warehouse.code ? `${warehouse.code} — ${warehouse.name}` : warehouse.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <ManufacturingWarehouseSelect
+                  id="bom-warehouse"
+                  kind="output"
+                  disabled={hydrating}
+                  value={outputWarehouseId}
+                  warehouses={warehouses}
+                  onValueChange={setOutputWarehouseId}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave on {MANUFACTURING_DEFER_STORE_LABEL} unless this recipe always receives finished goods into the same store.
+                </p>
               </div>
               {submitError && <p role="alert" className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{submitError}</p>}
               <div className="flex gap-2 border-t pt-4">
@@ -348,7 +351,7 @@ export default function NewBomPage() {
             <div><dt className="text-muted-foreground">Finished product</dt><dd className="break-words font-medium">{finishedProductOption?.label || "Select a product"}</dd></div>
             <div><dt className="text-muted-foreground">Batch output</dt><dd className="font-medium">{quantity || "—"} {uom}</dd></div>
             <div><dt className="text-muted-foreground">Method</dt><dd className="capitalize font-medium">{type}</dd></div>
-            <div><dt className="text-muted-foreground">Output destination</dt><dd>{warehouses.find(w => w.id === outputWarehouseId)?.name || "Choose on the work order"}</dd></div>
+            <div><dt className="text-muted-foreground">Output destination</dt><dd>{outputWarehouseId ? manufacturingWarehouseLabel(warehouses.find(w => w.id === outputWarehouseId) ?? { id: outputWarehouseId, name: outputWarehouseId }) : MANUFACTURING_DEFER_STORE_LABEL}</dd></div>
           </dl>
           <p className="border-t pt-4 text-xs leading-relaxed text-muted-foreground">Next: add components and quantities, then link a routing. Creating this {terms.formula} does not post inventory.</p>
         </aside>
