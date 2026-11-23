@@ -1,4 +1,4 @@
-import { apiRequest, downloadFile, requireLiveApi } from "./client";
+import { apiRequest, fetchApiBinary, requireLiveApi } from "./client";
 
 export type JoySalesOrder = {
   id: string;
@@ -327,9 +327,46 @@ export async function markJoyLoadDeparted(id: string): Promise<JoyLoadNote> {
   return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/depart`, { method: "POST", body: {} });
 }
 
-export async function downloadJoyLoadNotePdf(note: { id: string; number: string }, onNotAvailable: (message: string) => void) {
+/** Opens the browser print dialog for the loader note. The window must be opened before the PDF fetch so the click still counts as the user gesture. */
+export async function printJoyLoadNotePdf(note: { id: string; number: string }, onError: (message: string) => void) {
   requireLiveApi(LOADS);
-  return downloadFile(`/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/pdf`, `${note.number}.pdf`, onNotAvailable);
+  const popup = window.open("", "_blank");
+  if (!popup) {
+    onError("Allow pop-ups to print the loader note.");
+    return;
+  }
+  popup.document.title = note.number;
+  popup.document.body.textContent = "Preparing the loader note…";
+  try {
+    const blob = await fetchApiBinary(`/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/pdf`);
+    if (!blob || blob.size === 0) {
+      popup.close();
+      onError("Could not load the loader note for printing.");
+      return;
+    }
+    const typed = blob.type.includes("pdf") ? blob : new Blob([blob], { type: "application/pdf" });
+    const url = URL.createObjectURL(typed);
+    const title = note.number.replace(/[&<>"']/g, "");
+    popup.document.open();
+    popup.document.write(
+      `<!doctype html><html><head><title>${title}</title><style>html,body{margin:0;height:100%}embed{width:100%;height:100%;border:0}</style></head><body><embed type="application/pdf" src="${url}"></body></html>`
+    );
+    popup.document.close();
+    const print = () => {
+      try {
+        popup.focus();
+        popup.print();
+      } catch {
+        /* The PDF view still has its own print control. */
+      }
+    };
+    popup.addEventListener("load", () => window.setTimeout(print, 300));
+    window.setTimeout(print, 700);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (error) {
+    popup.close();
+    onError(error instanceof Error ? error.message : "Could not print the loader note.");
+  }
 }
 
 export async function fetchJoyMovementSummary(warehouseId: string, from: string, to: string) {

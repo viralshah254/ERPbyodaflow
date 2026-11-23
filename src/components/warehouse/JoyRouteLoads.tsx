@@ -15,7 +15,7 @@ import {
   cancelJoyLoadNote,
   createJoyDeliveryNotes,
   createJoyLoadNote,
-  downloadJoyLoadNotePdf,
+  printJoyLoadNotePdf,
   fetchJoyLoadNotes,
   generateJoyInvoices,
   markJoyLoadDeparted,
@@ -639,7 +639,7 @@ function LoadingNoteCard({
       />
       <CardContent className="space-y-4">
         <OrderRoster orders={ordersOnNote(note)} />
-        <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
+        <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loader note
         </Button>
         <div className="overflow-x-auto">
@@ -1130,7 +1130,7 @@ function ConfirmedNoteCard({
     <Card id={`note-${note.id}`} className="min-w-0">
       <LoadNoteHeader note={note} routeHint="Loader note confirmed" />
       <CardContent className="space-y-3">
-        <Button variant="outline" size="sm" onClick={() => void downloadJoyLoadNotePdf(note, (message) => toast.error(message))}>
+        <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loader note
         </Button>
         <div className="space-y-2 text-sm">
