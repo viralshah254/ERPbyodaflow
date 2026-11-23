@@ -365,6 +365,8 @@ export type DocumentDraftPayload = {
   linesAreTaxInclusive?: boolean;
   outputTemplateId?: string;
   odaflowMappingCorrections?: import("@/lib/odaflow-mapping-corrections").OdaflowMappingCorrectionsPayload;
+  /** Delivery note edits: why the note changed. */
+  editReason?: string;
 };
 
 export type PurchaseOrderLookupOption = {
@@ -964,6 +966,28 @@ export async function amendDeliveryNoteDispatchApi(
     method: "POST",
     body: payload,
   });
+}
+
+export type DeliveryNoteRevision = {
+  id: string;
+  revision: number;
+  kind: "ORIGINAL" | "EDIT" | "DISPATCH_AMEND";
+  reason?: string;
+  editedBy?: string;
+  editedByName?: string;
+  editedAt: string;
+  statusAtEdit?: string;
+  total?: number;
+  lines: Array<{ lineId: string; productId?: string; name: string; quantity: number; unit?: string; amount?: number }>;
+  changes: Array<{ field: string; from?: string; to?: string }>;
+};
+
+export async function fetchDeliveryNoteRevisionsApi(deliveryNoteId: string): Promise<DeliveryNoteRevision[]> {
+  requireLiveApi("Delivery note history");
+  const res = await apiRequest<{ items: DeliveryNoteRevision[] }>(
+    `/api/documents/delivery-note/${deliveryNoteId}/revisions`
+  );
+  return res.items ?? [];
 }
 
 export async function confirmDeliveryPodApi(

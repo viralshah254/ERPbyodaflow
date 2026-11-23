@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { DocumentStepper } from "@/components/docs/DocumentStepper";
 import { getDocTypeConfig } from "@/config/documents";
@@ -626,6 +627,9 @@ export function DocumentCreateWizard({
   const lineByLine = usesSalesLayout && operatingProfile.lineItemLayout === "line_by_line";
   const skipEmptyQuantities = sheetFinishedGoods || lineByLine;
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
+  /** Delivery note edits save once with a reason, so each save is one entry in its edit history. */
+  const deliveryNoteEdit = isEditMode && type === "delivery-note";
+  const [editReason, setEditReason] = React.useState("");
   const [repriceExistingRevision, setRepriceExistingRevision] = React.useState(0);
   const billableLines = React.useMemo(
     () => (skipEmptyQuantities ? lines.filter((line) => line.qty > 0) : lines),
@@ -1685,7 +1689,7 @@ export function DocumentCreateWizard({
 
   const persistEditDraft = React.useCallback(
     (immediate = false) => {
-      if (!salesLayoutReady || explicitSheetEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
+      if (!salesLayoutReady || explicitSheetEdit || deliveryNoteEdit || !isEditMode || !existingDocument || !editHydratedRef.current || skipEditAutosaveRef.current || !isApiConfigured()) return;
       const doSave = () => {
         if (isOdaflowFmcgEdit && odaflowBaselineRef.current) {
           const baseline = odaflowBaselineRef.current;
@@ -1709,7 +1713,7 @@ export function DocumentCreateWizard({
       }
       editAutosaveTimerRef.current = setTimeout(doSave, EDIT_AUTOSAVE_DEBOUNCE_MS);
     },
-    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, isOdaflowFmcgEdit, lines, salesLayoutReady, type]
+    [buildDraftPayload, existingDocument, form, isEditMode, explicitSheetEdit, deliveryNoteEdit, isOdaflowFmcgEdit, lines, salesLayoutReady, type]
   );
 
   const persistWizardProgress = React.useCallback(
@@ -2074,6 +2078,7 @@ export function DocumentCreateWizard({
       const payload = {
         ...buildDraftPayload(),
         ...(corrections ? { odaflowMappingCorrections: corrections } : {}),
+        ...(deliveryNoteEdit ? { editReason: editReason.trim() } : {}),
       };
       const patched = await patchDocumentApi(type as DocTypeKey, existingDocument.id, payload);
       toast.success(`${label} updated.`);
@@ -2090,7 +2095,7 @@ export function DocumentCreateWizard({
       allowLeaveRef.current = true;
       router.push(`/docs/${type}/${existingDocument.id}`);
     },
-    [buildDraftPayload, existingDocument, invoiceCopyFile, label, router, type]
+    [buildDraftPayload, deliveryNoteEdit, editReason, existingDocument, invoiceCopyFile, label, router, type]
   );
 
   const confirmOdaflowCorrectionReasons = React.useCallback(
@@ -2154,6 +2159,10 @@ export function DocumentCreateWizard({
     }
     try {
       if (isEditMode && existingDocument) {
+        if (deliveryNoteEdit && !editReason.trim()) {
+          toast.error("Give a reason for this edit. It is kept in the delivery note history.");
+          return;
+        }
         const mappingChanges = buildOdaflowChangePreview();
         if (mappingChanges) {
           const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
@@ -2633,6 +2642,7 @@ export function DocumentCreateWizard({
         </div>
       )}
       {explicitSheetEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. Customer defaults are not changed.</p> : null}
+      {deliveryNoteEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. You give a reason when you save, and the delivery note keeps each saved version in its edit history.</p> : null}
       <DocumentStepper
         step={step}
         maxStepReached={maxStepReached}
@@ -3407,6 +3417,23 @@ export function DocumentCreateWizard({
         </>
       )}
 
+      {deliveryNoteEdit && step === 3 ? (
+        <Card>
+          <CardContent className="space-y-2 pt-4">
+            <Label htmlFor="delivery-note-edit-reason">Reason for this edit</Label>
+            <Textarea
+              id="delivery-note-edit-reason"
+              value={editReason}
+              onChange={(e) => setEditReason(e.target.value)}
+              placeholder="For example: customer reduced the order by phone"
+              rows={2}
+              className="max-w-3xl"
+            />
+            <p className="text-xs text-muted-foreground">Required. Shown in the delivery note edit history with your name and the time.</p>
+          </CardContent>
+        </Card>
+      ) : null}
+
       <div className="flex justify-between">
         <div className="flex gap-2">
           {step > 1 && (
@@ -3436,7 +3463,7 @@ export function DocumentCreateWizard({
               Next
             </Button>
           ) : step === 3 ? (
-            <Button onClick={() => void onSubmit()} disabled={submitting}>
+            <Button onClick={() => void onSubmit()} disabled={submitting || (deliveryNoteEdit && !editReason.trim())}>
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
           ) : null}

@@ -56,6 +56,8 @@ import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { requiresStampedDeliveryNote } from "@/config/industry";
+import { DeliveryNoteEditHistory } from "@/components/docs/DeliveryNoteEditHistory";
 import {
   addDocumentCommentApi,
   amendDeliveryNoteDispatchApi,
@@ -349,6 +351,7 @@ export default function DocViewPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg =
     industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
+  const stampRequired = requiresStampedDeliveryNote(templateId);
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
   const canWrite = useCanWriteDocType(type);
@@ -607,7 +610,7 @@ export default function DocViewPage() {
   );
 
   const canRecordSignedPod = React.useMemo(() => {
-    if (!fmcgOrg) return false;
+    if (!fmcgOrg || !stampRequired) return false;
     if (type !== "delivery-note" || !document) return false;
     if (document.podConfirmation?.confirmedAt) return false;
     const st = String(document.status ?? "").toUpperCase();
@@ -620,7 +623,7 @@ export default function DocViewPage() {
       can(authUser, Permissions.SALES_DELIVERIES_POD) ||
       can(authUser, Permissions.SALES_WRITE)
     );
-  }, [fmcgOrg, type, document, authUser]);
+  }, [fmcgOrg, stampRequired, type, document, authUser]);
 
   React.useEffect(() => {
     if (!amendOpen || !document?.lines?.length) return;
@@ -1534,6 +1537,7 @@ export default function DocViewPage() {
       actionLoading={actionLoading || startPickPackLoading}
       startPickPackLoading={startPickPackLoading}
       fmcgOrg={fmcgOrg}
+      stampRequired={stampRequired}
       canRecordSignedPod={canRecordSignedPod}
       onPrintDn={() => setPrintOpen(true)}
       onUploadSignedDn={() => {
@@ -1664,9 +1668,11 @@ export default function DocViewPage() {
                   <div className="mt-4 rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
                     <p className="font-medium flex items-start gap-2 leading-snug">
                       <Icons.Info className="h-4 w-4 shrink-0 mt-0.5" />
-                      {isRouteDispatchMode(document.salesFlow?.mode)
-                        ? "Upload the stamped delivery note here to confirm delivery. The invoice can be posted after this stamp."
-                        : "Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery."}
+                      {!stampRequired
+                        ? "Use Edit to update draft lines. Each saved edit keeps its reason in the edit history."
+                        : isRouteDispatchMode(document.salesFlow?.mode)
+                          ? "Upload the stamped delivery note here to confirm delivery. The invoice can be posted after this stamp."
+                          : "Use Edit to update draft lines. After dispatch, invoice from the quantities confirmed in proof of delivery."}
                     </p>
                   </div>
                 ) : null}
@@ -1689,7 +1695,11 @@ export default function DocViewPage() {
                       <Icons.Truck className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
                         {fmcgOrg ? (
-                          isRouteDispatchMode(document.salesFlow?.mode) ? (
+                          !stampRequired ? (
+                            <>
+                              Shipped quantities are frozen from warehouse issue. Print the delivery note for the drop-off. You can create and post the invoice without a stamped copy.
+                            </>
+                          ) : isRouteDispatchMode(document.salesFlow?.mode) ? (
                             <>
                               Shipped quantities are frozen from warehouse issue. Print the delivery note for the drop-off. The invoice is on standby and can be created whenever you are ready.
                             </>
@@ -2131,8 +2141,8 @@ export default function DocViewPage() {
               {canPost && !openFiscalAttempt(document) && (
               <Button
                 size="sm"
-                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned) || (type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)))}
-                title={type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)) ? "Upload the stamped delivery note before posting." : undefined}
+                disabled={actionLoading || (creditDraftNeedsSave && !fiscallySigned) || (stampRequired && type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)))}
+                title={stampRequired && type === "invoice" && (document.linkedDeliveries ?? []).some((row) => !deliveryNoteSatisfiedForInvoicePost(row.status)) ? "Upload the stamped delivery note before posting." : undefined}
                 onClick={() => void requestPost()}
               >
                 {actionLoading ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Icons.Send className="mr-2 h-4 w-4" />}
@@ -2582,7 +2592,7 @@ export default function DocViewPage() {
             fmcgOrg={fmcgOrg}
           />
         )}
-        {type === "delivery-note" && document?.status === "DRAFT" && isRouteDispatchMode(document.salesFlow?.mode) && !document.podConfirmation?.confirmedAt ? (
+        {stampRequired && type === "delivery-note" && document?.status === "DRAFT" && isRouteDispatchMode(document.salesFlow?.mode) && !document.podConfirmation?.confirmedAt ? (
           <div className="rounded-lg border border-amber-300/70 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-700/70 dark:bg-amber-950/40 dark:text-amber-50">
             <p className="font-medium leading-snug">
               Upload the stamped delivery note to confirm this delivery. The invoice stays unposted until the stamp is recorded.
@@ -2874,6 +2884,20 @@ export default function DocViewPage() {
             </Card>
           }
         />
+        {type === "delivery-note" && document?.id ? (
+          <DeliveryNoteEditHistory
+            deliveryNoteId={document.id}
+            currency={document.currency}
+            refreshKey={[
+              document.status,
+              document.total,
+              document.warehouseId,
+              document.deliveryAddress,
+              document.notes,
+              ...(document.lines ?? []).map((line) => `${line.id}:${line.productId}:${line.qty}`),
+            ].join("|")}
+          />
+        ) : null}
         {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
         {compactDocument && (
           <details className="rounded-md border bg-card px-3 py-2">
@@ -4011,6 +4035,7 @@ function DynamicNextStepsPanel({
   actionLoading,
   startPickPackLoading = false,
   fmcgOrg = false,
+  stampRequired = true,
   canRecordSignedPod = false,
   onPrintDn,
   onUploadSignedDn,
@@ -4041,6 +4066,7 @@ function DynamicNextStepsPanel({
   actionLoading: boolean;
   startPickPackLoading?: boolean;
   fmcgOrg?: boolean;
+  stampRequired?: boolean;
   canRecordSignedPod?: boolean;
   onPrintDn?: () => void;
   onUploadSignedDn?: () => void;
@@ -4206,7 +4232,7 @@ function DynamicNextStepsPanel({
       });
     }
     if (status === "DRAFT" && routeInvoiceStandby && !hasPod) {
-      steps.push({
+      if (stampRequired) steps.push({
         icon: <Icons.Upload className="h-4 w-4 text-amber-600" />,
         text: "Upload the stamped delivery note to confirm delivery. The invoice can be posted after this stamp.",
         action: canRecordSignedPod ? onUploadSignedDn : undefined,
@@ -4234,7 +4260,24 @@ function DynamicNextStepsPanel({
       }
     } else if (["IN_TRANSIT", "DELIVERED", "POSTED"].includes(st)) {
       if (!hasPod) {
-        if (fmcgOrg) {
+        if (fmcgOrg && !stampRequired) {
+          steps.push({
+            icon: <Icons.Printer className="h-4 w-4 text-blue-600" />,
+            text: "Print or download the delivery note for the drop-off.",
+            action: onPrintDn,
+            actionLabel: onPrintDn ? "Print DN" : undefined,
+            variant: "outline",
+          });
+          if (convertTargets.includes("invoice") && !routeInvoiceStandby) {
+            steps.push({
+              icon: <Icons.FileText className="h-4 w-4 text-emerald-500" />,
+              text: "Create the invoice from this delivery note. No stamped copy is needed.",
+              action: () => onConvert("invoice"),
+              actionLabel: "Create Invoice from DN",
+              variant: "default",
+            });
+          }
+        } else if (fmcgOrg) {
           steps.push({
             icon: <Icons.Printer className="h-4 w-4 text-blue-600" />,
             text: "Print or download the delivery note (includes stamp / signature boxes), get it signed at drop-off.",
@@ -4303,9 +4346,9 @@ function DynamicNextStepsPanel({
         variant: "default",
       });
     } else if (status === "DRAFT") {
-      const undelivered = (document?.linkedDeliveries ?? []).filter(
-        (d) => !deliveryNoteSatisfiedForInvoicePost(d.status)
-      );
+      const undelivered = stampRequired
+        ? (document?.linkedDeliveries ?? []).filter((d) => !deliveryNoteSatisfiedForInvoicePost(d.status))
+        : [];
       if (undelivered.length > 0) {
         for (const dn of undelivered) {
           const needsStamp = isRouteDispatchMode(document?.salesFlow?.mode) && deliveryStillAtYard(dn.status);
