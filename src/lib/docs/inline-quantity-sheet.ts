@@ -2,8 +2,8 @@ import type { DocumentDetailRecord } from "@/lib/types/documents";
 import type { DocumentLine } from "@/components/docs/DocumentLineEditor";
 
 /**
- * Full-catalogue entry: orgs that enter orders on the full finished-goods sheet use it for new and edited
- * sales orders and invoices (Settings → Sales document flow).
+ * Catalogue entry for sales orders and invoices: search or browse finished goods, then keep the selected lines.
+ * Settings → Sales document flow.
  */
 export function usesInlineQuantitySheet(args: { type: string; editing?: boolean; prefillSalesOrders?: boolean; fullCatalogueSheet?: boolean }): boolean {
   if (args.fullCatalogueSheet && ["sales-order", "invoice"].includes(args.type)) return true;

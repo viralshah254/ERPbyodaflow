@@ -1,5 +1,5 @@
 import React from "react";
-import { act, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DocumentLineEditor, type DocumentLine } from "./DocumentLineEditor";
 import { fetchProductsPageApi, fetchProductApi } from "@/lib/api/products";
@@ -163,61 +163,77 @@ it("adds several ticked products in one step", async () => {
   expect(screen.getByRole("combobox", { name: "Search products to add" })).toHaveValue("");
 });
 
-it("loads 100 inline rows with one metadata batch and no per-product detail or variant requests", async () => {
-  api.configured = true;
-  const rows = Array.from({ length: 100 }, (_, i) => ({ ...products[0], id: `fg-${i}`, sku: String(i), code: String(i), name: `Finished ${i}` }));
-  vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: rows, hasMore: false, nextCursor: null } as never);
-  vi.mocked(fetchDocumentProductDataApi).mockResolvedValue(Object.fromEntries(rows.map((row) => [row.id, { packaging: [], pricing: [] }])));
+async function searchBox() {
+  const search = await screen.findByRole("combobox", { name: "Search products to add" });
+  await waitFor(() => expect(search).toBeEnabled());
+  return search;
+}
+
+async function addFromSearch(query: string, option: RegExp) {
+  fireEvent.change(await searchBox(), { target: { value: query } });
+  fireEvent.click(await screen.findByRole("option", { name: option }));
+}
+
+it("keeps the catalogue off the page until a product is searched or browsed", async () => {
   render(<Harness />);
-  await screen.findByLabelText("Quantity for Finished 99");
-  expect(fetchProductsPageApi).toHaveBeenCalledTimes(1);
-  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(1);
-  expect(fetchDocumentProductDataApi).toHaveBeenCalledWith(rows.map((row) => row.id));
-  expect(fetchProductApi).not.toHaveBeenCalled();
-  expect(fetchProductVariantsApi).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Show details for Finished 0" }));
-  await waitFor(() => expect(fetchProductVariantsApi).toHaveBeenCalledTimes(1));
-  expect(fetchProductVariantsApi).toHaveBeenCalledWith("fg-0");
-}, 20000);
+  expect(await screen.findByRole("button", { name: "Browse" })).toBeEnabled();
+  expect(screen.getByRole("img", { name: "No products selected" })).toBeInTheDocument();
+  expect(screen.queryByLabelText("Quantity for Queen cakes")).not.toBeInTheDocument();
+  await addFromSearch("Queen", /Queen cakes/);
+  const input = await screen.findByLabelText("Quantity for Queen cakes");
+  expect(input).toHaveValue("1");
+  expect(screen.queryByLabelText("Quantity for Celebration cake")).not.toBeInTheDocument();
+  fireEvent.change(input, { target: { value: "2" } });
+  fireEvent.blur(input);
+  const row = within(input.closest("tr")!);
+  expect(row.getByText("KES 86.20")).toBeInTheDocument();
+  expect(screen.getByText("Includes KES 11.89 tax")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Remove Queen cakes" }));
+  expect(screen.queryByLabelText("Quantity for Queen cakes")).not.toBeInTheDocument();
+});
+
 
 function finishedRows(from: number, to: number) {
   return Array.from({ length: to - from }, (_, i) => ({ ...products[0], id: `fg-${from + i}`, sku: String(from + i), code: String(from + i), name: `Finished ${from + i}` }));
 }
 
-it("loads the sheet ten rows at a time and fetches the next page when its end scrolls into view", async () => {
+it("browses finished goods in pages and adds the ticked products below the search", async () => {
   api.configured = true;
-  const observers: Array<(entries: Array<{ isIntersecting: boolean }>) => void> = [];
-  vi.stubGlobal("IntersectionObserver", class {
-    constructor(callback: (entries: Array<{ isIntersecting: boolean }>) => void) { observers.push(callback); }
-    observe() {}
-    disconnect() {}
+  vi.mocked(fetchProductsPageApi).mockImplementation(async (opts) => {
+    if (String(opts?.cursor ?? "0") !== "0") {
+      return { items: finishedRows(10, 12), hasMore: false, nextCursor: null } as never;
+    }
+    return { items: finishedRows(0, 10), hasMore: true, nextCursor: "10" } as never;
   });
-  vi.mocked(fetchProductsPageApi)
-    .mockResolvedValueOnce({ items: finishedRows(0, 10), hasMore: true, nextCursor: "10" } as never)
-    .mockResolvedValueOnce({ items: finishedRows(10, 12), hasMore: false, nextCursor: null } as never);
   render(<Harness />);
-  await screen.findByLabelText("Quantity for Finished 9");
-  expect(screen.queryByLabelText("Quantity for Finished 10")).not.toBeInTheDocument();
-  expect(screen.getByText("Scroll for more products")).toBeInTheDocument();
-  expect(fetchProductsPageApi).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "0", limit: 10, sortBy: "itemCode" }));
-  act(() => observers.at(-1)?.([{ isIntersecting: true }]));
-  expect(await screen.findByLabelText("Quantity for Finished 11")).toHaveValue("0");
-  expect(fetchProductsPageApi).toHaveBeenLastCalledWith(expect.objectContaining({ cursor: "10", limit: 10, sortBy: "itemCode" }));
-  expect(fetchDocumentProductDataApi).toHaveBeenLastCalledWith(["fg-10", "fg-11"]);
-  expect(screen.queryByText("Scroll for more products")).not.toBeInTheDocument();
-  vi.unstubAllGlobals();
+  fireEvent.click(await screen.findByRole("button", { name: "Browse" }));
+  expect(await screen.findByRole("heading", { name: "Add products" })).toBeInTheDocument();
+  expect(await screen.findByText("Finished 0")).toBeInTheDocument();
+  expect(screen.queryByText("Finished 10")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+  expect(await screen.findByText("Finished 11")).toBeInTheDocument();
+  expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ cursor: "10", limit: 100, sellable: true }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select Finished 0" }));
+  fireEvent.click(screen.getByRole("checkbox", { name: "Select Finished 11" }));
+  fireEvent.click(screen.getByRole("button", { name: "Add 2 lines" }));
+  fireEvent.click(screen.getByRole("button", { name: "Done" }));
+  expect(await screen.findByLabelText("Quantity for Finished 0")).toBeInTheDocument();
+  expect(screen.getByLabelText("Quantity for Finished 11")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Quantity for Finished 1")).not.toBeInTheDocument();
 });
 
-it("finds a product that has not been scrolled to yet by asking the server", async () => {
+it("finds a finished good that is not on the first page by asking the server", async () => {
   api.configured = true;
-  vi.mocked(fetchProductsPageApi)
-    .mockResolvedValueOnce({ items: finishedRows(0, 10), hasMore: true, nextCursor: "10" } as never)
-    .mockResolvedValueOnce({ items: finishedRows(40, 41), hasMore: false, nextCursor: null } as never);
+  vi.mocked(fetchProductsPageApi).mockImplementation(async (opts) => {
+    if (opts?.search) return { items: finishedRows(40, 41), hasMore: false, nextCursor: null } as never;
+    return { items: finishedRows(0, 10), hasMore: true, nextCursor: "10" } as never;
+  });
   render(<Harness />);
-  await screen.findByLabelText("Quantity for Finished 9");
-  fireEvent.change(screen.getByLabelText("Filter finished goods"), { target: { value: "Finished 40" } });
-  expect(await screen.findByLabelText("Quantity for Finished 40")).toHaveValue("0");
-  expect(fetchProductsPageApi).toHaveBeenLastCalledWith(expect.objectContaining({ search: "Finished 40", cursor: "0" }));
+  await searchBox();
+  fireEvent.change(screen.getByRole("combobox", { name: "Search products to add" }), { target: { value: "Finished 40" } });
+  fireEvent.click(await screen.findByRole("option", { name: /Finished 40/ }));
+  expect(await screen.findByLabelText("Quantity for Finished 40")).toHaveValue("1");
+  expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ search: "Finished 40" }));
 });
 
 it("uses PCS for a single cake and PACK for a Joy retail multipack without multiplying its price", async () => {
@@ -232,107 +248,102 @@ it("uses PCS for a single cake and PACK for a Joy retail multipack without multi
     cake: { packaging: [], pricing: [] },
   });
   render(<Harness packSizeFromName />);
+  await addFromSearch("Queen", /Queen cakes 8PCS/);
+  await addFromSearch("Celebration", /Celebration cake/);
   const input = await screen.findByLabelText("Quantity for Queen cakes 8PCS (250 GMS)");
   const pack = within(input.closest("tr")!);
   const piece = within(screen.getByLabelText("Quantity for Celebration cake (500 GMS)").closest("tr")!);
   expect(pack.getByRole("combobox")).toHaveTextContent("PACK");
   expect(piece.getByRole("combobox")).toHaveTextContent("PCS");
+  fireEvent.change(screen.getByLabelText("Quantity for Celebration cake (500 GMS)"), { target: { value: "0" } });
+  fireEvent.blur(screen.getByLabelText("Quantity for Celebration cake (500 GMS)"));
   fireEvent.change(input, { target: { value: "2" } });
   fireEvent.blur(input);
   expect(pack.getByText("KES 86.20")).toBeInTheDocument();
   expect(screen.getByText("Includes KES 11.89 tax")).toBeInTheDocument();
 });
 
-it("limits the Joy sales sheet to finished goods even if sellable raw or semi-finished items are returned", async () => {
+it("limits Joy search and browse to finished goods even if sellable raw or semi-finished items are returned", async () => {
   api.configured = true;
   const raw = { id: "raw", code: "RM152", name: "Black forest base", itemRole: "RAW", productType: "BOTH" };
   const semi = { id: "semi", code: "RM151", name: "Chocolate cake base", itemRole: "SEMI", productType: "FINISHED" };
   vi.mocked(fetchProductsPageApi).mockResolvedValue({ items: [...products, raw, semi], hasMore: false, nextCursor: null } as never);
   render(<Harness packSizeFromName />);
-  await screen.findByLabelText("Quantity for Celebration cake");
-  expect(screen.getByLabelText("Quantity for Queen cakes")).toBeInTheDocument();
-  expect(screen.queryByLabelText("Quantity for Black forest base")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Quantity for Chocolate cake base")).not.toBeInTheDocument();
+  const search = await searchBox();
+  fireEvent.change(search, { target: { value: "RM152" } });
+  await waitFor(() => expect(screen.getByRole("listbox", { name: "Matching products" })).toBeInTheDocument());
+  expect(screen.queryByRole("option", { name: /Black forest base/ })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Browse" }));
+  const dialog = await screen.findByRole("dialog", { name: "Add products" });
+  expect(within(dialog).getByText("Queen cakes")).toBeInTheDocument();
+  expect(within(dialog).getByText("Celebration cake")).toBeInTheDocument();
+  expect(within(dialog).queryByText("Black forest base")).not.toBeInTheDocument();
+  expect(within(dialog).queryByText("Chocolate cake base")).not.toBeInTheDocument();
   expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ itemRole: "FINISHED", sellable: true }));
-  expect(fetchDocumentProductDataApi).toHaveBeenCalledWith(["queen", "cake"]);
-  fireEvent.change(screen.getByLabelText("Filter finished goods"), { target: { value: "RM152" } });
-  expect(screen.queryByLabelText("Quantity for Black forest base")).not.toBeInTheDocument();
 });
 
-it("keeps failed metadata loading recoverable instead of enabling incomplete pricing", async () => {
+it("keeps failed metadata loading recoverable instead of listing unfinished prices", async () => {
   api.configured = true;
   vi.mocked(fetchDocumentProductDataApi).mockRejectedValueOnce(new Error("Offline"));
   render(<Harness />);
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not load");
   expect(screen.queryByLabelText("Quantity for Queen cakes")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Retry catalogue" }));
-  await screen.findByLabelText("Quantity for Queen cakes");
-  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(2);
+  await searchBox();
+  expect(vi.mocked(fetchDocumentProductDataApi).mock.calls.length).toBeGreaterThanOrEqual(2);
+  expect(screen.queryByLabelText("Quantity for Queen cakes")).not.toBeInTheDocument();
 });
 
-it("keeps new sheet rows in the SKU unit even when a default pack arrives before row creation", async () => {
+it("keeps new lines in the SKU unit even when a default pack is known", async () => {
   api.configured = true;
   vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({ queen: { packaging: [{ uom: "CTN", baseUom: "PCS", unitsPer: 24, isDefaultSalesUom: true }], pricing: [] }, cake: { packaging: [], pricing: [] } });
   render(<Harness queenPrice={50} />);
+  await addFromSearch("Queen", /Queen cakes/);
   const input = await screen.findByLabelText("Quantity for Queen cakes");
-  fireEvent.change(input, { target: { value: "2" } }); fireEvent.blur(input);
+  fireEvent.change(input, { target: { value: "2" } });
+  fireEvent.blur(input);
   const row = within(screen.getByText("Queen cakes").closest("tr")!);
   await waitFor(() => expect(row.getByText("KES 100.00")).toBeInTheDocument());
   expect(row.getByText("KES 50.00")).toBeInTheDocument();
   expect(screen.getByText("Includes KES 13.79 tax")).toBeInTheDocument();
-  expect(fetchDocumentProductDataApi).toHaveBeenCalledTimes(1);
+  expect(fetchDocumentProductDataApi).toHaveBeenCalled();
 });
 
 it("preserves an existing carton unit and uses batched conversions for quantity and VAT", async () => {
   api.configured = true;
   vi.mocked(fetchDocumentProductDataApi).mockResolvedValue({ queen: { packaging: [{ uom: "CTN", baseUom: "PCS", unitsPer: 24, isDefaultSalesUom: true }], pricing: [] }, cake: { packaging: [], pricing: [] } });
   render(<Harness queenPrice={50} initial={[{ id: "carton", productId: "queen", sku: "1", name: "Queen cakes", uom: "CTN", qty: 1, baseQty: 24, price: 1200, priceReason: "Existing", amount: 1200, taxCodeId: "vat" }]} />);
-  await screen.findByLabelText("Quantity for Celebration cake");
-  const input = screen.getByLabelText("Quantity for Queen cakes");
-  fireEvent.change(input, { target: { value: "2" } }); fireEvent.blur(input);
+  const input = await screen.findByLabelText("Quantity for Queen cakes");
+  expect(screen.queryByLabelText("Quantity for Celebration cake")).not.toBeInTheDocument();
+  fireEvent.change(input, { target: { value: "2" } });
+  fireEvent.blur(input);
   const row = within(screen.getByText("Queen cakes").closest("tr")!);
   expect(row.getByText("KES 2,400.00")).toBeInTheDocument();
   expect(row.getByText("KES 1,200.00")).toBeInTheDocument();
   expect(screen.getByText("Includes KES 331.03 tax")).toBeInTheDocument();
 });
-it("shows every finished good inline at zero including alphanumeric codes, without an add popup", async () => {
-  render(<Harness />);
-  expect(await screen.findByLabelText("Quantity for Queen cakes")).toHaveValue("0");
-  expect(screen.getByLabelText("Quantity for Celebration cake")).toHaveValue("0");
-  expect(screen.queryByRole("button", { name: "Add products" })).not.toBeInTheDocument();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Quantity for Queen cakes"), { target: { value: "2" } });
-  fireEvent.blur(screen.getByLabelText("Quantity for Queen cakes"));
-  expect(within(screen.getByText("Queen cakes").closest("tr")!).getByText("KES 86.20")).toBeInTheDocument();
-  expect(screen.getAllByText("KES 86.20")).toHaveLength(2);
-  expect(screen.getByText("Includes KES 11.89 tax")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Filter finished goods"), { target: { value: "6164000350467" } });
-  expect(screen.queryByLabelText("Quantity for Queen cakes")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Quantity for Celebration cake")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Filter finished goods"), { target: { value: "" } });
-  expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("2");
-  fireEvent.click(screen.getByRole("button", { name: "Clear quantity for Queen cakes" }));
-  expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("0");
-});
-it("preserves prefilled quantities while adding the remaining catalogue rows at zero", async () => {
+
+it("keeps an edited line and does not fill the rest of the catalogue", async () => {
   render(<Harness initial={[{ id: "existing", productId: "queen", sku: "1", name: "Queen cakes", uom: "PCS", qty: 5, baseQty: 5, price: 43.1, priceReason: "Price list", amount: 215.5 }]} />);
-  expect(await screen.findByLabelText("Quantity for Celebration cake")).toHaveValue("0");
-  expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("5");
+  expect(await screen.findByLabelText("Quantity for Queen cakes")).toHaveValue("5");
+  expect(screen.queryByLabelText("Quantity for Celebration cake")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Browse" })).toBeInTheDocument();
 });
-it("shows a recoverable catalogue error rather than silently requiring a popup", async () => {
+
+it("shows a recoverable catalogue error and still adds from search after retry", async () => {
   vi.mocked(fetchProductsPageApi).mockRejectedValueOnce(new Error("Unavailable"));
   render(<Harness />);
   expect(await screen.findByRole("alert")).toHaveTextContent("Could not load");
   fireEvent.click(screen.getByRole("button", { name: "Retry catalogue" }));
-  await waitFor(() => expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("0"));
+  await addFromSearch("Queen", /Queen cakes/);
+  expect(await screen.findByLabelText("Quantity for Queen cakes")).toHaveValue("1");
 });
 
 it("edits existing quantities, intentionally reprices for a different customer, and recomputes VAT basis", async () => {
   const initial: DocumentLine[] = [{ id: "stored-line", sourceLineId: "stored-line", productId: "queen", sku: "1", name: "Queen cakes", uom: "PCS", qty: 5, baseQty: 5, price: 40, priceReason: "Existing", amount: 200, taxCodeId: "vat" }];
   const view = render(<Harness initial={initial} />);
-  await screen.findByLabelText("Quantity for Celebration cake");
   const row = () => within(screen.getByText("Queen cakes").closest("tr")!);
-  expect(screen.getByLabelText("Quantity for Queen cakes")).toHaveValue("5");
+  expect(await screen.findByLabelText("Quantity for Queen cakes")).toHaveValue("5");
   expect(row().getByText("KES 40.00")).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Quantity for Queen cakes"), { target: { value: "2" } });
   fireEvent.blur(screen.getByLabelText("Quantity for Queen cakes"));
@@ -345,25 +356,26 @@ it("edits existing quantities, intentionally reprices for a different customer, 
   view.rerender(<Harness initial={initial} queenPrice={50} revision={1} inclusive={false} />);
   await waitFor(() => expect(row().getByText("KES 116.00")).toBeInTheDocument());
   expect(screen.getByText("KES 16.00")).toBeInTheDocument();
-  expect(screen.getByLabelText("Quantity for Celebration cake")).toHaveValue("0");
+  expect(screen.queryByLabelText("Quantity for Celebration cake")).not.toBeInTheDocument();
 });
+
 it("uses the newly selected customer's discount rather than the old document's discount", async () => {
   const initial: DocumentLine[] = [{ id: "old", productId: "queen", sku: "1", name: "Queen cakes", uom: "PCS", qty: 2, baseQty: 2, price: 40, priceReason: "Existing (20% discount)", discount: 20, amount: 80 }];
   const view = render(<Harness initial={initial} />);
-  await screen.findByLabelText("Quantity for Celebration cake");
+  expect(await screen.findByLabelText("Quantity for Queen cakes")).toHaveValue("2");
   view.rerender(<Harness initial={initial} queenPrice={100} discount={10} revision={1} />);
   const row = () => within(screen.getByText("Queen cakes").closest("tr")!);
   await waitFor(() => expect(row().getByText("KES 90.00")).toBeInTheDocument());
   expect(row().getByText("KES 180.00")).toBeInTheDocument();
 });
 
-it("reprices unused catalogue rows and retains a later manual discount when returning to Lines", async () => {
+it("reprices a selected line and retains a later manual discount when returning to Lines", async () => {
   const view = render(<Harness queenPrice={100} discount={20} />);
-  await screen.findByLabelText("Quantity for Queen cakes");
+  await addFromSearch("Queen", /Queen cakes/);
   const row = () => within(screen.getByText("Queen cakes").closest("tr")!);
-  expect(row().getByText("KES 80.00")).toBeInTheDocument();
+  await waitFor(() => expect(row().getAllByText("KES 80.00").length).toBeGreaterThan(0));
   view.rerender(<Harness queenPrice={100} discount={10} revision={1} />);
-  await waitFor(() => expect(row().getByText("KES 90.00")).toBeInTheDocument());
+  await waitFor(() => expect(row().getAllByText("KES 90.00").length).toBeGreaterThan(0));
   fireEvent.change(screen.getByLabelText("Quantity for Queen cakes"), { target: { value: "2" } });
   fireEvent.blur(screen.getByLabelText("Quantity for Queen cakes"));
   expect(row().getByText("KES 180.00")).toBeInTheDocument();
@@ -374,3 +386,4 @@ it("reprices unused catalogue rows and retains a later manual discount when retu
   view.rerender(<Harness queenPrice={100} discount={10} revision={1} editorKey={1} />);
   await waitFor(() => expect(row().getByText("KES 190.00")).toBeInTheDocument());
 });
+

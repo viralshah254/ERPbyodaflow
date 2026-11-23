@@ -33,9 +33,9 @@ const CLASSIC_STEPS = [
 ];
 
 const LINE_ITEM_LAYOUTS = {
-  picker: { label: "UI 1 · Product picker", hint: "Find and add products with the existing picker." },
+  picker: { label: "UI 1 · Product picker", hint: "Search by name or code, or browse to select several products. Selected lines appear below." },
   line_by_line: { label: "UI 2 · Line by line", hint: "Choose a product, enter its quantity, and press Enter to start the next line." },
-  catalogue: { label: "UI 3 · Full catalogue", hint: "Search the catalogue and enter quantities directly. Only products with a positive quantity are included." },
+  catalogue: { label: "UI 3 · Search and browse", hint: "Search by name or code, or browse to select several products. Selected lines appear below." },
 } satisfies Record<SalesLineItemLayout, { label: string; hint: string }>;
 
 const PICK_PACK_FIRST_STEPS = [

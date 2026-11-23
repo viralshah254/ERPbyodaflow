@@ -36,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
@@ -1344,10 +1345,9 @@ export function DocumentCreateWizard({
     setPricingByProductId((prev) => ({ ...prev, ...Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing])) }));
   }, []);
 
-  /** Fetch packaging / pricing for SKUs added via the product picker (beyond the initial cache page). */
+  /** Fetch packaging / pricing for products added from search or browse. */
   const handleProductsAdded = React.useCallback(
     (productIds: string[]) => {
-      if (sheetFinishedGoods) return;
       const isPurchasingDoc =
         type === "bill" ||
         type === "purchase-order" ||
@@ -1356,6 +1356,13 @@ export function DocumentCreateWizard({
         type === "purchase-credit-note" ||
         type === "purchase-debit-note";
       if (isPurchasingDoc) return;
+      if (sheetFinishedGoods) {
+        if (!isApiConfigured()) return;
+        const missing = productIds.filter((id) => packagingByProductId[id] === undefined);
+        if (!missing.length) return;
+        void fetchDocumentProductDataApi(missing).then(handleDocumentProductData).catch(() => {});
+        return;
+      }
       const missing = productIds.filter(
         (id) => packagingByProductId[id] === undefined || pricingByProductId[id] === undefined
       );
@@ -1381,7 +1388,7 @@ export function DocumentCreateWizard({
         })
         .catch(() => {});
     },
-    [packagingByProductId, pricingByProductId, type, sheetFinishedGoods]
+    [handleDocumentProductData, packagingByProductId, pricingByProductId, type, sheetFinishedGoods]
   );
 
   const handlePoSelect = React.useCallback(
@@ -3018,7 +3025,7 @@ export function DocumentCreateWizard({
       )}
 
       {step === 2 && (
-        <Card className="relative overflow-hidden">
+        <Card className="relative">
           {linesLoadingUiActive ? (
             <>
               <div
@@ -3200,15 +3207,22 @@ export function DocumentCreateWizard({
             /> : null}
             </div>
             {fmcgOrg && effectiveTaxConfig ? (
-              <div className="mt-4 rounded-lg border p-3 text-sm">
-                <p className="font-medium">
-                  Tax: {effectiveTaxConfig.name} ({effectiveTaxConfig.rate}%{" "}
-                  {effectiveTaxConfig.pricesAreTaxInclusive ? "inclusive" : "exclusive"})
-                </p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  The tax tag sets whether prices include VAT. Each product keeps its own rate (16% or 0%).
-                  Change the tag to switch exclusive / inclusive. Manage tags under Pricing → Tax tags.
-                </p>
+              <div className="mt-4 flex items-center gap-1 text-sm">
+                <span>{effectiveTaxConfig.name}</span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex rounded p-1 text-muted-foreground hover:text-foreground"
+                      aria-label="About this tax tag"
+                    >
+                      <Icons.Info className="h-3.5 w-3.5" aria-hidden />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-80 p-3 text-xs leading-relaxed text-muted-foreground">
+                    The tax tag sets whether prices include VAT. Each product keeps its own rate (16% or 0%). Change the tag to switch exclusive or inclusive. Manage tags under Pricing, Tax tags.
+                  </PopoverContent>
+                </Popover>
               </div>
             ) : (
               <div className="mt-4 flex items-start justify-between gap-4 rounded-lg border p-3">
@@ -3434,7 +3448,7 @@ export function DocumentCreateWizard({
         </Card>
       ) : null}
 
-      <div className="flex justify-between">
+      <div className="sticky bottom-0 z-30 -mx-4 flex justify-between border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
         <div className="flex gap-2">
           {step > 1 && (
             <Button
