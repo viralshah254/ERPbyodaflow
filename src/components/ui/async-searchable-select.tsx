@@ -100,6 +100,8 @@ interface AsyncSearchableSelectProps {
   openSignal?: string;
   /** Associates the trigger with a label via htmlFor. */
   id?: string;
+  /** Grip bar to drag the floating panel anywhere on screen (defaults to on when floating). */
+  showDragHandle?: boolean;
 }
 
 export function AsyncSearchableSelect({
@@ -133,6 +135,7 @@ export function AsyncSearchableSelect({
   reloadToken,
   openSignal,
   id,
+  showDragHandle = floating,
 }: AsyncSearchableSelectProps) {
   const orgId = useAuthStore((s) => s.org?.orgId);
   // Scope recent items per org so selections from one org never bleed into another
@@ -167,7 +170,12 @@ export function AsyncSearchableSelect({
   const [dragOrigin, setDragOrigin] = React.useState<{ left: number; top: number } | null>(null);
 
   React.useEffect(() => {
-    if (!open) setDragOrigin(null);
+    if (!open) {
+      setDragOrigin(null);
+      dragMovedRef.current = false;
+      return;
+    }
+    dragMovedRef.current = false;
   }, [open]);
   /** Always call latest loader without putting it in effect deps (inline handlers would retrigger searches every parent render). */
   const loadOptionsRef = React.useRef(loadOptions);
@@ -180,6 +188,12 @@ export function AsyncSearchableSelect({
   queryRef.current = query;
   const optionRefs = React.useRef<Array<HTMLButtonElement | null>>([]);
   const dragMovedRef = React.useRef(false);
+  const optionPressRef = React.useRef<{
+    optionId: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const optionCommittedViaPointerRef = React.useRef(false);
 
   const updateFloatingPosition = React.useCallback(() => {
     const btn = triggerRef.current;
@@ -275,15 +289,17 @@ export function AsyncSearchableSelect({
       setFloatingPos(null);
       return;
     }
-    updateFloatingPosition();
-    const onScrollOrResize = () => updateFloatingPosition();
+    if (!dragOrigin) updateFloatingPosition();
+    const onScrollOrResize = () => {
+      if (!dragOrigin) updateFloatingPosition();
+    };
     window.addEventListener("scroll", onScrollOrResize, true);
     window.addEventListener("resize", onScrollOrResize);
     return () => {
       window.removeEventListener("scroll", onScrollOrResize, true);
       window.removeEventListener("resize", onScrollOrResize);
     };
-  }, [open, floating, updateFloatingPosition]);
+  }, [open, floating, updateFloatingPosition, dragOrigin]);
 
   // The panel is portaled to document.body so it can be dragged past the sheet.
   // A modal sheet traps focus and pulls it back inside on every focusin, which
@@ -476,27 +492,25 @@ export function AsyncSearchableSelect({
       : undefined;
   const listScrollStyle = listMaxPx != null ? { maxHeight: listMaxPx } : undefined;
 
-  const onPanelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+  const beginPanelDrag = React.useCallback((event: React.PointerEvent) => {
     event.stopPropagation();
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("input, textarea, [data-no-drag]")) return;
     const panel = panelRef.current;
     if (!panel || event.button !== 0) return;
     const rect = panel.getBoundingClientRect();
     const startX = event.clientX;
     const startY = event.clientY;
-    const originLeft = rect.left;
-    const originTop = rect.top;
+    const originLeft = dragOrigin?.left ?? rect.left;
+    const originTop = dragOrigin?.top ?? rect.top;
     const width = rect.width;
     dragMovedRef.current = false;
+    const margin = 8;
     const move = (pointer: PointerEvent) => {
       const dx = pointer.clientX - startX;
       const dy = pointer.clientY - startY;
       if (!dragMovedRef.current && Math.hypot(dx, dy) < 5) return;
       dragMovedRef.current = true;
-      const margin = 8;
-      const maxLeft = Math.max(margin, window.innerWidth - Math.min(width, 120) - margin);
-      const maxTop = Math.max(margin, window.innerHeight - 48 - margin);
+      const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+      const maxTop = Math.max(margin, window.innerHeight - 72 - margin);
       setDragOrigin({
         left: Math.min(maxLeft, Math.max(margin, originLeft + dx)),
         top: Math.min(maxTop, Math.max(margin, originTop + dy)),
@@ -506,14 +520,45 @@ export function AsyncSearchableSelect({
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
       window.removeEventListener("pointercancel", stop);
+      window.setTimeout(() => {
+        dragMovedRef.current = false;
+      }, 0);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
+  }, [dragOrigin]);
+
+  const onPanelPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("input, textarea, [data-no-drag], [data-drag-handle]")) return;
+    beginPanelDrag(event);
   };
+
+  const floatingPanelTop = dragOrigin?.top ?? floatingPos?.top ?? 0;
+  const floatingPanelMaxHeight =
+    typeof window !== "undefined"
+      ? Math.max(180, window.innerHeight - floatingPanelTop - 8)
+      : undefined;
 
   const panelInner = (
     <>
+      {floating && showDragHandle ? (
+        <button
+          type="button"
+          data-drag-handle=""
+          className="mb-2 flex w-full cursor-grab items-center justify-center gap-1.5 rounded-md border border-dashed border-border/70 bg-muted/30 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted/50 active:cursor-grabbing"
+          title="Drag to move this panel"
+          aria-label="Drag to move this panel"
+          onPointerDown={(event) => {
+            event.preventDefault();
+            beginPanelDrag(event);
+          }}
+        >
+          <Icons.GripHorizontal className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          Drag to move
+        </button>
+      ) : null}
       <div className="relative" data-no-drag="">
         <TableLinearProgress active={loading} className="rounded-none" />
         <Input
@@ -585,10 +630,32 @@ export function AsyncSearchableSelect({
                 highlightedIndex === index ? "bg-muted" : ""
               }`}
               onMouseEnter={() => setHighlightedIndex(index)}
-              onClick={(e) => {
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                optionPressRef.current = {
+                  optionId: option.id,
+                  x: event.clientX,
+                  y: event.clientY,
+                };
+              }}
+              onPointerUp={(event) => {
+                event.stopPropagation();
+                const press = optionPressRef.current;
+                optionPressRef.current = null;
+                if (event.button !== 0 || !press || press.optionId !== option.id) return;
+                if (Math.hypot(event.clientX - press.x, event.clientY - press.y) > 10) return;
+                if (dragMovedRef.current) return;
+                optionCommittedViaPointerRef.current = true;
+                commitSelection(option);
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (optionCommittedViaPointerRef.current) {
+                  optionCommittedViaPointerRef.current = false;
+                  return;
+                }
                 if (dragMovedRef.current) {
-                  e.preventDefault();
-                  e.stopPropagation();
+                  event.preventDefault();
                   return;
                 }
                 commitSelection(option);
@@ -801,10 +868,10 @@ export function AsyncSearchableSelect({
                 dropdownClassName
               ),
               style: {
-                top: dragOrigin?.top ?? floatingPos!.top,
+                top: floatingPanelTop,
                 left: dragOrigin?.left ?? floatingPos!.left,
                 width: floatingPos!.width,
-                maxHeight: (listMaxPx ?? floatingPos!.maxH) + 120,
+                maxHeight: floatingPanelMaxHeight,
               },
             }),
             portalTarget
