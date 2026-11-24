@@ -1940,8 +1940,8 @@ export function DocumentLineEditor({
                       data-line-field="qty"
                       className="h-8 w-full px-2"
                       aria-label={`${lineColumnLabels?.qtyHeader ?? "Quantity"} for ${l.name}`}
-                      value={lineByLine && l.qty === 0 && lineQtyValue(l) === "0" ? "" : lineQtyValue(l)}
-                      placeholder={lineByLine ? "Qty" : undefined}
+                      value={(lineByLine || sheetFinishedGoods) && l.qty === 0 && lineQtyValue(l) === "0" ? "" : lineQtyValue(l)}
+                      placeholder={lineByLine ? "Qty" : sheetFinishedGoods ? "0" : undefined}
                       enterKeyHint={lineByLine ? "next" : undefined}
                       onValueChange={(raw) => handleLineQtyDraft(l.id, raw)}
                       onBlur={() => finalizeLineQtyDraft(l.id, lineQtyValue(l))}
