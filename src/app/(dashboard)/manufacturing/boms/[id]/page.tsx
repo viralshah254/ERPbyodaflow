@@ -20,6 +20,7 @@ import { BomComponentEditor, type RecipeCostSummary } from "@/components/manufac
 import { RecipePriceSimulator } from "@/components/manufacturing/recipe-price-simulator";
 import { ChangeChips, RecipeHistorySheet, namesFromHistory } from "@/components/manufacturing/recipe-history";
 import { BomPilotHelp } from "@/components/manufacturing/BomPilotHelp";
+import { bomUnitGapText } from "@/lib/manufacturing/unit-gaps";
 import {
   deleteManufacturingBom,
   fetchManufacturingBom,
@@ -171,6 +172,24 @@ export default function BomDetailPage() {
     void refresh();
     void loadHistory();
   }, [refresh, loadHistory]);
+
+  const [checkingUnits, setCheckingUnits] = React.useState(false);
+  const recheckUnits = React.useCallback(async () => {
+    setCheckingUnits(true);
+    try {
+      const next = await fetchManufacturingBom(id);
+      if (next) setBom((current) => (current ? { ...current, unitGaps: next.unitGaps } : next));
+    } finally {
+      setCheckingUnits(false);
+    }
+  }, [id]);
+  const hasUnitGaps = (bom?.unitGaps?.length ?? 0) > 0;
+  React.useEffect(() => {
+    if (!hasUnitGaps) return;
+    const onFocus = () => void recheckUnits();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [hasUnitGaps, recheckUnits]);
 
   const [hasDraft, setHasDraft] = React.useState(false);
   React.useEffect(() => {
@@ -382,6 +401,34 @@ export default function BomDetailPage() {
         }
       />
       <div className="space-y-5 p-4 sm:p-6">
+        {(bom.unitGaps ?? []).length > 0 && (
+          <Banner
+            tone="amber"
+            icon={Icons.AlertTriangle}
+            title="Set unit conversions before a work order"
+            actions={
+              <>
+                <Button size="sm" asChild>
+                  <Link href={`/master/products/${encodeURIComponent((bom.unitGaps ?? [])[0]?.productId ?? "")}?tab=packaging`} target="_blank">Set up units</Link>
+                </Button>
+                <Button size="sm" variant="outline" disabled={checkingUnits} onClick={() => void recheckUnits()}>
+                  {checkingUnits ? <Icons.Loader2 className="mr-1.5 size-4 animate-spin" /> : <Icons.RefreshCw className="mr-1.5 size-4" />}
+                  Check again
+                </Button>
+              </>
+            }
+          >
+            <ul className="mt-1 space-y-1">
+              {(bom.unitGaps ?? []).map((gap) => (
+                <li key={`${gap.productId}-${gap.fromUom}-${gap.kind}`}>
+                  {bomUnitGapText(gap)}{" "}
+                  <Link href={`/master/products/${encodeURIComponent(gap.productId)}?tab=packaging`} target="_blank" className="underline">Open product units</Link>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">Work orders for this recipe stay blocked until this is fixed. You can also change the recipe unit to match the stock unit.</p>
+          </Banner>
+        )}
         {state === "earlier" && (
           <Banner
             tone="muted"

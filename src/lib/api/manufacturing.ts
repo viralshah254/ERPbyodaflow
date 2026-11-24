@@ -43,7 +43,17 @@ export type ManufacturingBom = {
   routeId?: string;
   outputWarehouseId?: string;
   outputWarehouseName?: string;
+  /** Recipe units that cannot convert to the product's stock unit. */
+  unitGaps?: BomUnitGap[];
   items: ManufacturingBomItem[];
+};
+
+export type BomUnitGap = {
+  productId: string;
+  productName: string;
+  fromUom: string;
+  toUom: string;
+  kind: "missing" | "invalid";
 };
 
 export type RecipeRevisionChange = {
@@ -809,7 +819,7 @@ export async function checkWorkOrderAvailability(
   bomId: string,
   quantity: number,
   warehouseIds: string | string[]
-): Promise<{ lines: MaterialAvailabilityLine[] }> {
+): Promise<{ lines: MaterialAvailabilityLine[]; unitGaps?: BomUnitGap[] }> {
   requireLiveApi("Work order availability check");
   const ids = (Array.isArray(warehouseIds) ? warehouseIds : [warehouseIds]).map((id) => id.trim()).filter(Boolean);
   const params = new URLSearchParams({
@@ -818,7 +828,7 @@ export async function checkWorkOrderAvailability(
     warehouseIds: ids.join(","),
   });
   if (ids[0]) params.set("warehouseId", ids[0]);
-  return apiRequest<{ lines: MaterialAvailabilityLine[] }>(`/api/manufacturing/work-orders/availability?${params.toString()}`);
+  return apiRequest<{ lines: MaterialAvailabilityLine[]; unitGaps?: BomUnitGap[] }>(`/api/manufacturing/work-orders/availability?${params.toString()}`);
 }
 
 export async function checkExistingWorkOrderAvailability(id: string): Promise<{ lines: MaterialAvailabilityLine[] }> {

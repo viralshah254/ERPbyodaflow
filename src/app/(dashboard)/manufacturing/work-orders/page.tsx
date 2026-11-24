@@ -1,6 +1,4 @@
 "use client";
-import { Table as InteractiveTable } from "@/components/ui/table";
-
 
 import * as React from "react";
 import { OperationalFlowNav } from "@/components/operational/OperationalFlowNav";
@@ -12,15 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
-import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
-import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
+import { NewWorkOrderSheet } from "@/components/manufacturing/new-work-order-sheet";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -29,28 +19,12 @@ import { useTerminology } from "@/stores/orgContextStore";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { cn } from "@/lib/utils";
 import {
-  checkWorkOrderAvailability,
-  createManufacturingWorkOrder,
-  fetchBomInputStoreRecommendation,
-  fetchManufacturingBoms,
-  fetchManufacturingRoutes,
   fetchManufacturingWorkOrdersPage,
-  fetchProductionPlanDefaults,
-  type ManufacturingBom,
-  type ManufacturingRoute,
   type ManufacturingWorkOrder,
-  type ProductionPlanRow,
-  type InputStoreRecommendation,
-  type MaterialAvailabilityLine,
 } from "@/lib/api/manufacturing";
-import { fetchGRNs } from "@/lib/api/grn";
-import { fetchAllWarehousesApi } from "@/lib/api/warehouses";
-import { compareStoresForBatch, recommendOutputStore } from "@/lib/manufacturing/store-list-order";
-import { type PurchasingDocRow } from "@/lib/types/purchasing";
-import { isApiConfigured } from "@/lib/api/client";
 import { useCanWriteManufacturing } from "@/lib/rbac/use-write-guard";
 import { toast } from "sonner";
-import * as Icons from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 
 const SEARCH_DEBOUNCE_MS = 400;
 const PAGE_SIZE = 25;
@@ -81,48 +55,7 @@ export default function WorkOrdersPage() {
   const [hasMore, setHasMore] = React.useState(false);
   const hasLoadedOnce = React.useRef(false);
 
-  const [boms, setBoms] = React.useState<ManufacturingBom[]>([]);
-  const [routes, setRoutes] = React.useState<ManufacturingRoute[]>([]);
   const [sheetOpen, setSheetOpen] = React.useState(false);
-  const [sheetMetaLoading, setSheetMetaLoading] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
-  const [bomId, setBomId] = React.useState("");
-  const [productId, setProductId] = React.useState("");
-  const [selectedProductOption, setSelectedProductOption] = React.useState<AsyncSearchableSelectOption | null>(null);
-  const [routingId, setRoutingId] = React.useState("");
-  const [warehouses, setWarehouses] = React.useState<Array<{ id: string; code?: string; name: string; purpose?: string | null }>>([]);
-  const [inputWarehouseIds, setInputWarehouseIds] = React.useState<string[]>([]);
-  const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
-  const [inputQuery, setInputQuery] = React.useState("");
-  const [outputQuery, setOutputQuery] = React.useState("");
-  const [storeRecommendation, setStoreRecommendation] = React.useState<InputStoreRecommendation | null>(null);
-  const [measurementMode, setMeasurementMode] = React.useState<ManufacturingWorkOrder["measurementMode"]>("COUNT_ONLY");
-  const [quantity, setQuantity] = React.useState("1");
-  const [dueDate, setDueDate] = React.useState("");
-  const [grnId, setGrnId] = React.useState("");
-  const [availableGrns, setAvailableGrns] = React.useState<PurchasingDocRow[]>([]);
-  const [grnsLoading, setGrnsLoading] = React.useState(false);
-  const [availLines, setAvailLines] = React.useState<MaterialAvailabilityLine[]>([]);
-  const [availLoading, setAvailLoading] = React.useState(false);
-  const availDebounce = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const inputRecommendationCache = React.useRef(new Map<string, InputStoreRecommendation | null>());
-  const inputRecommendationFlight = React.useRef(new Map<string, Promise<InputStoreRecommendation | null>>());
-  const inputRecommendationKey = React.useRef("");
-  const requestInputRecommendation = React.useCallback((nextBomId: string, nextQuantity: number) => {
-    const key = `${nextBomId}:${nextQuantity}`;
-    if (inputRecommendationCache.current.has(key)) return Promise.resolve(inputRecommendationCache.current.get(key) ?? null);
-    const existing = inputRecommendationFlight.current.get(key);
-    if (existing) return existing;
-    const pending = fetchBomInputStoreRecommendation(nextBomId, nextQuantity)
-      .then((next) => {
-        inputRecommendationCache.current.set(key, next);
-        return next;
-      })
-      .catch(() => null)
-      .finally(() => { inputRecommendationFlight.current.delete(key); });
-    inputRecommendationFlight.current.set(key, pending);
-    return pending;
-  }, []);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
@@ -198,98 +131,9 @@ export default function WorkOrdersPage() {
     if (id === "q") setSearch("");
   };
 
-  React.useEffect(() => {
-    if (!sheetOpen) return;
-    setSheetMetaLoading(true);
-    void Promise.all([
-      fetchManufacturingBoms({ includeItems: true }),
-      fetchManufacturingRoutes({ includeOperations: true }),
-      fetchAllWarehousesApi(),
-    ])
-      .then(([nextBoms, nextRoutes, nextWarehouses]) => {
-        setBoms(nextBoms);
-        setRoutes(nextRoutes);
-        setWarehouses(nextWarehouses.filter((warehouse) => warehouse.status !== "INACTIVE"));
-      })
-      .catch(() => {
-        toast.error("Failed to load BOMs and routing for the form.");
-      })
-      .finally(() => setSheetMetaLoading(false));
-  }, [sheetOpen]);
-
-  React.useEffect(() => {
-    if (availDebounce.current) clearTimeout(availDebounce.current);
-    if (!bomId || !Number(quantity)) {
-      setAvailLines([]);
-      return;
-    }
-    availDebounce.current = setTimeout(async () => {
-      setAvailLoading(true);
-      try {
-        const result = await checkWorkOrderAvailability(bomId, Number(quantity), inputWarehouseIds);
-        setAvailLines(result.lines);
-      } catch {
-        setAvailLines([]);
-      } finally {
-        setAvailLoading(false);
-      }
-    }, 400);
-    return () => {
-      if (availDebounce.current) clearTimeout(availDebounce.current);
-    };
-  }, [bomId, quantity, inputWarehouseIds]);
-
-  React.useEffect(() => {
-    if (!sheetOpen || !bomId || !Number(quantity)) {
-      if (!sheetOpen || !bomId) inputRecommendationKey.current = "";
-      setStoreRecommendation(null);
-      return;
-    }
-    const qty = Number(quantity);
-    const key = `${bomId}:${qty}`;
-    if (inputRecommendationCache.current.has(key)) {
-      inputRecommendationKey.current = key;
-      setStoreRecommendation(inputRecommendationCache.current.get(key) ?? null);
-      return;
-    }
-    const productJustSelected = !inputRecommendationKey.current.startsWith(`${bomId}:`);
-    if (productJustSelected) setStoreRecommendation(null);
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      inputRecommendationKey.current = key;
-      void requestInputRecommendation(bomId, qty).then((next) => { if (!cancelled) setStoreRecommendation(next); });
-    }, productJustSelected ? 0 : 300);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [sheetOpen, bomId, quantity, requestInputRecommendation]);
-
-  const hasShortfall = availLines.some((line) => line.shortfall > 0);
-
-  React.useEffect(() => {
-    if (!grnId) return;
-    const selectedGrn = availableGrns.find((g) => g.id === grnId);
-    if (!selectedGrn) return;
-    const selectedBom = boms.find((b) => b.id === bomId);
-
-    if (selectedBom && selectedBom.items.length > 0) {
-      const bomProductIds = new Set(selectedBom.items.map((i) => i.productId).filter(Boolean));
-      const matchedWeight = (selectedGrn.lineAvailability ?? [])
-        .filter((l) => l.available && bomProductIds.has(l.productId ?? ""))
-        .reduce((sum, l) => sum + l.receivedWeightKg, 0);
-      if (matchedWeight > 0) setQuantity(String(matchedWeight));
-      else if (selectedGrn.receivedWeightKg) setQuantity(String(selectedGrn.receivedWeightKg));
-    } else if (selectedGrn.receivedWeightKg) {
-      setQuantity(String(selectedGrn.receivedWeightKg));
-    }
-
-    if (!selectedBom) {
-      const firstLine = (selectedGrn.lineAvailability ?? []).find((l) => l.available && l.productId);
-      if (firstLine?.productId) setProductId(firstLine.productId);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [grnId, bomId]);
+  const handleCreated = React.useCallback(() => {
+    void loadPage(0);
+  }, [loadPage]);
 
   const columns = React.useMemo(
     () => [
@@ -369,73 +213,6 @@ export default function WorkOrdersPage() {
     []
   );
 
-  const loadAvailableGrns = React.useCallback(async () => {
-    if (!isApiConfigured()) return;
-    setGrnsLoading(true);
-    try {
-      const all = await fetchGRNs({ availableForProcessing: true });
-      setAvailableGrns(all);
-    } catch {
-      setAvailableGrns([]);
-    } finally {
-      setGrnsLoading(false);
-    }
-  }, []);
-
-  const makeableById = React.useRef<Map<string, ProductionPlanRow>>(new Map());
-  const loadMakeableProducts = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
-    const page = await fetchProductionPlanDefaults({
-      search: query || undefined,
-      limit: 10,
-      scope: "makeable",
-    });
-    const items = page.items ?? [];
-    for (const row of items) makeableById.current.set(row.productId, row);
-    return items.map((row) => ({
-      id: row.productId,
-      label: row.productSku ? `${row.productSku} — ${row.productName}` : row.productName,
-      labelClassName: CAPS_ON_PRODUCT_CLASS,
-    }));
-  }, []);
-
-  function resetForm() {
-    setBomId("");
-    setProductId("");
-    setRoutingId("");
-    setInputWarehouseIds([]);
-    setOutputWarehouseId("");
-    setInputQuery("");
-    setOutputQuery("");
-    setStoreRecommendation(null);
-    setMeasurementMode("COUNT_ONLY");
-    setGrnId("");
-    setQuantity("1");
-    setDueDate("");
-    setAvailLines([]);
-    setSelectedProductOption(null);
-  }
-
-  const storeLabel = (store: { code?: string; name?: string }) => [store.code, store.name].filter(Boolean).join(" — ");
-  const inputQueryText = inputQuery.trim().toLowerCase();
-  const outputQueryText = outputQuery.trim().toLowerCase();
-  const storeCatalog = storeRecommendation && !warehouses.some((store) => store.id === storeRecommendation.warehouseId)
-    ? [{ id: storeRecommendation.warehouseId, code: storeRecommendation.code, name: storeRecommendation.name || storeRecommendation.code || "Recommended store" }, ...warehouses]
-    : warehouses;
-  const recommendedId = storeRecommendation?.warehouseId;
-  const recommendationReason = storeRecommendation
-    ? `Input store. Has ${storeRecommendation.linesCovered} of ${storeRecommendation.linesNeeded} ingredients this batch needs: ${storeRecommendation.lines.filter((line) => line.covered).map((line) => line.productName || "ingredient").join(", ") || "part of the ingredients"}.${storeRecommendation.lines.some((line) => !line.covered) ? ` Still short: ${storeRecommendation.lines.filter((line) => !line.covered).map((line) => line.productName || "ingredient").join(", ")}.` : ""}`
-    : "";
-  const formulaOutputId = boms.find((item) => item.id === bomId)?.outputWarehouseId;
-  const outputRecommendation = recommendOutputStore(storeCatalog, formulaOutputId);
-  const outputRecommendedId = outputRecommendation?.id;
-  const outputRecommendationReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, or Dispatch.";
-  const visibleInputs = storeCatalog.filter((store) => store.id === recommendedId || inputWarehouseIds.includes(store.id) || !inputQueryText || storeLabel(store).toLowerCase().includes(inputQueryText)).sort((a, b) => compareStoresForBatch(a, b, recommendedId, storeLabel));
-  const visibleOutputs = storeCatalog.filter((store) => store.id === outputWarehouseId || store.id === outputRecommendedId || !outputQueryText || storeLabel(store).toLowerCase().includes(outputQueryText)).sort((a, b) => compareStoresForBatch(a, b, outputRecommendedId, storeLabel));
-  React.useEffect(() => {
-    if (!sheetOpen || outputWarehouseId || !outputRecommendedId) return;
-    setOutputWarehouseId(outputRecommendedId);
-  }, [sheetOpen, outputWarehouseId, outputRecommendedId]);
-
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
@@ -446,7 +223,7 @@ export default function WorkOrdersPage() {
         actions={<><Button size="sm" variant="outline" asChild><Link href="/manufacturing/capacity">Capacity planner</Link></Button><Button size="sm" variant="outline" asChild><Link href="/manufacturing/trusted-devices">Trusted devices</Link></Button>{
           canWrite ? (
             <Button size="sm" onClick={() => setSheetOpen(true)}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
+              <Plus className="mr-2 h-4 w-4" />
               New work order
             </Button>
           ) : undefined
@@ -483,7 +260,7 @@ export default function WorkOrdersPage() {
               disabled={initialLoading || fetching}
               onClick={handleRefresh}
             >
-              <Icons.RefreshCw
+              <RefreshCw
                 className={cn("h-4 w-4 mr-1.5", (initialLoading || fetching) && "animate-spin")}
               />
               Refresh
@@ -532,418 +309,8 @@ export default function WorkOrdersPage() {
         />
       </div>
 
-      <Sheet
-        open={sheetOpen}
-        onOpenChange={(open) => {
-          setSheetOpen(open);
-          if (!open) {
-            resetForm();
-          } else {
-            void loadAvailableGrns();
-          }
-        }}
-      >
-        <SheetContent className="w-full overflow-y-auto">
-          <SheetHeader>
-            <SheetTitle>New work order</SheetTitle>
-            <SheetDescription>
-              {grnId
-                ? "Link a GRN batch to track input weight and production outputs."
-                : "Pick the finished or semi-finished SKU. The matching formula is attached so complete can issue raw materials and receive finished goods."}
-            </SheetDescription>
-          </SheetHeader>
+      <NewWorkOrderSheet open={sheetOpen} onOpenChange={setSheetOpen} onCreated={handleCreated} />
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>
-                GRN batch
-                <span className="ml-1 text-xs text-muted-foreground font-normal">(optional)</span>
-              </Label>
-              <Select
-                value={grnId || "__none__"}
-                onValueChange={(value) => {
-                  const next = value === "__none__" ? "" : value;
-                  setGrnId(next);
-                  if (!next && !bomId) setProductId("");
-                }}
-              >
-                <SelectTrigger>
-                  {grnsLoading ? (
-                    <span className="text-muted-foreground text-sm">Loading receipts…</span>
-                  ) : (
-                    <SelectValue placeholder="Select a GRN receipt" />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No GRN linked</SelectItem>
-                  {availableGrns.map((g) => {
-                    const eligible = g.eligibleLineCount ?? g.lineAvailability?.filter((l) => l.available).length ?? 0;
-                    const total = g.lineAvailability?.length ?? 0;
-                    const hasWo = !!(g.workOrderId && g.workOrderStatus !== "CANCELLED");
-                    return (
-                      <SelectItem key={g.id} value={g.id}>
-                        {g.number}
-                        {g.poRef ? ` · PO: ${g.poRef}` : ""}
-                        {` · ${g.status}`}
-                        {total > 0 ? ` · ${eligible}/${total} lines` : ""}
-                        {g.receivedWeightKg ? ` · ${g.receivedWeightKg.toLocaleString()} kg` : ""}
-                        {hasWo ? ` · ⚠ ${g.workOrderNumber ?? "WO linked"}` : ""}
-                      </SelectItem>
-                    );
-                  })}
-                  {!grnsLoading && availableGrns.length === 0 && (
-                    <SelectItem value="__empty__" disabled>
-                      No available receipts
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-              {grnId && (() => {
-                const grn = availableGrns.find((g) => g.id === grnId);
-                if (!grn) return null;
-                const lines = grn.lineAvailability?.filter((l) => l.available) ?? [];
-                const hasWo = !!(grn.workOrderId && grn.workOrderStatus !== "CANCELLED");
-                return (
-                  <div className="space-y-1.5">
-                    {hasWo && (
-                      <div className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-                        <Icons.AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>
-                          This GRN is already linked to{" "}
-                          <span className="font-medium">{grn.workOrderNumber ?? "a work order"}</span>. Creating another
-                          will be blocked.
-                        </span>
-                      </div>
-                    )}
-                    <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-1">
-                      {lines.length > 0 ? (
-                        lines.map((l, i) => (
-                          <div key={i} className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">{l.productName}</span>
-                            <span className="font-medium tabular-nums">{l.receivedWeightKg.toLocaleString()} kg</span>
-                          </div>
-                        ))
-                      ) : grn.receivedWeightKg ? (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-muted-foreground">Total received</span>
-                          <span className="font-medium tabular-nums">{grn.receivedWeightKg.toLocaleString()} kg</span>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            <div className="space-y-2">
-              <Label>
-                Product
-                <span className="ml-1 text-xs text-destructive">*</span>
-              </Label>
-              <AsyncSearchableSelect
-                value={productId}
-                selectedOption={selectedProductOption}
-                onValueChange={(nextProductId) => {
-                  setProductId(nextProductId);
-                  const cached = makeableById.current.get(nextProductId);
-                  const match = boms.find((bom) => bom.finishedProductId === nextProductId)
-                    ?? (cached?.bomId ? boms.find((bom) => bom.id === cached.bomId) : undefined);
-                  const nextBomId = cached?.bomId || match?.id || "";
-                  if (nextBomId) setBomId(nextBomId);
-                  if (cached?.routingId) setRoutingId(cached.routingId);
-                  else if (match?.routeId) setRoutingId(match.routeId);
-                  if (match?.outputWarehouseId) setOutputWarehouseId(match.outputWarehouseId);
-                  if (!nextBomId) return;
-                  const recommendationKey = `${nextBomId}:${Number(quantity) || 1}`;
-                  if (inputRecommendationCache.current.has(recommendationKey)) {
-                    inputRecommendationKey.current = recommendationKey;
-                    setStoreRecommendation(inputRecommendationCache.current.get(recommendationKey) ?? null);
-                  } else {
-                    setStoreRecommendation(null);
-                    void requestInputRecommendation(nextBomId, Number(quantity) || 1);
-                  }
-                }}
-                onOptionSelect={setSelectedProductOption}
-                loadOptions={loadMakeableProducts}
-                placeholder="Search SKU to make…"
-                searchPlaceholder="Type SKU or name — searches the server"
-                emptyMessage="No matching formula SKU. Raw materials are bought, not made here."
-                disabled={sheetMetaLoading}
-                searchDebounceMs={400}
-                floating={false}
-              />
-              <p className="text-xs text-muted-foreground">
-                Pick a SKU that has a formula. Completing the work order
-                issues raw materials and receives this SKU onto stock levels. Do not Stock In those unless you are
-                posting an opening balance.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Formula / BOM</Label>
-              <Select
-                value={bomId || "__none__"}
-                disabled={sheetMetaLoading}
-                onValueChange={(value) => {
-                  const nextBomId = value === "__none__" ? "" : value;
-                  setBomId(nextBomId);
-                  const recommendationKey = `${nextBomId}:${Number(quantity) || 1}`;
-                  if (nextBomId && inputRecommendationCache.current.has(recommendationKey)) {
-                    inputRecommendationKey.current = recommendationKey;
-                    setStoreRecommendation(inputRecommendationCache.current.get(recommendationKey) ?? null);
-                  } else {
-                    setStoreRecommendation(null);
-                    if (nextBomId) void requestInputRecommendation(nextBomId, Number(quantity) || 1);
-                  }
-                  const bom = boms.find((item) => item.id === nextBomId);
-                  if (bom) {
-                    setProductId(bom.finishedProductId);
-                    setSelectedProductOption({
-                      id: bom.finishedProductId,
-                      label: bom.finishedProductSku
-                        ? `${bom.finishedProductSku} — ${bom.finishedProductName ?? bom.name}`
-                        : (bom.finishedProductName ?? bom.name),
-                      labelClassName: CAPS_ON_PRODUCT_CLASS,
-                    });
-                    if (bom.routeId) setRoutingId(bom.routeId);
-                    if (bom.outputWarehouseId) setOutputWarehouseId(bom.outputWarehouseId);
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  {sheetMetaLoading ? (
-                    <span className="text-muted-foreground text-sm">Loading formulas…</span>
-                  ) : (
-                    <SelectValue placeholder="Select formula" />
-                  )}
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No formula (receive only)</SelectItem>
-                  {boms.map((bom) => (
-                    <SelectItem key={bom.id} value={bom.id}>
-                      {bom.code} - {bom.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {productId && !bomId && boms.some((bom) => bom.finishedProductId === productId) && (
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  This SKU has a formula. Leave it selected so complete can consume raw materials.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label>Routing</Label>
-              <Select
-                value={routingId || "__none__"}
-                disabled={sheetMetaLoading}
-                onValueChange={(v) => setRoutingId(v === "__none__" ? "" : v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Optional routing" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">No routing</SelectItem>
-                  {routes.map((route) => (
-                    <SelectItem key={route.id} value={route.id}>
-                      {route.code} - {route.name} ({route.operations.length} ops)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Quantity</Label>
-              <Input
-                type="number"
-                min="0.001"
-                step="0.001"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Input stores</Label>
-                <Input aria-label="Find an input store" placeholder="Find an input store" value={inputQuery} onChange={(event) => setInputQuery(event.target.value)} />
-                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
-                  {sheetMetaLoading ? (
-                    <p className="px-1 py-1 text-xs text-muted-foreground">Loading stores…</p>
-                  ) : visibleInputs.length === 0 ? (
-                    <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No input store matches that search."}</p>
-                  ) : visibleInputs.map((warehouse) => (
-                    <div key={warehouse.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
-                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                        <Checkbox
-                          checked={inputWarehouseIds.includes(warehouse.id)}
-                          onCheckedChange={(value) => {
-                            setInputWarehouseIds((current) => value === true
-                              ? (current.includes(warehouse.id) ? current : [...current, warehouse.id])
-                              : current.filter((id) => id !== warehouse.id));
-                          }}
-                        />
-                        <span className="truncate">{storeLabel(warehouse)}</span>
-                      </label>
-                      {warehouse.id === recommendedId ? (
-                        <button type="button" title={recommendationReason} className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary" onClick={() => setInputWarehouseIds((current) => current.includes(warehouse.id) ? current : [...current, warehouse.id])}>Recommended</button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Output store</Label>
-                <Input aria-label="Find an output store" placeholder="Find an output store" value={outputQuery} onChange={(event) => setOutputQuery(event.target.value)} />
-                <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
-                  {sheetMetaLoading ? (
-                    <p className="px-1 py-1 text-xs text-muted-foreground">Loading stores…</p>
-                  ) : visibleOutputs.length === 0 ? (
-                    <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No output store matches that search."}</p>
-                  ) : visibleOutputs.map((warehouse) => (
-                    <div key={warehouse.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
-                      <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                        <input type="radio" name="create-output-store" checked={outputWarehouseId === warehouse.id} onChange={() => setOutputWarehouseId(warehouse.id)} />
-                        <span className="truncate">{storeLabel(warehouse)}</span>
-                      </label>
-                      {warehouse.id === outputRecommendedId ? (
-                        <button type="button" title={outputRecommendationReason} className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary" onClick={() => setOutputWarehouseId(warehouse.id)}>Recommended</button>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Production measurement</Label>
-              <Select value={measurementMode} onValueChange={(value) => setMeasurementMode(value as ManufacturingWorkOrder["measurementMode"])}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="COUNT_ONLY">Count only (no weighing)</SelectItem>
-                  <SelectItem value="MANUAL_SCALE">Manual scale</SelectItem>
-                  <SelectItem value="DEVICE_SCALE">Connected device scale</SelectItem>
-                  <SelectItem value="WEIGHBRIDGE">Weighbridge</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Due date</Label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-
-            {bomId && (
-              <div className="rounded-md border p-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Material availability</span>
-                  {availLoading && <Icons.Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
-                  {!availLoading && hasShortfall && (
-                    <Badge variant="destructive" className="text-xs">
-                      <Icons.AlertTriangle className="mr-1 h-3 w-3" />
-                      Shortfall
-                    </Badge>
-                  )}
-                  {!availLoading && !hasShortfall && availLines.length > 0 && (
-                    <Badge variant="secondary" className="text-xs">
-                      <Icons.CheckCircle2 className="mr-1 h-3 w-3" />
-                      All available
-                    </Badge>
-                  )}
-                </div>
-                {availLines.length > 0 && (
-                  <>
-                    <p className="text-[11px] text-muted-foreground">
-                      Click a component for stock. Each line is checked in the input stores you ticked, or in the store named on that BOM component.
-                    </p>
-                    <InteractiveTable className="w-full min-w-[32rem] text-xs" dataScope="page">
-                      <thead>
-                        <tr className="text-muted-foreground border-b">
-                          <th className="text-left py-1 font-medium">Component</th>
-                          <th className="text-left py-1 font-medium">Store</th>
-                          <th className="text-right py-1 font-medium">Required</th>
-                          <th className="text-right py-1 font-medium">On hand</th>
-                          <th className="text-right py-1 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {availLines.map((line) => (
-                          <tr key={`${line.productId}-${line.warehouseId ?? ""}`} className="border-b border-border/40 last:border-0">
-                            <td className="py-1 pr-2 align-top whitespace-nowrap">
-                              <MaterialComponentLinks line={line} compact />
-                            </td>
-                            <td className="py-1 pr-2 align-top text-muted-foreground whitespace-nowrap">
-                              {line.warehouseName ?? "—"}
-                            </td>
-                            <td className="py-1 text-right tabular-nums whitespace-nowrap">
-                              {Math.round(line.requiredQty * 1000) / 1000} {line.uom}
-                            </td>
-                            <td className="py-1 text-right tabular-nums whitespace-nowrap">
-                              {Math.round(line.onHandQty * 1000) / 1000} {line.uom}
-                            </td>
-                            <td className="py-1 text-right whitespace-nowrap">
-                              {line.shortfall > 0 ? (
-                                <span className="text-destructive font-medium">
-                                  −{Math.round(line.shortfall * 1000) / 1000}
-                                </span>
-                              ) : (
-                                <span className="text-emerald-600 dark:text-emerald-400">OK</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </InteractiveTable>
-                  </>
-                )}
-                {availLines.length === 0 && !availLoading && (
-                  <p className="text-xs text-muted-foreground">No component lines on this BOM.</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <SheetFooter>
-            <Button variant="outline" onClick={() => { setSheetOpen(false); resetForm(); }}>
-              Cancel
-            </Button>
-            <Button
-              disabled={saving || sheetMetaLoading || (!productId && !grnId && !bomId) || inputWarehouseIds.length === 0 || !outputWarehouseId}
-              onClick={async () => {
-                setSaving(true);
-                try {
-                  await createManufacturingWorkOrder({
-                    productId,
-                    bomId: bomId || undefined,
-                    routingId: routingId || undefined,
-                    grnId: grnId || undefined,
-                    inputWarehouseIds,
-                    inputWarehouseId: inputWarehouseIds[0],
-                    outputWarehouseId,
-                    measurementMode,
-                    weighingRequired: measurementMode !== "COUNT_ONLY",
-                    quantity: Number(quantity) || 0,
-                    dueDate: dueDate || undefined,
-                  });
-                  toast.success("Work order created.");
-                  setSheetOpen(false);
-                  resetForm();
-                  await loadPage(0);
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "Failed to create work order.");
-                } finally {
-                  setSaving(false);
-                }
-              }}
-            >
-              {hasShortfall && <Icons.AlertTriangle className="mr-2 h-4 w-4 text-amber-400" />}
-              Create work order
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
     </PageShell>
   );
 }
