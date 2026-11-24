@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { ArrowRightLeft } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
@@ -8,9 +9,6 @@ import type { CollectionRoute } from "@/lib/api/joy-route-orders";
 import { SfaSalesRepSelect, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 
 const selectClass = "block min-h-10 w-full rounded-md border bg-background px-3 py-2 text-sm";
-const DISPATCH_DEFAULT = "__dispatch__";
-
-export type RouteSourceStore = { id: string; label: string };
 
 function matching<T extends AsyncSearchableSelectOption>(options: T[], query: string): T[] {
   const needle = query.trim().toLowerCase();
@@ -28,10 +26,10 @@ export function JoyOrderRouteFields(props: {
   onSalesRepChange: (value: PickedSalesRep | null) => void;
   tillNumber: string;
   onTillChange: (value: string) => void;
-  sourceStores: RouteSourceStore[];
-  sourceStoreId: string;
-  onSourceStoreChange: (value: string) => void;
-  dispatchStoreLabel: string;
+  /** Set on orders saved before route stock: the store they still pick from. */
+  legacyPickStoreLabel?: string | null;
+  /** Opens Transfer stock into the chosen route. */
+  transferHref?: string;
   loading: boolean;
   error?: string;
   hasCustomer: boolean;
@@ -40,7 +38,7 @@ export function JoyOrderRouteFields(props: {
 }) {
   const {
     date, onDateChange, routes, route, savedRoute, onRouteChange, salesRep, onSalesRepChange, tillNumber, onTillChange,
-    sourceStores, sourceStoreId, onSourceStoreChange, dispatchStoreLabel, loading, error, hasCustomer, captions = true,
+    legacyPickStoreLabel, transferHref, loading, error, hasCustomer, captions = true,
   } = props;
   const tills = [...new Set(route?.collectors.map((row) => row.tillNumber).filter(Boolean))];
 
@@ -52,16 +50,6 @@ export function JoyOrderRouteFields(props: {
     })),
     [routes],
   );
-  const dispatchOption = React.useMemo<AsyncSearchableSelectOption>(
-    () => ({ id: DISPATCH_DEFAULT, label: `${dispatchStoreLabel} (default)`, description: "The dispatch store route trucks load from." }),
-    [dispatchStoreLabel],
-  );
-  const sourceOptions = React.useMemo<AsyncSearchableSelectOption[]>(
-    () => sourceStores.filter((store) => store.id !== route?.id).map((store) => ({ id: store.id, label: store.label })),
-    [sourceStores, route?.id],
-  );
-  const selectedSource = sourceOptions.find((option) => option.id === sourceStoreId) ?? dispatchOption;
-
   return (
     <div className="mt-4 grid gap-4 sm:grid-cols-2">
       <div className="space-y-1">
@@ -94,25 +82,22 @@ export function JoyOrderRouteFields(props: {
                   : "The first route you save for this outlet and weekday becomes its default."}
           </p>
         ) : error ? <p className="text-xs text-destructive">{error}</p> : null}
+        {legacyPickStoreLabel ? (
+          <p className="text-xs text-muted-foreground">
+            Saved before route stock. Still picked from <span className="font-medium text-foreground">{legacyPickStoreLabel}</span>.
+          </p>
+        ) : route && transferHref ? (
+          <a
+            href={transferHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 pt-0.5 text-sm font-medium text-primary hover:underline"
+          >
+            <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
+            Transfer stock to this route
+          </a>
+        ) : null}
       </div>
-      <div className="space-y-1">
-        <Label htmlFor="joy-source-store">Pick from store</Label>
-        <AsyncSearchableSelect
-          id="joy-source-store"
-          value={sourceStoreId || DISPATCH_DEFAULT}
-          selectedOption={selectedSource}
-          onValueChange={(next) => onSourceStoreChange(next === DISPATCH_DEFAULT ? "" : next)}
-          loadOptions={async (query) => (query.trim() ? matching(sourceOptions, query) : [dispatchOption, ...sourceOptions])}
-          reloadToken={`${sourceOptions.length}:${route?.id ?? ""}`}
-          searchDebounceMs={0}
-          placeholder={dispatchOption.label}
-          searchPlaceholder="Find a store"
-          emptyMessage="No store matches."
-          wrapLabels
-          minDropdownWidth={300}
-        />
-      </div>
-      <div className="hidden sm:block" aria-hidden />
       <div className="space-y-1">
         <Label htmlFor="joy-sales-rep">Sales rep</Label>
         <SfaSalesRepSelect id="joy-sales-rep" value={salesRep} onChange={onSalesRepChange} disabled={!route} />

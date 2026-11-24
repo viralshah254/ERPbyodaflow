@@ -128,7 +128,10 @@ export default function TransferDetailPage() {
     "inventory.transfer.receive": "Received",
     "inventory.transfer.receipt_exception": "Receipt shortage recorded",
     "inventory.transfer.shortage_posted": "Shortage approved and written off",
+    "inventory.transfer.posted": "Stock transferred",
   };
+  const postedInOneStep = Boolean(t.activity?.some((entry) => entry.action === "inventory.transfer.posted"));
+  const activity = (t.activity ?? []).filter((entry) => !postedInOneStep || entry.action !== "inventory.transfer.receive");
 
   return (
     <PageShell>
@@ -303,8 +306,8 @@ export default function TransferDetailPage() {
           <CardContent>
             <DocumentTimeline
               entries={[
-                { id: "created", action: "Draft created", by: t.createdBy ?? "Operator unavailable", at: new Date(t.createdAt ?? t.date).toLocaleString() },
-                ...(t.activity ?? []).map((entry) => ({ ...entry, action: auditLabels[entry.action] ?? entry.action, by: entry.by ?? "Operator unavailable", at: new Date(entry.at).toLocaleString() })),
+                { id: "created", action: postedInOneStep ? "Created" : "Draft created", by: t.createdBy ?? "Operator unavailable", at: new Date(t.createdAt ?? t.date).toLocaleString() },
+                ...activity.map((entry) => ({ ...entry, action: auditLabels[entry.action] ?? entry.action, by: entry.by ?? "Operator unavailable", at: new Date(entry.at).toLocaleString() })),
                 ...(t.receivedAt && !t.activity?.some((entry) => entry.action === "inventory.transfer.receive")
                   ? [{ id: "received", action: "Received", by: "Operator unavailable", at: new Date(t.receivedAt).toLocaleString() }] : []),
               ]}

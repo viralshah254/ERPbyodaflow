@@ -17,11 +17,15 @@ export type TransferStockRow = {
   quantity: number;
   reserved: number;
   available: number;
+  /** Stock already in the receiving store. Present when a receiving store was given. */
+  destination?: { quantity: number; available: number };
 };
 
-export async function fetchTransferStock(warehouseId: string): Promise<TransferStockRow[]> {
+export async function fetchTransferStock(warehouseId: string, toWarehouseId?: string): Promise<TransferStockRow[]> {
   requireLiveApi("Transfer stock");
-  const result = await apiRequest<{ items: TransferStockRow[] }>("/api/warehouse/transfers/stock", { params: { warehouseId } });
+  const result = await apiRequest<{ items: TransferStockRow[] }>("/api/warehouse/transfers/stock", {
+    params: { warehouseId, ...(toWarehouseId ? { toWarehouseId } : {}) },
+  });
   return result.items;
 }
 
@@ -58,9 +62,11 @@ export async function createTransfer(body: {
   transferCostKes?: number;
   costNotes?: string;
   sourceGrnId?: string;
-}): Promise<{ id: string }> {
+  /** Move the stock now instead of saving a draft for approval. */
+  post?: boolean;
+}): Promise<{ id: string; number?: string; status?: TransferStatus }> {
   requireLiveApi("Create warehouse transfer");
-  return apiRequest<{ id: string }>("/api/warehouse/transfers", {
+  return apiRequest<{ id: string; number?: string; status?: TransferStatus }>("/api/warehouse/transfers", {
     method: "POST",
     body,
   });
