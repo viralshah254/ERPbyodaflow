@@ -47,6 +47,7 @@ vi.mock("@/components/ui/select", () => ({
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, "", "/");
+  window.localStorage.clear();
 });
 
 it("shows source availability beside quantity and blocks a draft over available stock", async () => {
@@ -73,6 +74,31 @@ it("shows source availability beside quantity and blocks a draft over available 
   })));
 });
 
+it("transfers in one step from an order, showing stock in both stores and what moved", async () => {
+  vi.mocked(fetchTransferStock).mockImplementation(async (_from: string, to?: string) => [
+    { productId: "p", sku: "SKU-072", name: "Soap", uom: "PCS", quantity: 40, reserved: 0, available: 40, ...(to ? { destination: { quantity: 5, available: 5 } } : {}) },
+  ]);
+  vi.mocked(createTransfer).mockResolvedValueOnce({ id: "t-1", number: "TRF-0009", status: "RECEIVED" });
+  window.history.replaceState(null, "", "/warehouse/transfers/new?to=destination&line=p%3A12&return=order");
+  render(<NewTransferPage />);
+  await screen.findAllByRole("option", { name: "Finished Goods" });
+  fireEvent.change(screen.getByLabelText("From warehouse"), { target: { value: "source" } });
+  expect(await screen.findByText("5 PCS")).toBeInTheDocument();
+  expect(screen.getByText("→ 17 after")).toBeInTheDocument();
+  expect(fetchTransferStock).toHaveBeenLastCalledWith("source", "destination");
+  fireEvent.click(screen.getByRole("button", { name: "Transfer now" }));
+  await waitFor(() => expect(createTransfer).toHaveBeenLastCalledWith(expect.objectContaining({
+    post: true,
+    fromWarehouseId: "source",
+    toWarehouseId: "destination",
+    lines: [{ productId: "p", sku: "SKU-072", productName: "Soap", quantity: 12, unit: "PCS" }],
+  })));
+  expect(await screen.findByRole("heading", { name: "Stock transferred" })).toBeInTheDocument();
+  expect(screen.getByText("+12 PCS")).toBeInTheDocument();
+  expect(screen.getByText("17 now at Dispatch")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Back to the order" })).toBeInTheDocument();
+});
+
 it("shows the API rejection reason and leaves draft creation disabled", async () => {
   vi.mocked(fetchTransferStock).mockRejectedValueOnce(new Error("Select an active, usable source warehouse."));
   render(<NewTransferPage />);
@@ -94,6 +120,7 @@ it("opens from a finished batch with the output store, product and quantity alre
   expect(screen.queryByRole("spinbutton", { name: "Quantity for Bread SKU-073" })).toBeNull();
   expect(screen.getByLabelText("Reference (optional)")).toHaveValue("WO-0007");
   fireEvent.change(screen.getByLabelText("To warehouse"), { target: { value: "destination" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Save draft" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
   await waitFor(() => expect(createTransfer).toHaveBeenLastCalledWith(expect.objectContaining({
     fromWarehouseId: "source",

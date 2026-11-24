@@ -1,9 +1,17 @@
 import { apiRequest } from "./client";
 
-export function saveLockPassword(password: string): Promise<{ lockPasswordSet: boolean }> {
+export type LockSettings = {
+  lockPasswordSet: boolean;
+  lockIdleMinutes: number;
+};
+
+export function saveLockPassword(input: {
+  password?: string;
+  idleMinutes: number;
+}): Promise<LockSettings> {
   return apiRequest("/api/me/lock-password", {
     method: "PUT",
-    body: { password },
+    body: input,
   });
 }
 

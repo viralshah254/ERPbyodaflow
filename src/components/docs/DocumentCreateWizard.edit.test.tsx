@@ -170,7 +170,7 @@ it("keeps a Joy sales order on the header until a delivery warehouse is selected
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
   expect(screen.getByLabelText("Delivery date")).toBeInTheDocument();
   expect(screen.getByLabelText("Route warehouse")).toBeInTheDocument();
-  expect(screen.getByLabelText("Pick from store")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Pick from store")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Sales rep")).toBeInTheDocument();
   expect(screen.getByLabelText("M-Pesa till")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
@@ -181,7 +181,7 @@ it("keeps a Joy sales order on the header until a delivery warehouse is selected
   expect(screen.queryByTestId("edit-sheet")).not.toBeInTheDocument();
 });
 
-it("shows the saved pick-from store on a Joy order and saves a change", async () => {
+it("keeps the saved pick store on a Joy order raised before route stock", async () => {
   vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
     { id: "legacy", label: "Existing route" },
     { id: "fg", label: "FG - Finished Goods" },
@@ -213,23 +213,53 @@ it("shows the saved pick-from store on a Joy order and saves a change", async ()
   expect(screen.queryByText("This order keeps its delivery route. You can still change the store it is picked from.")).not.toBeInTheDocument();
   expect(screen.queryByText("The whole order is picked from this store when its route is loaded.")).not.toBeInTheDocument();
   expect(screen.queryByText("From OdaFlow SFA. Optional. You can add or change it later here or on the loader note.")).not.toBeInTheDocument();
-  const source = screen.getByLabelText("Pick from store");
-  await waitFor(() => expect(source).toHaveValue("fg"));
+  expect(screen.queryByLabelText("Pick from store")).not.toBeInTheDocument();
+  expect(await screen.findByText(/Still picked from/)).toHaveTextContent("Saved before route stock. Still picked from FG - Finished Goods.");
   expect(screen.getByLabelText("M-Pesa till")).toHaveDisplayValue("501001");
-  fireEvent.change(source, { target: { value: "cold" } });
-  expect(source).toHaveValue("cold");
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
   await screen.findByTestId("edit-sheet");
   const review = screen.getAllByRole("button", { name: "Review & Submit" });
   await waitFor(() => expect(review[review.length - 1]).toBeEnabled());
-  expect(checkStockApi).toHaveBeenLastCalledWith("cold", [{ productId: "queen", quantity: 2 }]);
+  expect(checkStockApi).toHaveBeenLastCalledWith("fg", [{ productId: "queen", quantity: 2 }]);
+  fireEvent.click(review[review.length - 1]);
+  fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
+  const body = vi.mocked(patchDocumentApi).mock.calls[0]![2];
+  expect(body).toEqual(expect.objectContaining({
+    warehouseId: "legacy",
+    joyRouteOrder: { deliveryDate: "2026-11-16", salesRepId: "sfa-ann", tillNumber: "501001" },
+  }));
+  expect(body).not.toHaveProperty("sourceWarehouseId");
+});
+
+it("picks an order on its route warehouse and keeps the route on edit", async () => {
+  vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
+    { id: "legacy", label: "Existing route" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
+  ]);
+  vi.mocked(fetchJoyOrderRoute).mockResolvedValueOnce({
+    routes: [{ id: "legacy", name: "Existing route", collectors: [] }],
+    defaultRouteId: "legacy",
+    saved: true,
+  });
+  render(<DocumentCreateWizard type="sales-order" mode="edit" existingDocument={{
+    ...doc("sales-order"),
+    warehouseId: "legacy",
+    sourceWarehouseId: "legacy",
+    joyRoute: { deliveryDate: "2026-11-16", routeName: "Existing route", routeWarehouseId: "legacy" },
+  }} />);
+  await waitFor(() => expect(screen.getByLabelText("Route warehouse")).toHaveValue("legacy"));
+  expect(screen.queryByText(/Still picked from/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
+  await screen.findByTestId("edit-sheet");
+  const review = screen.getAllByRole("button", { name: "Review & Submit" });
+  await waitFor(() => expect(review[review.length - 1]).toBeEnabled());
+  expect(checkStockApi).toHaveBeenLastCalledWith("legacy", [{ productId: "queen", quantity: 2 }]);
   fireEvent.click(review[review.length - 1]);
   fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
   expect(patchDocumentApi).toHaveBeenCalledWith("sales-order", "synthetic-doc", expect.objectContaining({
     warehouseId: "legacy",
-    sourceWarehouseId: "cold",
-    joyRouteOrder: { deliveryDate: "2026-11-16", salesRepId: "sfa-ann", tillNumber: "501001" },
+    sourceWarehouseId: "legacy",
   }));
 });
 
@@ -311,7 +341,7 @@ it("keeps routes without collection settings usable during rollout", async () =>
   expect(await screen.findByText(/Step 2 of 3/)).toBeInTheDocument();
 });
 
-it("lets a Joy order pick from any store except its route, with the dispatch store as the default", async () => {
+it("has no pick store on a new Joy order and links to a transfer into the chosen route", async () => {
   vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
     { id: "legacy", label: "Existing route" }, { id: "fg", label: "FG - Finished Goods" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
   ]);
@@ -321,10 +351,8 @@ it("lets a Joy order pick from any store except its route, with the dispatch sto
   const route = screen.getByLabelText("Route warehouse");
   await waitFor(() => expect(route).toHaveTextContent("Existing route"));
   fireEvent.change(route, { target: { value: "legacy" } });
-  const source = screen.getByLabelText("Pick from store");
-  await waitFor(() => expect(source).toHaveTextContent("FG - Finished Goods"));
-  expect(source).toHaveAccessibleName("DISPATCH - Dispatch (default)");
-  expect(source).not.toHaveTextContent("Existing route");
-  fireEvent.change(source, { target: { value: "fg" } });
-  expect(source).toHaveValue("fg");
+  expect(screen.queryByLabelText("Pick from store")).not.toBeInTheDocument();
+  const transfer = await screen.findByRole("link", { name: "Transfer stock to this route" });
+  expect(transfer).toHaveAttribute("href", "/warehouse/transfers/new?to=legacy&return=order");
+  expect(transfer).toHaveAttribute("target", "_blank");
 });

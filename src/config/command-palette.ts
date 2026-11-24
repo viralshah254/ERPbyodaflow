@@ -7,7 +7,7 @@
  * so it stays in sync with permissions, feature flags, and org modules.
  */
 
-export type CommandGroup = "nav" | "create" | "copilot" | "search";
+export type CommandGroup = "nav" | "create" | "copilot" | "search" | "action";
 
 export interface CommandItemBase {
   id: string;
@@ -44,7 +44,12 @@ export interface CommandItemCopilot extends CommandItemBase {
   copilotPrompt: string;
 }
 
-export type CommandItem = CommandItemNav | CommandItemCreate | CommandItemCopilot;
+export interface CommandItemAction extends CommandItemBase {
+  group: "action";
+  action: "lock-screen";
+}
+
+export type CommandItem = CommandItemNav | CommandItemCreate | CommandItemCopilot | CommandItemAction;
 
 /**
  * Extra routes that don't appear in the sidebar nav tree but should be reachable
@@ -70,6 +75,26 @@ export const COMMAND_NAV_FALLBACK_ITEMS: CommandItemNav[] = [
     href: "/settings/uom",
     keywords: ["uom", "unit of measure", "units of measure", "packaging", "packs", "units"],
     icon: "Ruler",
+  },
+  {
+    id: "nav-change-password",
+    label: "Change password",
+    group: "nav",
+    href: "/change-password",
+    keywords: ["password", "sign-in", "signin", "login"],
+    icon: "KeyRound",
+  },
+];
+
+/** Actions that open a dialog instead of a page. */
+export const COMMAND_ACTION_ITEMS: CommandItemAction[] = [
+  {
+    id: "action-lock-screen",
+    label: "Lock screen",
+    group: "action",
+    action: "lock-screen",
+    keywords: ["lock", "password", "lock password", "idle", "inactivity", "unlock", "screen"],
+    icon: "Lock",
   },
 ];
 

@@ -222,7 +222,7 @@ export function paymentRecordingCommands(query: string): typeof PAYMENT_RECORD_C
 }
 
 /** Score a nav item for relevance against query tokens (higher = better match). */
-export function scoreNavItem(item: CommandItemNav, tokens: string[]): number {
+export function scoreNavItem(item: { label: string; keywords?: string[] }, tokens: string[]): number {
   const label = item.label.toLowerCase();
   const keywords = (item.keywords ?? []).join(" ").toLowerCase();
 

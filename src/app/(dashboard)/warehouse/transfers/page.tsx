@@ -124,8 +124,8 @@ export default function WarehouseTransfersPage() {
             {canWrite && (
               <Button size="sm" asChild>
                 <Link href="/warehouse/transfers/new" data-tour-step="create-button">
-                  <Icons.Plus className="mr-2 h-4 w-4" />
-                  Create transfer
+                  <Icons.ArrowRightLeft className="mr-2 h-4 w-4" />
+                  Transfer stock
                 </Link>
               </Button>
             )}
@@ -167,7 +167,7 @@ export default function WarehouseTransfersPage() {
         <div className={LIST_TABLE_SURFACE_CLASS}>
           <div className="shrink-0 border-b px-4 py-3">
             <h3 className="text-sm font-semibold">Transfers</h3>
-            <p className="text-xs text-muted-foreground">Draft to approved to in transit to received with live warehouse movements.</p>
+            <p className="text-xs text-muted-foreground">Transfer now moves stock in one step. Drafts go through approve, dispatch and receive.</p>
           </div>
           {loading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">Loading transfers…</div>

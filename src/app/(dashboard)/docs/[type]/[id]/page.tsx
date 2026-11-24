@@ -2510,7 +2510,9 @@ export default function DocViewPage() {
                   ),
                 },
                 { label: "M-Pesa till", value: document.joyRoute.tillNumber || "—" },
-                { label: "Pick from store", value: sourceWarehouseLabel ?? "DISPATCH" },
+                ...(document.sourceWarehouseId && document.sourceWarehouseId === document.warehouseId
+                  ? []
+                  : [{ label: "Pick from store", value: sourceWarehouseLabel ?? "DISPATCH" }]),
               ] : []),
               ...(type === "sales-order" && routeDispatch && !document.joyRoute
                 ? [

@@ -43,7 +43,9 @@ import { useBaseCurrency } from "@/lib/org/useBaseCurrency";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
-import { useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { useCanWriteInventory, useCanWriteSales } from "@/lib/rbac/use-write-guard";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
+import { useAuthStore } from "@/stores/auth-store";
 import { isOdaflowSalesOrder } from "@/lib/odaflow/sales-order-source";
 import { SalesOrdersListPanel } from "@/components/sales/SalesOrdersListPanel";
 
@@ -415,6 +417,11 @@ export default function SalesOrdersPage() {
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const isFranchisor = orgRole === "FRANCHISOR";
   const franchiseOrdersBadge = navCounts["franchise-inbound-orders"] ?? 0;
+  const orgId = useAuthStore((s) => s.org?.orgId);
+  const operatingProfile = useOperatingProfile(orgId);
+  const canWriteInventory = useCanWriteInventory();
+  /** Route orders pick from the route warehouse, so stock is moved there before ordering. */
+  const showTransfer = operatingProfile.routeDispatch && canWriteInventory;
 
   return (
     <PageShell>
@@ -427,13 +434,25 @@ export default function SalesOrdersPage() {
         ]}
         sticky
         showCommandHint
-        actions={canWrite ? (
-          <Button asChild>
-            <Link href="/docs/sales-order/new">
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Create Sales Order
-            </Link>
-          </Button>
+        actions={canWrite || showTransfer ? (
+          <div className="flex items-center gap-2">
+            {showTransfer ? (
+              <Button variant="outline" asChild>
+                <Link href="/warehouse/transfers/new">
+                  <Icons.ArrowRightLeft className="mr-2 h-4 w-4" />
+                  Transfer stock
+                </Link>
+              </Button>
+            ) : null}
+            {canWrite ? (
+              <Button asChild>
+                <Link href="/docs/sales-order/new">
+                  <Icons.Plus className="mr-2 h-4 w-4" />
+                  Create Sales Order
+                </Link>
+              </Button>
+            ) : null}
+          </div>
         ) : undefined}
       />
       <div className={LIST_PAGE_BODY_PAGINATED_CLASS}>

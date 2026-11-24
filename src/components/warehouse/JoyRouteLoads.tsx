@@ -31,6 +31,7 @@ import { ChevronRight, ClipboardList, MapPin, Package, Truck } from "lucide-reac
 import { toast } from "sonner";
 import { SfaSalesRepsField, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
+import { transferPrefillHref } from "@/lib/warehouse/transfer-prefill";
 
 function roundQty(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -440,8 +441,11 @@ function WaitingRouteCard({
     const byId = new Map<string, AsyncSearchableSelectOption>();
     if (dispatchId) byId.set(dispatchId, { id: dispatchId, label: placeLabel(dispatchName) });
     for (const store of stores) {
-      if (store.id === route.warehouseId) continue;
-      byId.set(store.id, { id: store.id, label: placeLabel(store.name) });
+      byId.set(store.id, {
+        id: store.id,
+        label: placeLabel(store.name),
+        ...(store.id === route.warehouseId ? { description: "This route. Stock transferred here." } : {}),
+      });
     }
     if (pickStoreId && !byId.has(pickStoreId)) {
       byId.set(pickStoreId, { id: pickStoreId, label: placeLabel(route.sourceWarehouseName || dispatchName) });
@@ -526,7 +530,16 @@ function WaitingRouteCard({
         {shortCount > 0 && !activeNote ? (
           <p role="alert" className="rounded-md border border-red-500/50 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-300">
             {placeLabel(route.sourceWarehouseName || dispatchName)} is short on {shortCount} product{shortCount === 1 ? "" : "s"}.
-            Update the stock or pick from another store before creating the loading note.
+            Transfer the stock in or pick from another store before creating the loading note.{" "}
+            <Link
+              className="font-medium underline"
+              href={transferPrefillHref({
+                toWarehouseId: pickStoreId,
+                lines: route.products.flatMap((product) => (product.shortQty ?? 0) > 0.0001 ? [{ productId: product.productId, quantity: product.shortQty! }] : []),
+              })}
+            >
+              Transfer the missing stock
+            </Link>
           </p>
         ) : null}
         {activeNote ? (
