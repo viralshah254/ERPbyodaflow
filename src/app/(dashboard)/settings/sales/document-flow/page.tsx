@@ -4,6 +4,7 @@ import * as React from "react";
 import { PageLayout } from "@/components/layout/page-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -253,6 +254,11 @@ export default function SalesDocumentFlowPage() {
         : CLASSIC_STEPS;
 
   const save = async () => {
+    const range = settings.orderSheetItemCodes;
+    if (range && (!(range.from >= 1) || !(range.to >= range.from) || range.to - range.from > 500)) {
+      toast.error("Fixed order sheet needs item codes from 1 upward, with To at or above From and at most 500 codes.");
+      return;
+    }
     setSaving(true);
     try {
       const updated = await updateSalesDocumentFlowApi(bakery ? { ...settings, productionRecording: "planned" } : settings);
@@ -301,6 +307,48 @@ export default function SalesDocumentFlowPage() {
             </Select>
             <p id="lineItemLayoutHint" className="text-sm text-muted-foreground">{LINE_ITEM_LAYOUTS[lineItemLayout].hint}</p>
           </div>
+          {lineItemLayout === "catalogue" && (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="fixedOrderSheet">Fixed order sheet</Label>
+                  <p className="text-sm text-muted-foreground">
+                    List every product in an item-code range on sales orders, with no search or browse. Clerks only fill in quantities; products left at zero are not saved.
+                  </p>
+                </div>
+                <Switch id="fixedOrderSheet" checked={Boolean(settings.orderSheetItemCodes)}
+                  disabled={loading || saving} onCheckedChange={(checked) =>
+                    setSettings((prev) => ({ ...prev, orderSheetItemCodes: checked ? { from: 1, to: 31 } : null }))
+                  } />
+              </div>
+              {settings.orderSheetItemCodes ? (
+                <div className="flex flex-wrap items-end gap-3">
+                  {(["from", "to"] as const).map((edge) => (
+                    <div key={edge} className="space-y-1">
+                      <Label htmlFor={`orderSheet-${edge}`}>{edge === "from" ? "From item code" : "To item code"}</Label>
+                      <Input
+                        id={`orderSheet-${edge}`}
+                        type="number"
+                        inputMode="numeric"
+                        min={1}
+                        step={1}
+                        className="h-9 w-28"
+                        disabled={loading || saving}
+                        value={settings.orderSheetItemCodes?.[edge] ?? ""}
+                        onWheel={(e) => e.currentTarget.blur()}
+                        onChange={(e) => {
+                          const value = Math.trunc(Number(e.target.value));
+                          setSettings((prev) => prev.orderSheetItemCodes
+                            ? { ...prev, orderSheetItemCodes: { ...prev.orderSheetItemCodes, [edge]: value } }
+                            : prev);
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          )}
           {fmcg && (
             <div className="flex items-start justify-between gap-4">
               <div className="space-y-1">

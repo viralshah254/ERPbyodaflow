@@ -14,10 +14,10 @@ const products = [
   { id: "queen", code: "1", sku: "1", name: "Queen cakes", unit: "PCS", itemRole: "FINISHED", productType: "FINISHED" },
   { id: "cake", code: "FG-CAKE", sku: "FG-CAKE", barcode: "6164000350467", name: "Celebration cake", unit: "PCS", itemRole: "FINISHED", productType: "BOTH" },
 ];
-function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision = 0, discount = 0, editorKey = 0, packSizeFromName = false }: { initial?: DocumentLine[]; queenPrice?: number; inclusive?: boolean; revision?: number; discount?: number; editorKey?: number; packSizeFromName?: boolean }) {
+function Harness({ initial = [], queenPrice = 43.1, inclusive = true, revision = 0, discount = 0, editorKey = 0, packSizeFromName = false, fixedItemCodes }: { initial?: DocumentLine[]; queenPrice?: number; inclusive?: boolean; revision?: number; discount?: number; editorKey?: number; packSizeFromName?: boolean; fixedItemCodes?: { from: number; to: number } }) {
   const [lines, setLines] = React.useState<DocumentLine[]>(initial);
   const [data, setData] = React.useState<Awaited<ReturnType<typeof fetchDocumentProductDataApi>>>({});
-  return <DocumentLineEditor onDocumentProductData={setData} packagingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.packaging]))} pricingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing]))} key={editorKey} sheetFinishedGoods packSizeFromName={packSizeFromName} fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount, ...(packSizeFromName ? { packPrices: [{ uom: "PACK", unitsPer: 1, unitPrice: queenPrice }] } : {}) }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
+  return <DocumentLineEditor fixedItemCodes={fixedItemCodes} onDocumentProductData={setData} packagingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.packaging]))} pricingByProductId={Object.fromEntries(Object.entries(data).map(([id, row]) => [id, row.pricing]))} key={editorKey} sheetFinishedGoods packSizeFromName={packSizeFromName} fmcgOrg plantCatalogue productFilter="sellable" currency="KES" priceListId={revision ? "customer-b" : "standard"} repriceExistingRevision={revision} lines={lines} onLinesChange={setLines} fmcgCatalogByProductId={{ queen: { productId: "queen", pricePerPiece: queenPrice, discountPercent: discount, ...(packSizeFromName ? { packPrices: [{ uom: "PACK", unitsPer: 1, unitPrice: queenPrice }] } : {}) }, cake: { productId: "cake", pricePerPiece: 100 } }} linesAreTaxInclusive={inclusive} taxCodes={[{ id: "vat", code: "VAT16", name: "VAT", rate: 16 }]} defaultLineTaxCodeId="vat" />;
 }
 beforeEach(() => { api.configured = false; vi.mocked(fetchProductApi).mockClear(); vi.mocked(fetchProductVariantsApi).mockClear(); vi.mocked(fetchDocumentProductDataApi).mockReset().mockResolvedValue({}); setProductsCache([]); vi.mocked(fetchProductsPageApi).mockReset().mockResolvedValue({ items: products, hasMore: false, nextCursor: null } as never); });
 
@@ -195,6 +195,24 @@ it("browses finished goods in pages and adds the ticked products below the searc
   expect(await screen.findByLabelText("Quantity for Finished 0")).toBeInTheDocument();
   expect(screen.getByLabelText("Quantity for Finished 11")).toBeInTheDocument();
   expect(screen.queryByLabelText("Quantity for Finished 1")).not.toBeInTheDocument();
+});
+
+it("lists every product in the fixed item-code range with no search, browse or remove", async () => {
+  api.configured = true;
+  vi.mocked(fetchProductsPageApi).mockImplementation(async (opts) => {
+    if (String(opts?.cursor ?? "0") !== "0") return { items: finishedRows(100, 102), hasMore: false, nextCursor: null } as never;
+    return { items: finishedRows(1, 100), hasMore: true, nextCursor: "100" } as never;
+  });
+  render(<Harness fixedItemCodes={{ from: 1, to: 101 }} />);
+  expect(await screen.findByLabelText("Quantity for Finished 1")).toHaveValue("0");
+  expect(screen.getByLabelText("Quantity for Finished 101")).toHaveValue("0");
+  expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ itemCodes: { from: 1, to: 101 }, limit: 100, cursor: "100" }));
+  expect(screen.queryByRole("combobox", { name: "Search products to add" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Browse" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Remove Finished 1" })).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Quantity for Finished 1"), { target: { value: "3" } });
+  fireEvent.blur(screen.getByLabelText("Quantity for Finished 1"));
+  expect(screen.getByLabelText("Quantity for Finished 1")).toHaveValue("3");
 });
 
 it("finds a finished good that is not on the first page by asking the server", async () => {
