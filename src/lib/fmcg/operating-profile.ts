@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { fetchSalesDocumentFlowApi, isRouteDispatchMode, resolveSalesLineItemLayout, type SalesDocumentFlowSettings, type SalesLineItemLayout } from "@/lib/api/sales-document-flow";
+import { fetchSalesDocumentFlowApi, isRouteDispatchMode, resolveSalesLineItemLayout, type OrderSheetItemCodes, type SalesDocumentFlowSettings, type SalesLineItemLayout } from "@/lib/api/sales-document-flow";
 
 /**
  * How this organisation runs its FMCG day, from Settings → Sales document flow.
@@ -15,6 +15,8 @@ export type OperatingProfile = {
   dispatchWarehouseId?: string;
   fullCatalogueOrderSheet: boolean;
   lineItemLayout: SalesLineItemLayout;
+  /** Fixed order sheet: every product with an item code in this range, no search. */
+  orderSheetItemCodes?: OrderSheetItemCodes;
   productionRecording: "planned" | "record_output";
   packSizeFromName: boolean;
   vanSalesBook: boolean;
@@ -41,6 +43,7 @@ export function operatingProfileFromFlow(flow: Partial<SalesDocumentFlowSettings
     dispatchWarehouseId: flow.dispatchWarehouseId?.trim() || undefined,
     fullCatalogueOrderSheet: lineItemLayout === "catalogue",
     lineItemLayout,
+    ...(lineItemLayout === "catalogue" && flow.orderSheetItemCodes ? { orderSheetItemCodes: flow.orderSheetItemCodes } : {}),
     productionRecording: flow.productionRecording === "record_output" ? "record_output" : "planned",
     packSizeFromName: flow.finishedGoodsSalesUnit === "pack_size_in_name",
     vanSalesBook: flow.vanSalesBook !== false,

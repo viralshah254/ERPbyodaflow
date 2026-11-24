@@ -110,6 +110,8 @@ export type FetchProductsOptions = {
   pricedStatus?: "priced" | "unpriced";
   /** Active finished goods whose item code is a whole number. */
   numericItemCode?: boolean;
+  /** Only products whose item code is a whole number in this range. */
+  itemCodes?: { from: number; to: number };
 };
 
 export type FetchProductsPageResult = {
@@ -142,6 +144,10 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.pricedOnPriceListId?.trim()) params.set("pricedOnPriceListId", opts.pricedOnPriceListId.trim());
   if (opts.pricedStatus) params.set("pricedStatus", opts.pricedStatus);
   if (opts.numericItemCode) params.set("numericItemCode", "true");
+  if (opts.itemCodes) {
+    params.set("itemCodeFrom", String(opts.itemCodes.from));
+    params.set("itemCodeTo", String(opts.itemCodes.to));
+  }
   const lim = opts.limit != null && opts.limit > 0 ? Math.min(opts.limit, 100) : 25;
   params.set("limit", String(lim));
   if (opts.cursor != null && opts.cursor !== "") params.set("cursor", opts.cursor);

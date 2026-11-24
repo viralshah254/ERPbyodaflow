@@ -112,6 +112,11 @@ interface DocumentLineEditorProps {
    * Users enter quantities directly; no add-products dialog is needed.
    */
   sheetFinishedGoods?: boolean;
+  /**
+   * With `sheetFinishedGoods`: list every product whose item code is in this range as a zero-quantity row.
+   * No search, browse or row removal; quantities left at zero are not saved.
+   */
+  fixedItemCodes?: { from: number; to: number };
   lineByLine?: boolean;
   /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
   repriceExistingRevision?: number;
@@ -262,6 +267,7 @@ export function DocumentLineEditor({
   pricingByProductId,
   productFilter,
   sheetFinishedGoods = false,
+  fixedItemCodes,
   lineByLine = false,
   repriceExistingRevision = 0,
   taxCodes = [],
@@ -281,6 +287,9 @@ export function DocumentLineEditor({
   stockShortByProductId,
 }: DocumentLineEditorProps) {
   const inlineCatalogue = lineByLine && !fmcgOrg;
+  const fixedSheet = sheetFinishedGoods && Boolean(fixedItemCodes);
+  const fixedFrom = fixedSheet ? fixedItemCodes?.from : undefined;
+  const fixedTo = fixedSheet ? fixedItemCodes?.to : undefined;
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
@@ -437,12 +446,24 @@ export function DocumentLineEditor({
     setSheetCursor(null);
     sheetGenerationRef.current += 1;
     let nextSheetCursor: string | null = null;
-    const load = sheetFinishedGoods
-      ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName }).then((page) => {
-          nextSheetCursor = page.nextCursor;
-          return page.items;
-        })
-      : fetchProductsForDocumentLines(productFilter);
+    const loadFixedSheet = async (range: { from: number; to: number }) => {
+      const rows: ProductRow[] = [];
+      let cursor: string | null = "0";
+      for (let page = 0; cursor != null && page < 6; page += 1) {
+        const result = await fetchFinishedGoodsPage({ itemCodes: range, cursor, limit: 100 });
+        rows.push(...result.items);
+        cursor = result.nextCursor;
+      }
+      return rows;
+    };
+    const load = fixedFrom != null && fixedTo != null
+      ? loadFixedSheet({ from: fixedFrom, to: fixedTo })
+      : sheetFinishedGoods
+        ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName }).then((page) => {
+            nextSheetCursor = page.nextCursor;
+            return page.items;
+          })
+        : fetchProductsForDocumentLines(productFilter);
     load
       .then(async (rows) => {
         if (sheetFinishedGoods && isApiConfigured()) {
@@ -477,7 +498,7 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry, lineByLine, fmcgOrg]);
+  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry, lineByLine, fmcgOrg, fixedFrom, fixedTo]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
@@ -806,6 +827,20 @@ export function DocumentLineEditor({
       fmcgCatalogByProductId,
     ]
   );
+
+  /** Fixed order sheet: every product in the item-code range starts as a zero-quantity row. */
+  React.useEffect(() => {
+    if (!fixedSheet || !sheetCatalogReady || (packSizeFromName && !fmcgCatalogByProductId)) return;
+    if (!filteredProducts?.length) return;
+    const existingIds = new Set(lines.map((line) => line.productId));
+    const missingProducts = filteredProducts.filter((product) => !existingIds.has(product.id));
+    if (!missingProducts.length) return;
+    commitProducts(
+      missingProducts.map((product) => ({ product, qty: 0, asNewLine: false })),
+      undefined,
+      false
+    );
+  }, [fixedSheet, sheetCatalogReady, packSizeFromName, fmcgCatalogByProductId, filteredProducts, lines, commitProducts]);
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -1727,9 +1762,17 @@ export function DocumentLineEditor({
   return (
     <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
       <Label>{lineItemsLabel}</Label>
-      {!inlineCatalogue ? composer : null}
+      {!inlineCatalogue && !fixedSheet ? composer : null}
+      {fixedSheet && !catalogError && filteredProducts == null ? (
+        <p className="text-sm text-muted-foreground">Loading order sheet…</p>
+      ) : null}
+      {fixedSheet && !catalogError && filteredProducts?.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No active products with item codes {fixedItemCodes?.from} to {fixedItemCodes?.to}.
+        </p>
+      ) : null}
 
-      {!inlineCatalogue && <DocumentProductPickerSheet
+      {!inlineCatalogue && !fixedSheet && <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         sheetFinishedGoods={sheetFinishedGoods}
@@ -1753,7 +1796,7 @@ export function DocumentLineEditor({
         </div>
       ) : null}
       {lines.length === 0 ? (
-        inlineCatalogue ? composer : sheetFinishedGoods || fmcgOrg ? (
+        fixedSheet ? null : inlineCatalogue ? composer : sheetFinishedGoods || fmcgOrg ? (
           <div className="flex items-center justify-center py-10" role="img" aria-label="No products selected">
             <Icons.PackageOpen className="h-9 w-9 text-muted-foreground/70" aria-hidden />
           </div>
@@ -1831,7 +1874,11 @@ export function DocumentLineEditor({
                         )}
                       </button>
                       <div className="min-w-0">
-                        <button
+                        {fixedSheet ? (
+                          <p className={cn("line-clamp-2 text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>
+                            {l.name || product?.name || l.sku}
+                          </p>
+                        ) : <button
                           type="button"
                           className={cn(
                             "line-clamp-2 text-left text-sm font-medium leading-snug hover:underline",
@@ -1845,7 +1892,7 @@ export function DocumentLineEditor({
                           }}
                         >
                           {l.name || product?.name || l.sku}
-                        </button>
+                        </button>}
                         {taxRateLabel ? (
                           <p className="mt-0.5 truncate text-xs text-muted-foreground">{taxRateLabel}</p>
                         ) : null}
@@ -1915,16 +1962,18 @@ export function DocumentLineEditor({
                     </span>
                   </td>
                   <td className="px-1 py-2">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0"
-                      aria-label={`Remove ${l.name}`}
-                      onClick={() => removeLine(l.id)}
-                    >
-                      <Icons.Trash2 className="h-4 w-4" />
-                    </Button>
+                    {fixedSheet ? null : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        aria-label={`Remove ${l.name}`}
+                        onClick={() => removeLine(l.id)}
+                      >
+                        <Icons.Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </td>
               </tr>
                 {expanded ? (
