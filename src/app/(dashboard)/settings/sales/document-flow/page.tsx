@@ -143,6 +143,7 @@ const DEFAULTS: SalesDocumentFlowSettings = {
   productionRecording: "planned",
   finishedGoodsSalesUnit: "product_pack",
   approveNewFieldCustomers: false,
+  allowOrdersForPendingFieldCustomers: true,
   vanSalesBook: true,
 };
 
@@ -431,6 +432,14 @@ export default function SalesDocumentFlowPage() {
                 checked={settings.approveNewFieldCustomers === true}
                 disabled={loading}
                 onChange={(checked) => setSettings((prev) => ({ ...prev, approveNewFieldCustomers: checked }))}
+              />
+              <SwitchRow
+                id="allowOrdersForPendingFieldCustomers"
+                label="Allow orders for customers pending approval"
+                hint="Field reps can send orders for a new customer before approval. The order waits in the Odaflow sync queue and becomes a sales order once the customer is approved."
+                checked={settings.allowOrdersForPendingFieldCustomers !== false}
+                disabled={loading}
+                onChange={(checked) => setSettings((prev) => ({ ...prev, allowOrdersForPendingFieldCustomers: checked }))}
               />
               <SwitchRow
                 id="vanSalesBook"

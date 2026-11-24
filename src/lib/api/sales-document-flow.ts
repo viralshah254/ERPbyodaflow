@@ -33,6 +33,7 @@ export type SalesDocumentFlowSettings = {
   productionRecording?: "planned" | "record_output";
   finishedGoodsSalesUnit?: "product_pack" | "pack_size_in_name";
   approveNewFieldCustomers?: boolean;
+  allowOrdersForPendingFieldCustomers?: boolean;
   vanSalesBook?: boolean;
 };
 
