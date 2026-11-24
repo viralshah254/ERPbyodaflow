@@ -3,11 +3,13 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import * as Dialog from "@radix-ui/react-dialog";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,6 +34,8 @@ type DoneTransfer = {
 };
 
 const RECENT_LIMIT = 5;
+const SEARCH_INPUT_ID = "transfer-product-search";
+const BROWSE_PAGE = 30;
 
 function formatQty(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -42,6 +46,10 @@ function shortStore(label: string | undefined): string {
   if (!label) return "";
   const at = label.indexOf(" - ");
   return at > 0 ? label.slice(0, at) : label;
+}
+
+function productCodes(row: TransferStockRow): string {
+  return [...new Set([row.sku, row.code, row.barcode].filter(Boolean))].join(" · ");
 }
 
 function storeOptions(warehouses: LookupOption[], query: string, showBlock: boolean): AsyncSearchableSelectOption[] {
@@ -82,14 +90,336 @@ function describeLine(line: TransferLineDraft, stock: TransferStockRow | undefin
   return { stock, base, alternates, unit, factor, qty, baseQty, over: Boolean(stock && baseQty > stock.available + 1e-9) };
 }
 
-function focusNextQuantity(current: HTMLInputElement) {
+function quantityInput(productId: string): HTMLInputElement | undefined {
+  return [...document.querySelectorAll<HTMLInputElement>("input[data-transfer-qty]")].find((input) => input.dataset.transferQty === productId);
+}
+
+/** Enter in a quantity moves to the next empty quantity, then back to search for the next product. */
+function focusAfterQuantity(current: HTMLInputElement) {
   const inputs = [...document.querySelectorAll<HTMLInputElement>("input[data-transfer-qty]:not(:disabled)")];
-  inputs[inputs.indexOf(current) + 1]?.focus();
+  const next = inputs.slice(inputs.indexOf(current) + 1).find((input) => !input.value);
+  (next ?? document.getElementById(SEARCH_INPUT_ID))?.focus();
+}
+
+function useDebounced<T>(value: T, ms: number): T {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), ms);
+    return () => window.clearTimeout(timer);
+  }, [value, ms]);
+  return debounced;
+}
+
+function StockFigures({ row, fromShort, toShort }: { row: TransferStockRow; fromShort: string; toShort: string }) {
+  return (
+    <span className="shrink-0 text-right text-xs tabular-nums">
+      <span className="block font-medium text-foreground">{formatQty(row.available)} {row.uom} <span className="font-normal text-muted-foreground">at {fromShort}</span></span>
+      {row.destination ? <span className="block text-muted-foreground">{formatQty(row.destination.quantity)} at {toShort}</span> : null}
+    </span>
+  );
+}
+
+function ProductSearch({ fromWarehouseId, toWarehouseId, fromShort, toShort, pickedIds, disabled, onPick, onBrowse }: {
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  fromShort: string;
+  toShort: string;
+  pickedIds: Set<string>;
+  disabled: boolean;
+  onPick: (row: TransferStockRow) => void;
+  onBrowse: () => void;
+}) {
+  const [text, setText] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const [results, setResults] = React.useState<TransferStockRow[]>([]);
+  const [resultsFor, setResultsFor] = React.useState("");
+  const [active, setActive] = React.useState(0);
+  const [pendingEnter, setPendingEnter] = React.useState(false);
+  const query = useDebounced(text.trim(), 200);
+  const loading = Boolean(text.trim()) && resultsFor !== `${fromWarehouseId}|${toWarehouseId}|${text.trim()}`;
+
+  React.useEffect(() => {
+    if (!fromWarehouseId || !query) return;
+    let cancelled = false;
+    const key = `${fromWarehouseId}|${toWarehouseId}|${query}`;
+    fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: toWarehouseId || undefined, search: query, limit: 8 })
+      .then((page) => {
+        if (cancelled) return;
+        setResults(page.items);
+        setActive(0);
+      })
+      .catch(() => {
+        if (!cancelled) setResults([]);
+      })
+      .finally(() => {
+        if (!cancelled) setResultsFor(key);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [fromWarehouseId, toWarehouseId, query]);
+
+  const choose = React.useCallback((row: TransferStockRow) => {
+    onPick(row);
+    setText("");
+    setOpen(false);
+    setPendingEnter(false);
+  }, [onPick]);
+
+  React.useEffect(() => {
+    if (!pendingEnter || loading) return;
+    setPendingEnter(false);
+    if (results[0]) choose(results[0]);
+  }, [pendingEnter, loading, results, choose]);
+
+  const showPanel = open && Boolean(text.trim());
+  const listId = `${SEARCH_INPUT_ID}-results`;
+
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
+      <div className="relative min-w-0 flex-1">
+        <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          id={SEARCH_INPUT_ID}
+          role="combobox"
+          aria-expanded={showPanel}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-label="Find a product to transfer"
+          autoComplete="off"
+          className="h-11 pl-9 text-base sm:text-sm"
+          placeholder={fromWarehouseId ? `Search ${fromShort} by name, SKU, code or scan a barcode` : "Choose the source store first"}
+          disabled={disabled || !fromWarehouseId}
+          value={text}
+          onChange={(event) => {
+            setText(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 120)}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setOpen(true);
+              setActive((index) => Math.min(index + 1, Math.max(results.length - 1, 0)));
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              setActive((index) => Math.max(index - 1, 0));
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              if (!text.trim()) return;
+              if (loading) setPendingEnter(true);
+              else if (results[active]) choose(results[active]);
+            } else if (event.key === "Escape") {
+              setOpen(false);
+            }
+          }}
+        />
+        {showPanel ? (
+          <div id={listId} role="listbox" aria-label="Matching products"
+            className="absolute inset-x-0 top-full z-30 mt-1 overflow-hidden rounded-lg border bg-popover shadow-lg">
+            {loading && !results.length ? (
+              <p className="px-3 py-3 text-sm text-muted-foreground">Searching…</p>
+            ) : !results.length ? (
+              <p className="px-3 py-3 text-sm text-muted-foreground">No product with stock in {fromShort} matches “{text.trim()}”.</p>
+            ) : results.map((row, index) => {
+              const added = pickedIds.has(row.productId);
+              return (
+                <button
+                  key={row.productId}
+                  type="button"
+                  role="option"
+                  aria-selected={index === active}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(row)}
+                  className={cn("flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0", index === active ? "bg-muted" : "")}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{row.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{productCodes(row)}</span>
+                  </span>
+                  {added ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Added</span> : null}
+                  <StockFigures row={row} fromShort={fromShort} toShort={toShort} />
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+      </div>
+      <Button type="button" variant="outline" className="h-11 shrink-0" onClick={onBrowse} disabled={disabled || !fromWarehouseId}>
+        <Icons.LayoutList className="mr-2 h-4 w-4" aria-hidden />
+        Browse
+      </Button>
+    </div>
+  );
+}
+
+function BrowseStockDialog({ open, onOpenChange, fromWarehouseId, toWarehouseId, fromLabel, fromShort, toShort, pickedIds, onAdd }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  fromLabel: string;
+  fromShort: string;
+  toShort: string;
+  pickedIds: Set<string>;
+  onAdd: (rows: TransferStockRow[]) => void;
+}) {
+  const [text, setText] = React.useState("");
+  const query = useDebounced(text.trim(), 250);
+  const [items, setItems] = React.useState<TransferStockRow[]>([]);
+  const [total, setTotal] = React.useState(0);
+  const [hasMore, setHasMore] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState("");
+  const [checked, setChecked] = React.useState<Map<string, TransferStockRow>>(new Map());
+  const loadingMore = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!open) {
+      setText("");
+      setChecked(new Map());
+    }
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open || !fromWarehouseId) return;
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: toWarehouseId || undefined, search: query || undefined, limit: BROWSE_PAGE })
+      .then((page) => {
+        if (cancelled) return;
+        setItems(page.items);
+        setTotal(page.total);
+        setHasMore(page.hasMore);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) {
+          setItems([]);
+          setHasMore(false);
+          setError(e.message || "Stock could not load.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, fromWarehouseId, toWarehouseId, query]);
+
+  const loadMore = async () => {
+    if (loadingMore.current || !hasMore) return;
+    loadingMore.current = true;
+    try {
+      const page = await fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: toWarehouseId || undefined, search: query || undefined, limit: BROWSE_PAGE, offset: items.length });
+      setItems((current) => [...current, ...page.items.filter((item) => !current.some((row) => row.productId === item.productId))]);
+      setHasMore(page.hasMore);
+    } catch (e) {
+      toast.error((e as Error).message || "More stock could not load.");
+    } finally {
+      loadingMore.current = false;
+    }
+  };
+
+  const toggle = (row: TransferStockRow) => setChecked((current) => {
+    const next = new Map(current);
+    if (next.has(row.productId)) next.delete(row.productId);
+    else next.set(row.productId, row);
+    return next;
+  });
+
+  const add = () => {
+    onAdd([...checked.values()]);
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+        <Dialog.Content
+          className="fixed left-1/2 top-1/2 z-50 flex max-h-[min(44rem,92dvh)] w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border bg-background shadow-2xl focus:outline-none"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            document.getElementById("transfer-browse-search")?.focus();
+          }}
+        >
+          <div className="space-y-3 border-b p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <Dialog.Title className="text-base font-semibold">Products in {fromLabel}</Dialog.Title>
+                <Dialog.Description className="text-sm text-muted-foreground">
+                  {loading && !items.length ? "Loading stock…" : `${total} product${total === 1 ? "" : "s"}${query ? " match" : " in stock"}. Tick the ones to transfer.`}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close">
+                <Icons.X className="h-4 w-4" />
+              </Dialog.Close>
+            </div>
+            <div className="relative">
+              <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+              <Input id="transfer-browse-search" aria-label="Filter products" className="pl-9" placeholder="Filter by name, SKU, code or barcode"
+                value={text} onChange={(event) => setText(event.target.value)} />
+            </div>
+          </div>
+          <div
+            className="min-h-[12rem] flex-1 overflow-y-auto"
+            onScroll={(event) => {
+              const el = event.currentTarget;
+              if (el.scrollHeight - el.scrollTop - el.clientHeight < 160) void loadMore();
+            }}
+          >
+            {error ? <p role="alert" className="p-4 text-sm text-destructive">{error}</p>
+              : loading && !items.length ? (
+                <div className="space-y-2 p-4">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-12 animate-pulse rounded-md bg-muted/60" />)}</div>
+              ) : !items.length ? (
+                <p className="px-4 py-12 text-center text-sm text-muted-foreground">{query ? `No product matches “${query}”.` : `${fromLabel} has no stock to transfer.`}</p>
+              ) : (
+                <ul className="divide-y">
+                  {items.map((row) => {
+                    const added = pickedIds.has(row.productId);
+                    const isChecked = added || checked.has(row.productId);
+                    const id = `browse-${row.productId}`;
+                    return (
+                      <li key={row.productId}>
+                        <label htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 px-4 py-2.5 sm:px-5", added ? "cursor-default opacity-60" : "hover:bg-muted/40", isChecked && !added && "bg-primary/[0.05]")}>
+                          <Checkbox id={id} checked={isChecked} disabled={added} onCheckedChange={() => toggle(row)} aria-label={`Select ${row.name}`} />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{row.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{productCodes(row)}{added ? " · already in this transfer" : ""}</span>
+                          </span>
+                          <StockFigures row={row} fromShort={fromShort} toShort={toShort} />
+                        </label>
+                      </li>
+                    );
+                  })}
+                  {hasMore ? (
+                    <li className="p-3 text-center">
+                      <Button type="button" variant="ghost" size="sm" onClick={() => void loadMore()}>Show more</Button>
+                    </li>
+                  ) : null}
+                </ul>
+              )}
+          </div>
+          <div className="flex items-center gap-2 border-t bg-muted/30 px-4 py-3 sm:px-5">
+            <p className="mr-auto text-sm text-muted-foreground">{checked.size ? `${checked.size} selected` : "Nothing selected yet"}</p>
+            <Dialog.Close asChild><Button variant="ghost">Cancel</Button></Dialog.Close>
+            <Button onClick={add} disabled={!checked.size}>
+              {checked.size ? `Add ${checked.size} product${checked.size === 1 ? "" : "s"}` : "Add products"}
+            </Button>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
 }
 
 type UpdateLine = (productId: string, stockUnit: string, patch: Partial<TransferLineDraft>) => void;
 
-const TransferRow = React.memo(function TransferRow({ row, line: draft, units, hasDestination, busy, onUpdate, onLoadUnits }: {
+const TransferRow = React.memo(function TransferRow({ row, line: draft, units, hasDestination, busy, onUpdate, onLoadUnits, onRemove }: {
   row: TransferStockRow;
   line: TransferLineDraft | undefined;
   units: ProductPackaging[] | undefined;
@@ -97,6 +427,7 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   busy: boolean;
   onUpdate: UpdateLine;
   onLoadUnits: (productId: string) => void;
+  onRemove: (productId: string) => void;
 }) {
   const line = draft ?? { productId: row.productId, qty: "", unit: row.uom };
   const { base, alternates, unit, factor, baseQty, over } = describeLine(line, row, units);
@@ -105,10 +436,10 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   const toNow = row.destination?.quantity ?? 0;
   const empty = row.available <= 0;
   return (
-    <tr className={cn("border-t align-top", over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "hover:bg-muted/30")}>
+    <tr className={cn("border-t align-top", over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "")}>
       <th scope="row" className={cn("border-l-2 px-4 py-3 text-left font-medium", over ? "border-l-destructive" : picked ? "border-l-primary" : "border-l-transparent")}>
         {row.name}
-        <span className="block text-xs font-normal text-muted-foreground">{[...new Set([row.sku, row.code, row.barcode].filter(Boolean))].join(" · ")}</span>
+        <span className="block text-xs font-normal text-muted-foreground">{productCodes(row)}</span>
       </th>
       <td id={hint} className="px-3 py-3 text-right tabular-nums">
         <p className={cn("font-semibold", over ? "text-destructive" : empty ? "text-muted-foreground" : "")}>{formatQty(row.available)} {base}</p>
@@ -124,10 +455,10 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
           </>
         )}
       </td>
-      <td className="w-[19rem] px-3 py-2.5">
+      <td className="w-[21rem] px-3 py-2.5">
         <div className="flex items-center gap-2">
           <Input
-            data-transfer-qty
+            data-transfer-qty={row.productId}
             type="number"
             inputMode="decimal"
             min={0}
@@ -144,7 +475,7 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 event.preventDefault();
-                focusNextQuantity(event.currentTarget);
+                focusAfterQuantity(event.currentTarget);
               }
             }}
           />
@@ -167,6 +498,18 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
             onClick={() => onUpdate(row.productId, row.uom, { qty: String(row.available), unit: base })}
           >
             All
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+            disabled={busy}
+            aria-label={`Remove ${row.name}`}
+            title="Remove from this transfer"
+            onClick={() => onRemove(row.productId)}
+          >
+            <Icons.X className="h-4 w-4" />
           </Button>
         </div>
       </td>
@@ -198,17 +541,20 @@ export default function NewTransferPage() {
   const lastFromKey = `transfer:last-from:${orgId}`;
   const recentToKey = `transfer:recent-to:${orgId}`;
 
-  const [search, setSearch] = React.useState("");
-  const [selectedOnly, setSelectedOnly] = React.useState(false);
   const [warehouseError, setWarehouseError] = React.useState("");
   const [saving, setSaving] = React.useState<"post" | "draft" | null>(null);
   const [done, setDone] = React.useState<DoneTransfer | null>(null);
   const [openedFromOrder, setOpenedFromOrder] = React.useState(false);
   const [recentTo, setRecentTo] = React.useState<string[]>([]);
+  const [browseOpen, setBrowseOpen] = React.useState(false);
 
   const [warehouses, setWarehouses] = React.useState<LookupOption[]>([]);
   const [packaging, setPackaging] = React.useState<Record<string, ProductPackaging[]>>({});
-  const [sourceStock, setSourceStock] = React.useState<TransferStockRow[]>([]);
+  /** Products in this transfer, in the order they were added. */
+  const [pickedIds, setPickedIds] = React.useState<string[]>([]);
+  /** Latest stock for the products in this transfer, from the current source and receiving store. */
+  const [stockRows, setStockRows] = React.useState<Record<string, TransferStockRow>>({});
+  const [sourceTotal, setSourceTotal] = React.useState<number | null>(null);
   const [stockError, setStockError] = React.useState("");
   const [stockRefresh, setStockRefresh] = React.useState(0);
   const [stockLoading, setStockLoading] = React.useState(false);
@@ -222,6 +568,7 @@ export default function NewTransferPage() {
   const [costNotes, setCostNotes] = React.useState("");
   const [sourceGrnId, setSourceGrnId] = React.useState("");
   const prefilledFrom = React.useRef(false);
+  const pickedRef = React.useRef<string[]>([]);
 
   const fromStore = warehouses.find((wh) => wh.id === fromWarehouseId);
   const toStore = warehouses.find((wh) => wh.id === toWarehouseId);
@@ -229,17 +576,16 @@ export default function NewTransferPage() {
   const toShort = shortStore(toStore?.label);
   const busy = saving !== null;
 
-  const stockByProduct = React.useMemo(() => new Map(sourceStock.map((row) => [row.productId, row])), [sourceStock]);
-  const selectedLines = Object.values(lines).filter((line) => line.qty.trim() !== "" && Number(line.qty) !== 0);
-  const deferredSearch = React.useDeferredValue(search);
-  const visibleStock = React.useMemo(() => {
-    const query = deferredSearch.trim().toLowerCase();
-    return sourceStock
-      .filter((row) => [row.name, row.sku, row.code, row.barcode].some((value) => value?.toLowerCase().includes(query)))
-      .sort((a, b) => (a.sku || a.name).localeCompare(b.sku || b.name, undefined, { numeric: true }));
-  }, [sourceStock, deferredSearch]);
-  const rows = selectedOnly ? visibleStock.filter((row) => Number(lines[row.productId]?.qty ?? 0) !== 0) : visibleStock;
-  const alreadyThere = sourceStock.filter((row) => (row.destination?.quantity ?? 0) > 0).length;
+  const pickedSet = React.useMemo(() => new Set(pickedIds), [pickedIds]);
+  const pickedRows = pickedIds.flatMap((id) => (stockRows[id] ? [stockRows[id]] : []));
+  const selectedLines = pickedIds.flatMap((id) => {
+    const line = lines[id];
+    return line && line.qty.trim() !== "" && Number(line.qty) !== 0 ? [line] : [];
+  });
+
+  React.useEffect(() => {
+    pickedRef.current = pickedIds;
+  }, [pickedIds]);
 
   React.useEffect(() => {
     setOpenedFromOrder(new URLSearchParams(window.location.search).get("return") === "order");
@@ -251,8 +597,10 @@ export default function NewTransferPage() {
       setFromWarehouseId(prefill.fromWarehouseId);
     }
     if (prefill.toWarehouseId) setToWarehouseId(prefill.toWarehouseId);
+    const ids = prefill.lines.map((line) => line.productId);
+    pickedRef.current = ids;
+    setPickedIds(ids);
     setLines(Object.fromEntries(prefill.lines.map((line) => [line.productId, { productId: line.productId, qty: String(line.quantity), unit: "" }])));
-    if (prefill.lines.length) setSelectedOnly(true);
     if (prefill.reference) setReference(prefill.reference);
   }, [recentToKey]);
 
@@ -270,25 +618,38 @@ export default function NewTransferPage() {
     if (store) setFromWarehouseId((current) => current || (store.id === toWarehouseId ? "" : store.id));
   }, [warehouses, lastFromKey, toWarehouseId]);
 
+  /** Re-read stock for the products already in the transfer whenever either store changes. */
   React.useEffect(() => {
     if (!fromWarehouseId) {
-      setSourceStock([]);
+      setStockRows({});
+      setSourceTotal(null);
       setStockLoading(false);
       return;
     }
     let cancelled = false;
+    const ids = pickedRef.current;
+    const to = toWarehouseId || undefined;
     setStockLoading(true);
     setStockError("");
-    const request = toWarehouseId ? fetchTransferStock(fromWarehouseId, toWarehouseId) : fetchTransferStock(fromWarehouseId);
-    void request
-      .then((next) => {
-        if (!cancelled) setSourceStock(next);
+    void Promise.all([
+      fetchTransferStock({ warehouseId: fromWarehouseId, limit: 1 }),
+      ids.length ? fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: to, productIds: ids, limit: 100 }) : Promise.resolve(null),
+    ])
+      .then(([summary, picked]) => {
+        if (cancelled) return;
+        setSourceTotal(summary.total);
+        const fetched = new Map((picked?.items ?? []).map((row) => [row.productId, row]));
+        const requested = new Set(ids);
+        setStockRows((current) => Object.fromEntries(pickedRef.current.flatMap((id) => {
+          const row = fetched.get(id) ?? (requested.has(id) ? undefined : current[id]);
+          return row ? [[id, row]] : [];
+        })));
       })
       .catch((error: Error) => {
-        if (!cancelled) {
-          setSourceStock([]);
-          setStockError(error.message || "Warehouse stock could not load.");
-        }
+        if (cancelled) return;
+        setStockRows({});
+        setSourceTotal(null);
+        setStockError(error.message || "Warehouse stock could not load.");
       })
       .finally(() => {
         if (!cancelled) setStockLoading(false);
@@ -306,7 +667,6 @@ export default function NewTransferPage() {
     }
     if (value === fromWarehouseId) return;
     setFromWarehouseId(value);
-    setSourceStock([]);
     setStockLoading(Boolean(value));
     if (toWarehouseId === value) setToWarehouseId("");
   }
@@ -321,9 +681,36 @@ export default function NewTransferPage() {
     const nextTo = fromWarehouseId;
     setFromWarehouseId(toWarehouseId);
     setToWarehouseId(nextTo);
-    setSourceStock([]);
     setStockLoading(true);
   }
+
+  const addProducts = React.useCallback((rows: TransferStockRow[], focus: boolean) => {
+    if (!rows.length) return;
+    setStockRows((current) => ({ ...current, ...Object.fromEntries(rows.map((row) => [row.productId, row])) }));
+    setPickedIds((current) => {
+      const next = [...current, ...rows.map((row) => row.productId).filter((id) => !current.includes(id))];
+      pickedRef.current = next;
+      return next;
+    });
+    const target = rows.find((row) => row.available > 0) ?? rows[0];
+    if (focus && target) window.requestAnimationFrame(() => quantityInput(target.productId)?.focus());
+  }, []);
+
+  const pickFromSearch = React.useCallback((row: TransferStockRow) => addProducts([row], true), [addProducts]);
+  const addFromBrowse = React.useCallback((rows: TransferStockRow[]) => addProducts(rows, true), [addProducts]);
+
+  const removeProduct = React.useCallback((productId: string) => {
+    setPickedIds((current) => {
+      const next = current.filter((id) => id !== productId);
+      pickedRef.current = next;
+      return next;
+    });
+    setLines((current) => {
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
+  }, []);
 
   const updateLine = React.useCallback<UpdateLine>((productId, stockUnit, patch) => {
     setLines((current) => ({
@@ -344,9 +731,9 @@ export default function NewTransferPage() {
       });
   }, []);
 
-  const lineDetails = (line: TransferLineDraft) => describeLine(line, stockByProduct.get(line.productId), packaging[line.productId]);
+  const lineDetails = (line: TransferLineDraft) => describeLine(line, stockRows[line.productId], packaging[line.productId]);
 
-  const missingLines = stockLoading || stockError ? [] : selectedLines.filter((line) => !stockByProduct.has(line.productId));
+  const missingIds = stockLoading || stockError || !fromWarehouseId ? [] : pickedIds.filter((id) => !stockRows[id]);
   const hasValidLines = selectedLines.length > 0 && selectedLines.every((line) => {
     const { stock, factor, baseQty, over } = lineDetails(line);
     return Boolean(stock && factor && Number.isFinite(baseQty) && baseQty > 0 && !over);
@@ -354,9 +741,10 @@ export default function NewTransferPage() {
   const ready = !busy && !stockLoading && !stockError && Boolean(date && fromWarehouseId && toWarehouseId) && hasValidLines;
   const blocker = !fromWarehouseId ? "Choose where the stock comes from."
     : !toWarehouseId ? "Choose where the stock goes."
-      : !selectedLines.length ? "Enter a quantity for at least one product."
-        : !hasValidLines ? "Fix the quantities marked in red."
-          : "";
+      : !pickedIds.length ? "Search for a product, or browse the store, to add it."
+        : !selectedLines.length ? "Enter a quantity for at least one product."
+          : !hasValidLines ? "Fix the quantities marked in red."
+            : "";
 
   function remember() {
     writeStored(lastFromKey, [fromWarehouseId]);
@@ -436,8 +824,9 @@ export default function NewTransferPage() {
   function startAgain(keepTo: boolean) {
     setDone(null);
     setLines({});
-    setSearch("");
-    setSelectedOnly(false);
+    setPickedIds([]);
+    pickedRef.current = [];
+    setStockRows({});
     setReference("");
     setTransferCostKes("");
     setCostNotes("");
@@ -519,9 +908,9 @@ export default function NewTransferPage() {
               <StorePanel
                 tone="from"
                 footer={!fromWarehouseId ? "The store holding the stock, for example the production store."
-                  : stockLoading ? "Loading stock…"
+                  : stockLoading && sourceTotal === null ? "Loading stock…"
                     : stockError ? null
-                      : `${sourceStock.length} product${sourceStock.length === 1 ? "" : "s"} in stock`}
+                      : sourceTotal !== null ? `${sourceTotal} product${sourceTotal === 1 ? "" : "s"} in stock` : null}
               >
                 <Label htmlFor="transfer-from-warehouse" className="sr-only">From warehouse</Label>
                 <AsyncSearchableSelect
@@ -554,10 +943,7 @@ export default function NewTransferPage() {
               </div>
               <StorePanel
                 tone="to"
-                footer={!toWarehouseId ? "The route or store that will pick the orders."
-                  : fromWarehouseId && !stockLoading && !stockError && sourceStock.length
-                    ? `${alreadyThere} of these product${alreadyThere === 1 ? " is" : "s are"} already here`
-                    : null}
+                footer={!toWarehouseId ? "The route or store that will pick the orders." : null}
               >
                 <Label htmlFor="transfer-to-warehouse" className="sr-only">To warehouse</Label>
                 <AsyncSearchableSelect
@@ -610,61 +996,51 @@ export default function NewTransferPage() {
             {warehouseError && <p role="alert" className="border-t px-4 py-2 text-sm text-destructive">{warehouseError}</p>}
           </section>
 
-          {missingLines.length > 0 && (
+          {missingIds.length > 0 && (
             <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
-              {missingLines.length === 1 ? "1 product has" : `${missingLines.length} products have`} no available stock in {fromStore?.label ?? "this store"}. Choose another store, or remove {missingLines.length === 1 ? "it" : "them"}. Finished goods held for QC cannot move until QC accepts them.{" "}
-              <button type="button" className="font-medium underline" onClick={() => setLines((current) => {
-                const next = { ...current };
-                for (const line of missingLines) delete next[line.productId];
-                return next;
-              })}>Remove {missingLines.length === 1 ? "it" : "them"}</button>
+              {missingIds.length === 1 ? "1 product has" : `${missingIds.length} products have`} no available stock in {fromStore?.label ?? "this store"}. Choose another store, or remove {missingIds.length === 1 ? "it" : "them"}. Finished goods held for QC cannot move until QC accepts them.{" "}
+              <button type="button" className="font-medium underline" onClick={() => missingIds.forEach(removeProduct)}>Remove {missingIds.length === 1 ? "it" : "them"}</button>
             </p>
           )}
 
-          <section className="overflow-hidden rounded-xl border bg-card shadow-sm" aria-labelledby="source-stock">
-            <div className="flex flex-wrap items-center gap-3 border-b p-3 sm:px-4">
-              <h2 id="source-stock" className="mr-auto font-semibold">Products</h2>
-              <div className="relative w-full sm:w-72">
-                <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                <Input className="pl-8" aria-label="Search source stock" placeholder="Name, SKU, code or barcode"
-                  value={search} onChange={(event) => setSearch(event.target.value)} disabled={!sourceStock.length} />
+          <section className="rounded-xl border bg-card shadow-sm" aria-labelledby="transfer-products">
+            <div className="space-y-3 border-b p-3 sm:p-4">
+              <div className="flex items-baseline justify-between gap-3">
+                <h2 id="transfer-products" className="font-semibold">Products to transfer</h2>
+                {pickedIds.length ? (
+                  <span className="text-xs text-muted-foreground">{pickedIds.length} added · {selectedLines.length} with a quantity</span>
+                ) : null}
               </div>
-              <div role="group" aria-label="Show" className="inline-flex rounded-lg border bg-muted/40 p-0.5 text-sm">
-                {([false, true] as const).map((only) => (
-                  <button
-                    key={String(only)}
-                    type="button"
-                    aria-pressed={selectedOnly === only}
-                    disabled={!sourceStock.length}
-                    onClick={() => setSelectedOnly(only)}
-                    className={cn(
-                      "rounded-md px-3 py-1 font-medium transition disabled:opacity-50",
-                      selectedOnly === only ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {only ? `In this transfer · ${selectedLines.length}` : "All"}
-                  </button>
-                ))}
-              </div>
+              <ProductSearch
+                fromWarehouseId={fromWarehouseId}
+                toWarehouseId={toWarehouseId}
+                fromShort={fromShort}
+                toShort={toShort}
+                pickedIds={pickedSet}
+                disabled={busy}
+                onPick={pickFromSearch}
+                onBrowse={() => setBrowseOpen(true)}
+              />
             </div>
-            {!fromWarehouseId ? (
-              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Icons.Warehouse className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
-                <p className="text-sm text-muted-foreground">Choose the store the stock comes from to see what it holds.</p>
-              </div>
-            ) : stockLoading && !sourceStock.length ? (
-              <div role="status" className="space-y-2 p-4">
-                <span className="sr-only">Loading warehouse stock…</span>
-                {[0, 1, 2, 3].map((i) => <div key={i} className="h-11 animate-pulse rounded-md bg-muted/60" />)}
-              </div>
-            ) : stockError ? (
+            {stockError ? (
               <p role="alert" className="p-4 text-sm text-destructive">{stockError}{" "}
                 <button type="button" className="underline" onClick={() => setStockRefresh((value) => value + 1)}>Retry</button></p>
-            ) : !rows.length ? (
-              <p className="px-4 py-10 text-center text-sm text-muted-foreground">{sourceStock.length ? "No products match your filters." : "This store has no stock to transfer."}</p>
-            ) : (
-              <div className="max-h-[62dvh] overflow-auto">
-                <table className="w-full min-w-[46rem] text-sm">
+            ) : !pickedIds.length ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Icons.PackageSearch className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
+                <p className="text-sm font-medium">No products added yet</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  {fromWarehouseId ? `Search above, scan a barcode, or browse what ${fromShort} holds. Only the products you add show here.` : "Choose the store the stock comes from, then search for the products to move."}
+                </p>
+              </div>
+            ) : stockLoading && !pickedRows.length ? (
+              <div role="status" className="space-y-2 p-4">
+                <span className="sr-only">Loading warehouse stock…</span>
+                {pickedIds.slice(0, 4).map((id) => <div key={id} className="h-11 animate-pulse rounded-md bg-muted/60" />)}
+              </div>
+            ) : pickedRows.length ? (
+              <div aria-busy={stockLoading} className={cn("max-h-[62dvh] overflow-auto rounded-b-xl transition-opacity", stockLoading && "opacity-60")}>
+                <table className="w-full min-w-[48rem] text-sm">
                   <thead className="sticky top-0 z-10 bg-card text-left text-xs uppercase tracking-wide text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
                     <tr>
                       <th className="px-4 py-2.5 font-medium">Product</th>
@@ -678,7 +1054,7 @@ export default function NewTransferPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {pickedRows.map((row) => (
                       <TransferRow
                         key={row.productId}
                         row={row}
@@ -688,13 +1064,30 @@ export default function NewTransferPage() {
                         busy={busy}
                         onUpdate={updateLine}
                         onLoadUnits={loadUnits}
+                        onRemove={removeProduct}
                       />
                     ))}
                   </tbody>
                 </table>
               </div>
-            )}
+            ) : !fromWarehouseId ? (
+              <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+                {pickedIds.length} product{pickedIds.length === 1 ? " is" : "s are"} ready. Choose the store the stock comes from to see what it holds.
+              </p>
+            ) : null}
           </section>
+
+          <BrowseStockDialog
+            open={browseOpen}
+            onOpenChange={setBrowseOpen}
+            fromWarehouseId={fromWarehouseId}
+            toWarehouseId={toWarehouseId}
+            fromLabel={fromStore?.label ?? fromShort}
+            fromShort={fromShort}
+            toShort={toShort}
+            pickedIds={pickedSet}
+            onAdd={addFromBrowse}
+          />
 
           <details className="group rounded-xl border bg-card px-4 py-3 shadow-sm">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-medium">
@@ -725,7 +1118,7 @@ export default function NewTransferPage() {
           <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
             <div className="mr-auto min-w-0 text-sm" aria-live="polite">
               <p className="font-medium">
-                {selectedLines.length} product{selectedLines.length === 1 ? "" : "s"} selected
+                {selectedLines.length} product{selectedLines.length === 1 ? "" : "s"} to move
                 {fromWarehouseId && toWarehouseId ? <span className="font-normal text-muted-foreground"> · {fromShort} → {toShort}</span> : null}
               </p>
               {blocker ? <p className="text-xs text-muted-foreground">{blocker}</p> : null}

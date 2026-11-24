@@ -21,12 +21,39 @@ export type TransferStockRow = {
   destination?: { quantity: number; available: number };
 };
 
-export async function fetchTransferStock(warehouseId: string, toWarehouseId?: string): Promise<TransferStockRow[]> {
+export type TransferStockQuery = {
+  warehouseId: string;
+  toWarehouseId?: string;
+  search?: string;
+  /** Only these products. Used to refresh the products already in a transfer. */
+  productIds?: string[];
+  limit?: number;
+  offset?: number;
+};
+
+export async function fetchTransferStock(query: TransferStockQuery): Promise<{ items: TransferStockRow[]; total: number; hasMore: boolean }> {
   requireLiveApi("Transfer stock");
-  const result = await apiRequest<{ items: TransferStockRow[] }>("/api/warehouse/transfers/stock", {
-    params: { warehouseId, ...(toWarehouseId ? { toWarehouseId } : {}) },
+  const result = await apiRequest<{ items: TransferStockRow[]; total?: number; hasMore?: boolean }>("/api/warehouse/transfers/stock", {
+    params: listParams({
+      warehouseId: query.warehouseId,
+      toWarehouseId: query.toWarehouseId,
+      search: query.search?.trim(),
+      productIds: query.productIds?.join(","),
+      limit: String(query.limit ?? 25),
+      offset: String(query.offset ?? 0),
+    }),
   });
-  return result.items;
+  const items = result.items ?? [];
+  if (result.total !== undefined) return { items, total: result.total, hasMore: Boolean(result.hasMore) };
+  // Older API versions return the whole store at once.
+  const needle = query.search?.trim().toLowerCase();
+  const matching = items.filter((row) =>
+    (!query.productIds || query.productIds.includes(row.productId))
+    && (!needle || [row.name, row.sku, row.code, row.barcode].some((value) => value?.toLowerCase().includes(needle))))
+    .sort((a, b) => (a.sku || a.name).localeCompare(b.sku || b.name, undefined, { numeric: true }));
+  const offset = query.offset ?? 0;
+  const limit = query.limit ?? 25;
+  return { items: matching.slice(offset, offset + limit), total: matching.length, hasMore: offset + limit < matching.length };
 }
 
 function listParams(p?: Record<string, string | undefined>): Record<string, string> {
