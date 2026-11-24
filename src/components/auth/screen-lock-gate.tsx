@@ -11,6 +11,7 @@ import { signOutOfErp } from "@/lib/auth/sign-out-erp";
 import {
   CHANGE_LOCK_PASSWORD_EVENT,
   DEFAULT_LOCK_IDLE_MINUTES,
+  blankLockIdlePart,
   formatLockDuration,
   idleLockMessage,
   isIdle,
@@ -21,6 +22,7 @@ import {
   parseLockIdleParts,
   readLastActivity,
   splitLockIdle,
+  typedLockIdlePart,
   setScreenLocked,
   touchActivity,
   writeLastActivity,
@@ -40,7 +42,7 @@ const LOCK_IDLE_PRESETS = [
 
 function idleFields(totalMinutes: unknown): { hours: string; minutes: string } {
   const parts = splitLockIdle(totalMinutes);
-  return { hours: String(parts.hours), minutes: String(parts.minutes) };
+  return { hours: blankLockIdlePart(parts.hours), minutes: blankLockIdlePart(parts.minutes) };
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -381,19 +383,24 @@ export function ScreenLockGate() {
                   </Label>
                   <Input
                     id="screen-lock-hours"
-                    type="number"
+                    type="text"
                     inputMode="numeric"
-                    min={0}
-                    max={24}
-                    step={1}
-                    required
+                    autoComplete="off"
                     aria-label="Hours"
+                    placeholder="0"
                     className="w-20"
                     value={idleHours}
+                    onFocus={(event) => {
+                      if (!event.currentTarget.value || event.currentTarget.value === "0") {
+                        setIdleHours("");
+                        return;
+                      }
+                      event.currentTarget.select();
+                    }}
                     onChange={(event) => {
-                      const next = event.target.value;
+                      const next = typedLockIdlePart(event.target.value);
                       setIdleHours(next);
-                      if (Number(next) >= 24) setIdleMins("0");
+                      if (Number(next) >= 24) setIdleMins("");
                     }}
                   />
                   <span className="text-sm text-muted-foreground">hr</span>
@@ -402,17 +409,22 @@ export function ScreenLockGate() {
                   </Label>
                   <Input
                     id="screen-lock-minutes"
-                    type="number"
+                    type="text"
                     inputMode="numeric"
-                    min={0}
-                    max={59}
-                    step={1}
-                    required
+                    autoComplete="off"
                     aria-label="Minutes"
+                    placeholder="0"
                     className="w-20"
                     value={idleMins}
                     disabled={Number(idleHours) >= 24}
-                    onChange={(event) => setIdleMins(event.target.value)}
+                    onFocus={(event) => {
+                      if (!event.currentTarget.value || event.currentTarget.value === "0") {
+                        setIdleMins("");
+                        return;
+                      }
+                      event.currentTarget.select();
+                    }}
+                    onChange={(event) => setIdleMins(typedLockIdlePart(event.target.value))}
                   />
                   <span className="text-sm text-muted-foreground">min</span>
                 </div>

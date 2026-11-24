@@ -33,20 +33,30 @@ export function formatLockDuration(totalMinutes: unknown): string {
   return `${hourLabel} ${minuteLabel}`;
 }
 
+/** A blank field means zero, so the box can show 0 as a placeholder. */
+export function blankLockIdlePart(value: number): string {
+  return value === 0 ? "" : String(value);
+}
+
+/** Drop a leading zero so typing 1 into an empty hour box stays 1. */
+export function typedLockIdlePart(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  const value = Number(digits);
+  return value === 0 ? "" : String(value);
+}
+
 export function parseLockIdleParts(
   hoursRaw: string,
   minutesRaw: string
 ): { minutes: number } | { error: string } {
   const hoursText = hoursRaw.trim();
   const minutesText = minutesRaw.trim();
-  if (!hoursText || !minutesText) {
-    return { error: "Enter hours and minutes. The shortest wait is 1 minute, and the longest is 24 hours." };
-  }
-  if (!/^\d+$/.test(hoursText) || !/^\d+$/.test(minutesText)) {
+  if ((hoursText && !/^\d+$/.test(hoursText)) || (minutesText && !/^\d+$/.test(minutesText))) {
     return { error: "Use whole hours and minutes." };
   }
-  const hours = Number(hoursText);
-  const minutes = Number(minutesText);
+  const hours = hoursText ? Number(hoursText) : 0;
+  const minutes = minutesText ? Number(minutesText) : 0;
   if (hours > 24 || minutes > 59) {
     return { error: "Use up to 24 hours, and 0 to 59 minutes." };
   }
