@@ -3348,7 +3348,7 @@ export function DocumentCreateWizard({
             <div className={cn(!linesStepReady && !skipEmptyQuantities && "pointer-events-none opacity-60")}>
             {salesLayoutReady ? <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
-              fixedItemCodes={lineEditorMode === "sales" ? operatingProfile.orderSheetItemCodes : undefined}
+              fixedOrderSheet={lineEditorMode === "sales" && operatingProfile.fixedOrderSheet}
               lineByLine={lineByLine}
               packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}

@@ -113,10 +113,10 @@ interface DocumentLineEditorProps {
    */
   sheetFinishedGoods?: boolean;
   /**
-   * With `sheetFinishedGoods`: list every product whose item code is in this range as a zero-quantity row.
+   * With `sheetFinishedGoods`: list every active finished good as a zero-quantity row.
    * No search, browse or row removal; quantities left at zero are not saved.
    */
-  fixedItemCodes?: { from: number; to: number };
+  fixedOrderSheet?: boolean;
   lineByLine?: boolean;
   /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
   repriceExistingRevision?: number;
@@ -267,7 +267,7 @@ export function DocumentLineEditor({
   pricingByProductId,
   productFilter,
   sheetFinishedGoods = false,
-  fixedItemCodes,
+  fixedOrderSheet = false,
   lineByLine = false,
   repriceExistingRevision = 0,
   taxCodes = [],
@@ -287,9 +287,7 @@ export function DocumentLineEditor({
   stockShortByProductId,
 }: DocumentLineEditorProps) {
   const inlineCatalogue = lineByLine && !fmcgOrg;
-  const fixedSheet = sheetFinishedGoods && Boolean(fixedItemCodes);
-  const fixedFrom = fixedSheet ? fixedItemCodes?.from : undefined;
-  const fixedTo = fixedSheet ? fixedItemCodes?.to : undefined;
+  const fixedSheet = sheetFinishedGoods && fixedOrderSheet;
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
@@ -446,18 +444,18 @@ export function DocumentLineEditor({
     setSheetCursor(null);
     sheetGenerationRef.current += 1;
     let nextSheetCursor: string | null = null;
-    const loadFixedSheet = async (range: { from: number; to: number }) => {
+    const loadFixedSheet = async () => {
       const rows: ProductRow[] = [];
       let cursor: string | null = "0";
       for (let page = 0; cursor != null && page < 6; page += 1) {
-        const result = await fetchFinishedGoodsPage({ itemCodes: range, cursor, limit: 100 });
+        const result = await fetchFinishedGoodsPage({ finishedGoodsOnly: true, cursor, limit: 100 });
         rows.push(...result.items);
         cursor = result.nextCursor;
       }
       return rows;
     };
-    const load = fixedFrom != null && fixedTo != null
-      ? loadFixedSheet({ from: fixedFrom, to: fixedTo })
+    const load = fixedSheet
+      ? loadFixedSheet()
       : sheetFinishedGoods
         ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName }).then((page) => {
             nextSheetCursor = page.nextCursor;
@@ -498,7 +496,7 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry, lineByLine, fmcgOrg, fixedFrom, fixedTo]);
+  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry, lineByLine, fmcgOrg, fixedSheet]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
@@ -828,7 +826,7 @@ export function DocumentLineEditor({
     ]
   );
 
-  /** Fixed order sheet: every product in the item-code range starts as a zero-quantity row. */
+  /** Fixed order sheet: every active finished good starts as a zero-quantity row. */
   React.useEffect(() => {
     if (!fixedSheet || !sheetCatalogReady || (packSizeFromName && !fmcgCatalogByProductId)) return;
     if (!filteredProducts?.length) return;
@@ -1767,9 +1765,7 @@ export function DocumentLineEditor({
         <p className="text-sm text-muted-foreground">Loading order sheet…</p>
       ) : null}
       {fixedSheet && !catalogError && filteredProducts?.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          No active products with item codes {fixedItemCodes?.from} to {fixedItemCodes?.to}.
-        </p>
+        <p className="text-sm text-muted-foreground">No active finished goods to order.</p>
       ) : null}
 
       {!inlineCatalogue && !fixedSheet && <DocumentProductPickerSheet

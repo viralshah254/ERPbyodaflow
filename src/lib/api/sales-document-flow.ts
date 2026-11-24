@@ -8,8 +8,6 @@ export function isRouteDispatchMode(mode: string | null | undefined): boolean {
   return mode === "route_dispatch" || mode === "joy_dispatch";
 }
 
-export type OrderSheetItemCodes = { from: number; to: number };
-
 export type SalesDocumentFlowSettings = {
   mode: SalesDocumentFlowMode;
   requireSalesOrderApprovalBeforePicking: boolean;
@@ -27,8 +25,8 @@ export type SalesDocumentFlowSettings = {
   sendPodNotification: boolean;
   prefillSalesOrderFinishedGoods: boolean;
   lineItemLayout?: SalesLineItemLayout;
-  /** Search-and-browse layout only: list every product with an item code in this range. `null` clears it. */
-  orderSheetItemCodes?: OrderSheetItemCodes | null;
+  /** Search-and-browse layout only: list every active finished good, with no search or browse. */
+  fixedOrderSheet?: boolean;
   routeCollectionsEnabled?: boolean;
   /** Route dispatch: the store trucks are loaded from. */
   dispatchWarehouseId?: string;
