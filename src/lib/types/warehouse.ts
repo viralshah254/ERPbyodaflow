@@ -24,7 +24,9 @@ export interface TransferRow {
   id: string;
   number: string;
   date: string;
+  fromWarehouseId?: string;
   fromWarehouse: string;
+  toWarehouseId?: string;
   toWarehouse: string;
   status: TransferStatus;
   lines: TransferLineRow[];

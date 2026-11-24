@@ -558,10 +558,12 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Due date</Label>
-            <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
-          </div>
+          {!bakery && (
+            <div className="space-y-2">
+              <Label>Due date</Label>
+              <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
+            </div>
+          )}
 
           {bomId && (
             <div className="space-y-2 rounded-md border p-3">
@@ -667,7 +669,7 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
                   measurementMode,
                   weighingRequired: measurementMode !== "COUNT_ONLY",
                   quantity: Number(quantity) || 0,
-                  dueDate: dueDate || undefined,
+                  dueDate: bakery ? undefined : dueDate || undefined,
                 });
                 resetForm();
                 onOpenChange(false);
