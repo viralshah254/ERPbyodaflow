@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
 import { Table } from "@/components/ui/table";
 import { MaterialComponentLinks } from "@/components/manufacturing/material-component-links";
+import { StorePicker, storeOptionLabel } from "@/components/manufacturing/store-picker";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import {
   checkWorkOrderAvailability,
@@ -35,30 +36,17 @@ import { fetchGRNs } from "@/lib/api/grn";
 import { fetchAllWarehousesApi } from "@/lib/api/warehouses";
 import { compareStoresForBatch, recommendOutputStore } from "@/lib/manufacturing/store-list-order";
 import { bomUnitGapText } from "@/lib/manufacturing/unit-gaps";
+import { productionVoice } from "@/lib/manufacturing/production-language";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { type PurchasingDocRow } from "@/lib/types/purchasing";
 import { isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
 
-const STORE_WINDOW = 40;
-
 type StoreRow = { id: string; code?: string; name: string; purpose?: string | null };
-
-function storeLabel(store: { code?: string; name?: string }) {
-  return [store.code, store.name].filter(Boolean).join(" — ");
-}
 
 function routeLabel(route: Pick<ManufacturingRoute, "code" | "name" | "operationCount" | "operations">) {
   const count = route.operationCount ?? route.operations?.length ?? 0;
   return `${route.code} - ${route.name} (${count} ops)`;
-}
-
-function windowStores(stores: StoreRow[], query: string, pinned: string[]) {
-  if (query) return { shown: stores, hidden: 0 };
-  const pin = new Set(pinned.filter(Boolean));
-  const head = stores.filter((store) => pin.has(store.id));
-  const rest = stores.filter((store) => !pin.has(store.id)).slice(0, STORE_WINDOW);
-  const shown = [...head, ...rest];
-  return { shown, hidden: Math.max(0, stores.length - shown.length) };
 }
 
 export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
@@ -70,6 +58,8 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }) {
+  const router = useRouter();
+  const bakery = productionVoice(useOrgContextStore((s) => s.templateId)) === "bakery";
   const [sheetMetaLoading, setSheetMetaLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [bomId, setBomId] = React.useState("");
@@ -81,8 +71,6 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
   const [warehouses, setWarehouses] = React.useState<StoreRow[]>([]);
   const [inputWarehouseIds, setInputWarehouseIds] = React.useState<string[]>([]);
   const [outputWarehouseId, setOutputWarehouseId] = React.useState("");
-  const [inputQuery, setInputQuery] = React.useState("");
-  const [outputQuery, setOutputQuery] = React.useState("");
   const [storeRecommendation, setStoreRecommendation] = React.useState<InputStoreRecommendation | null>(null);
   const [measurementMode, setMeasurementMode] = React.useState<ManufacturingWorkOrder["measurementMode"]>("COUNT_ONLY");
   const [quantity, setQuantity] = React.useState("1");
@@ -173,8 +161,6 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
     setSelectedRouteOption(null);
     setInputWarehouseIds([]);
     setOutputWarehouseId("");
-    setInputQuery("");
-    setOutputQuery("");
     setStoreRecommendation(null);
     setMeasurementMode("COUNT_ONLY");
     setGrnId("");
@@ -329,8 +315,6 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
 
   const hasShortfall = availLines.some((line) => line.shortfall > 0);
   const blockedByUnits = unitGaps.length > 0 || /conversion/i.test(availError);
-  const inputQueryText = inputQuery.trim().toLowerCase();
-  const outputQueryText = outputQuery.trim().toLowerCase();
   const storeCatalog = React.useMemo(() => (
     storeRecommendation && !warehouses.some((store) => store.id === storeRecommendation.warehouseId)
       ? [{ id: storeRecommendation.warehouseId, code: storeRecommendation.code, name: storeRecommendation.name || storeRecommendation.code || "Recommended store" }, ...warehouses]
@@ -344,10 +328,14 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
   const outputRecommendation = recommendOutputStore(storeCatalog, formulaOutputId);
   const outputRecommendedId = outputRecommendation?.id;
   const outputRecommendationReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, or Dispatch.";
-  const filteredInputs = storeCatalog.filter((store) => store.id === recommendedId || inputWarehouseIds.includes(store.id) || !inputQueryText || storeLabel(store).toLowerCase().includes(inputQueryText)).sort((a, b) => compareStoresForBatch(a, b, recommendedId, storeLabel));
-  const filteredOutputs = storeCatalog.filter((store) => store.id === outputWarehouseId || store.id === outputRecommendedId || !outputQueryText || storeLabel(store).toLowerCase().includes(outputQueryText)).sort((a, b) => compareStoresForBatch(a, b, outputRecommendedId, storeLabel));
-  const inputWindow = windowStores(filteredInputs, inputQueryText, [recommendedId ?? "", ...inputWarehouseIds]);
-  const outputWindow = windowStores(filteredOutputs, outputQueryText, [outputWarehouseId, outputRecommendedId ?? ""]);
+  const sortedInputs = React.useMemo(
+    () => [...storeCatalog].sort((a, b) => compareStoresForBatch(a, b, recommendedId, storeOptionLabel)),
+    [storeCatalog, recommendedId],
+  );
+  const sortedOutputs = React.useMemo(
+    () => [...storeCatalog].sort((a, b) => compareStoresForBatch(a, b, outputRecommendedId, storeOptionLabel)),
+    [storeCatalog, outputRecommendedId],
+  );
 
   React.useEffect(() => {
     if (!open || outputWarehouseId || !outputRecommendedId) return;
@@ -364,9 +352,11 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
     >
       <SheetContent className="w-full overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>New work order</SheetTitle>
+          <SheetTitle>{bakery ? "New baked batch" : "New work order"}</SheetTitle>
           <SheetDescription>
-            {grnId
+            {bakery
+              ? "Pick what was baked, how many, and the stores. You record the bake on the next screen."
+              : grnId
               ? "Link a GRN batch to track input weight and production outputs."
               : "Pick the finished or semi-finished SKU. The matching formula is attached so complete can issue raw materials and receive finished goods."}
           </SheetDescription>
@@ -525,66 +515,34 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
           </div>
 
           <div className="space-y-2">
-            <Label>Quantity</Label>
+            <Label>{bakery ? "How many were baked?" : "Quantity"}</Label>
             <Input type="number" min="0.001" step="0.001" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Input stores</Label>
-              <Input aria-label="Find an input store" placeholder="Find an input store" value={inputQuery} onChange={(event) => setInputQuery(event.target.value)} />
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
-                {sheetMetaLoading ? (
-                  <p className="px-1 py-1 text-xs text-muted-foreground">Loading stores…</p>
-                ) : inputWindow.shown.length === 0 ? (
-                  <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No input store matches that search."}</p>
-                ) : inputWindow.shown.map((warehouse) => (
-                  <div key={warehouse.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
-                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                      <Checkbox
-                        checked={inputWarehouseIds.includes(warehouse.id)}
-                        onCheckedChange={(value) => {
-                          setInputWarehouseIds((current) => value === true
-                            ? (current.includes(warehouse.id) ? current : [...current, warehouse.id])
-                            : current.filter((id) => id !== warehouse.id));
-                        }}
-                      />
-                      <span className="truncate">{storeLabel(warehouse)}</span>
-                    </label>
-                    {warehouse.id === recommendedId ? (
-                      <button type="button" title={recommendationReason} className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary" onClick={() => setInputWarehouseIds((current) => current.includes(warehouse.id) ? current : [...current, warehouse.id])}>Recommended</button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-              {inputWindow.hidden > 0 && (
-                <p className="text-xs text-muted-foreground">Type to find the other {inputWindow.hidden} stores.</p>
-              )}
-            </div>
-            <div className="space-y-2">
-              <Label>Output store</Label>
-              <Input aria-label="Find an output store" placeholder="Find an output store" value={outputQuery} onChange={(event) => setOutputQuery(event.target.value)} />
-              <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2">
-                {sheetMetaLoading ? (
-                  <p className="px-1 py-1 text-xs text-muted-foreground">Loading stores…</p>
-                ) : outputWindow.shown.length === 0 ? (
-                  <p className="px-1 py-1 text-xs text-muted-foreground">{warehouses.length === 0 ? "No stores found." : "No output store matches that search."}</p>
-                ) : outputWindow.shown.map((warehouse) => (
-                  <div key={warehouse.id} className="flex items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
-                    <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
-                      <input type="radio" name="create-output-store" checked={outputWarehouseId === warehouse.id} onChange={() => setOutputWarehouseId(warehouse.id)} />
-                      <span className="truncate">{storeLabel(warehouse)}</span>
-                    </label>
-                    {warehouse.id === outputRecommendedId ? (
-                      <button type="button" title={outputRecommendationReason} className="shrink-0 rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary" onClick={() => setOutputWarehouseId(warehouse.id)}>Recommended</button>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-              {outputWindow.hidden > 0 && (
-                <p className="text-xs text-muted-foreground">Type to find the other {outputWindow.hidden} stores.</p>
-              )}
-            </div>
+            <StorePicker
+              mode="multiple"
+              label="Input stores"
+              hint={recommendedId && !inputWarehouseIds.length ? "Pick where the ingredients come from. The recommended store has the most of them." : undefined}
+              stores={sortedInputs}
+              loading={sheetMetaLoading}
+              value={inputWarehouseIds}
+              onChange={setInputWarehouseIds}
+              recommendedId={recommendedId}
+              recommendedReason={recommendationReason}
+              searchPlaceholder="Find an input store"
+            />
+            <StorePicker
+              mode="single"
+              label="Output store"
+              stores={sortedOutputs}
+              loading={sheetMetaLoading}
+              value={outputWarehouseId}
+              onChange={setOutputWarehouseId}
+              recommendedId={outputRecommendedId}
+              recommendedReason={outputRecommendationReason}
+              searchPlaceholder="Find an output store"
+            />
           </div>
 
           <div className="space-y-2">
@@ -698,7 +656,7 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
             onClick={async () => {
               setSaving(true);
               try {
-                await createManufacturingWorkOrder({
+                const created = await createManufacturingWorkOrder({
                   productId,
                   bomId: bomId || undefined,
                   routingId: routingId || undefined,
@@ -711,10 +669,11 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
                   quantity: Number(quantity) || 0,
                   dueDate: dueDate || undefined,
                 });
-                toast.success("Work order created.");
                 resetForm();
                 onOpenChange(false);
                 onCreated();
+                if (bakery) router.push(`/manufacturing/work-orders/${encodeURIComponent(created.id)}`);
+                else toast.success("Work order created.");
               } catch (error) {
                 toast.error(error instanceof Error ? error.message : "Failed to create work order.");
               } finally {
@@ -723,7 +682,7 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
             }}
           >
             {hasShortfall && <AlertTriangle className="mr-2 h-4 w-4 text-amber-400" />}
-            Create work order
+            {bakery ? "Continue to record bake" : "Create work order"}
           </Button>
         </SheetFooter>
       </SheetContent>

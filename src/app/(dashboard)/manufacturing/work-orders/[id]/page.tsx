@@ -25,7 +25,7 @@ import { MaterialComponentLinks } from "@/components/manufacturing/material-comp
 import { MaterialShortageNotice } from "@/components/manufacturing/material-shortage-notice";
 import { materialShortagesFromError, readableProductName, type MaterialShortageRow } from "@/lib/manufacturing/material-shortage";
 import { manufacturingAreaLabel, t } from "@/lib/terminology";
-import { productionTerms } from "@/lib/manufacturing/production-language";
+import { productionTerms, productionVoice } from "@/lib/manufacturing/production-language";
 import { storeDisplayName } from "@/lib/warehouse/store-label";
 import { isSeafoodOrg } from "@/config/industry";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
@@ -40,6 +40,7 @@ import { printProductionSheet } from "@/lib/manufacturing/production-sheet";
 import { DeviceReadingPicker } from "@/components/manufacturing/device-reading-picker";
 import { WorkOrderFloor } from "@/components/manufacturing/work-order-floor";
 import { WorkOrderPreparation } from "@/components/manufacturing/work-order-preparation";
+import { BakeryBatchRecorder } from "@/components/manufacturing/bakery-batch-recorder";
 import { completionInputDefaults, completionIssueShortages } from "@/lib/manufacturing/completion-inputs";
 import * as Icons from "lucide-react";
 
@@ -106,6 +107,8 @@ export default function WorkOrderDetailPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const seafoodOrg = isSeafoodOrg(templateId, industryCategory);
   const terms = productionTerms(templateId);
+  const bakery = productionVoice(templateId) === "bakery";
+  const [editingStores, setEditingStores] = React.useState(false);
 
   const [order, setOrder] = React.useState<ManufacturingWorkOrder | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -247,6 +250,7 @@ export default function WorkOrderDetailPage() {
       );
       if (action === "complete") { setMeasuredWeight(""); setDeviceReadingId(""); }
       if (action === "complete" && next.status === "COMPLETED" && canTransfer) setTransferOfferOpen(true);
+      if (action === "reopen") setEditingStores(true);
       if (action === "reopen") window.setTimeout(() => document.getElementById("prepare-batch")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
       if (action === "cancel") router.push("/manufacturing/work-orders");
     } catch (error) {
@@ -286,7 +290,9 @@ export default function WorkOrderDetailPage() {
                       <span className="mt-0.5 block font-mono text-xs">{productBarcode}</span>
                     ) : null}
                     <span className="mt-1 block">
-                      Walk this batch through release, start, and complete — not from the list.
+                      {bakery
+                        ? "Record what came out of the oven. Stock moves in one step."
+                        : "Walk this batch through release, start, and complete — not from the list."}
                     </span>
                   </>
                 )
@@ -331,10 +337,38 @@ export default function WorkOrderDetailPage() {
                 ) : null}
               </div>
             ) : null}
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives the output into the selected store. That store has to be a shelf store, or the quantity shows as 0. Plants that use quality control hold the lot until QC accepts it. Do not add the output again with a stock adjustment.</p></div><div className="flex flex-wrap gap-2">{transfer && <Button variant="outline" asChild><Link href={transfer.href}><Icons.ArrowLeftRight className="mr-2 h-4 w-4" />Move to another store</Link></Button>}{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div></div>
-            {canWrite && order.status === "DRAFT" && <div id="prepare-batch"><WorkOrderPreparation order={order} restartToken={restartToken} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} /></div>}
-            {canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
-            <Card data-tutorial-hint="work-order-lifecycle">
+            {bakery && order.status !== "CANCELLED" ? (
+              canWrite && order.status === "DRAFT" && (editingStores || order.preparationStatus === "REQUIRED" || !order.materialLines.length) ? (
+                <div id="prepare-batch">
+                  <WorkOrderPreparation
+                    quick
+                    order={order}
+                    onSaved={(next) => { setOrder(next); setEditingStores(false); }}
+                    onCancel={order.materialLines.length && order.preparationStatus !== "REQUIRED" ? () => setEditingStores(false) : undefined}
+                  />
+                </div>
+              ) : canWrite || order.status === "COMPLETED" ? (
+                <BakeryBatchRecorder
+                  order={order}
+                  availLines={availLines}
+                  availLoading={availLoading}
+                  availError={availError}
+                  storeNames={storeNames}
+                  canApprove={canApprove}
+                  transferHref={transfer?.href}
+                  onOrderChange={setOrder}
+                  onCompleted={() => { if (canTransfer) setTransferOfferOpen(true); }}
+                  onChangeStores={order.status === "DRAFT" ? () => setEditingStores(true) : canChangeStores(order) ? () => setPendingAction("reopen") : undefined}
+                  onCancelBatch={(order.status === "DRAFT" || order.status === "RELEASED") && order.producedQuantity <= 0 && !order.materialLines.some((line) => line.issuedQuantity - line.returnedQuantity - line.consumedQuantity > 1e-9) ? () => setPendingAction("cancel") : undefined}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">You can view this batch, but recording it needs production access.</p>
+              )
+            ) : null}
+            {!bakery && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-primary/5 p-4"><div><p className="text-sm font-medium">{order.status === "DRAFT" ? "Prepare, then release to the production team" : order.status === "RELEASED" ? "Released to production · ready for the floor to start" : order.status === "IN_PROGRESS" ? "Record verified actual output before receiving stock" : "Finished output and quality release"}</p><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Completion consumes materials and receives the output into the selected store. That store has to be a shelf store, or the quantity shows as 0. Plants that use quality control hold the lot until QC accepts it. Do not add the output again with a stock adjustment.</p></div><div className="flex flex-wrap gap-2">{transfer && <Button variant="outline" asChild><Link href={transfer.href}><Icons.ArrowLeftRight className="mr-2 h-4 w-4" />Move to another store</Link></Button>}{order.producedQuantity > 0 && <Button variant="outline" asChild><Link href="/manufacturing/quality">Review finished lots in QC<Icons.ArrowRight className="ml-2 h-4 w-4" /></Link></Button>}</div></div>}
+            {!bakery && canWrite && order.status === "DRAFT" && <div id="prepare-batch"><WorkOrderPreparation order={order} restartToken={restartToken} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} /></div>}
+            {!bakery && canWrite && ["RELEASED", "IN_PROGRESS", "COMPLETED"].includes(order.status) && <WorkOrderFloor order={order} storeNames={storeNames} onSaved={(next) => { setOrder(next); setCompletionQuantity(String(next.openQuantity)); setActualInputs(completionInputDefaults(next, next.openQuantity)); }} />}
+            {(!bakery || order.status === "CANCELLED") && <Card data-tutorial-hint="work-order-lifecycle">
               <CardHeader className="pb-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <CardTitle className="text-lg">Production steps</CardTitle>
@@ -495,9 +529,9 @@ export default function WorkOrderDetailPage() {
                   </div>
                 ) : null}
               </CardContent>
-            </Card>
+            </Card>}
 
-            {order.status !== "COMPLETED" && order.status !== "CANCELLED" ? (
+            {!bakery && order.status !== "COMPLETED" && order.status !== "CANCELLED" ? (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Materials in the warehouse</CardTitle>
@@ -567,7 +601,7 @@ export default function WorkOrderDetailPage() {
               </Card>
             ) : null}
 
-            <Card data-tutorial-hint="work-order-reconciliation">
+            {!bakery && <Card data-tutorial-hint="work-order-reconciliation">
               <CardHeader>
                 <CardTitle className="text-lg">Production reconciliation</CardTitle>
                 <CardDescription>Actual WIP, mass, count, and cost closure from posted partial completions.</CardDescription>
@@ -581,7 +615,7 @@ export default function WorkOrderDetailPage() {
                   {order.completions.length} completion posting{order.completions.length === 1 ? "" : "s"} · snapshots and posting history are immutable.
                 </p>
               </CardContent>
-            </Card>
+            </Card>}
           </>
         )}
       </div>
