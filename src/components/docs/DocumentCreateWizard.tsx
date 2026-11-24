@@ -880,9 +880,16 @@ export function DocumentCreateWizard({
   const [routeTillChoice, setRouteTillChoice] = React.useState(
     () => (mode === "edit" ? existingDocument?.joyRoute?.tillNumber ?? "" : ""),
   );
+  const onRouteSalesRepChange = React.useCallback((rep: PickedSalesRep | null) => {
+    setRouteSalesRep(rep);
+    setRouteTillChoice(rep?.tillNumber ?? "");
+  }, []);
   const routeTills = React.useMemo(
-    () => [...new Set(activeCollectionRoute?.collectors.map((row) => row.tillNumber).filter(Boolean))],
-    [activeCollectionRoute],
+    () => [...new Set([
+      routeSalesRep?.tillNumber,
+      ...(activeCollectionRoute?.collectors.map((row) => row.tillNumber) ?? []),
+    ].filter(Boolean))],
+    [activeCollectionRoute, routeSalesRep],
   );
   const routeKnownToLookup = Boolean(
     activeCollectionRoute &&
@@ -890,9 +897,16 @@ export function DocumentCreateWizard({
     !activeRouteLookup.error &&
     (activeRouteLookup.routes ?? []).some((route) => route.id === activeCollectionRoute.id),
   );
-  const routeTill = routeKnownToLookup
-    ? (routeTills.includes(routeTillChoice) ? routeTillChoice : routeTills[0] ?? "")
-    : routeTillChoice;
+  const collectorTills = activeCollectionRoute?.collectors.map((row) => row.tillNumber).filter(Boolean) ?? [];
+  const routeTill = routeTills.includes(routeTillChoice)
+    ? routeTillChoice
+    : routeSalesRep?.tillNumber && routeTillChoice === routeSalesRep.tillNumber
+      ? routeTillChoice
+      : collectorTills.length === 0 && /^\d{3,20}$/.test(routeTillChoice)
+        ? routeTillChoice
+        : routeKnownToLookup
+          ? (routeTills[0] ?? "")
+          : routeTillChoice;
   const routeReadyForSave = Boolean(
     activeCollectionRoute && (
       (isEditMode && existingDocument?.joyRoute) ||
@@ -3107,7 +3121,7 @@ export function DocumentCreateWizard({
                     setRouteSelection({ key: routeLookupKey, routeId });
                   }}
                   salesRep={routeSalesRep}
-                  onSalesRepChange={setRouteSalesRep}
+                  onSalesRepChange={onRouteSalesRepChange}
                   tillNumber={routeTill}
                   onTillChange={setRouteTillChoice}
                   legacyPickStoreLabel={legacyRouteSourceLabel}

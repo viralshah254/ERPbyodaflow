@@ -11,12 +11,21 @@ import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetT
 import { createSfaSalesRep, fetchSfaSalesReps, type SfaSalesArea } from "@/lib/api/sfa-sales-reps";
 
 /** What ERP keeps for a rep on an order or loader note. */
-export type PickedSalesRep = { id: string; name: string; phone?: string };
+export type PickedSalesRep = { id: string; name: string; phone?: string; tillNumber?: string };
 
-const repOption = (rep: PickedSalesRep & { areaName?: string }): AsyncSearchableSelectOption => ({
+export function pickSalesRep(rep: PickedSalesRep): PickedSalesRep {
+  return {
+    id: rep.id,
+    name: rep.name,
+    ...(rep.phone ? { phone: rep.phone } : {}),
+    ...(rep.tillNumber ? { tillNumber: rep.tillNumber } : {}),
+  };
+}
+
+const repOption = (rep: PickedSalesRep & { areaName?: string; isActive?: boolean }): AsyncSearchableSelectOption => ({
   id: rep.id,
   label: rep.name,
-  description: [rep.phone, rep.areaName].filter(Boolean).join(" · ") || undefined,
+  description: [rep.phone, rep.areaName, rep.isActive === false ? "Inactive" : undefined].filter(Boolean).join(" · ") || undefined,
 });
 
 function errorText(error: unknown, fallback: string) {
@@ -35,8 +44,8 @@ function useSalesRepSearch(exclude: string[] = []) {
   const loadOptions = React.useCallback(async (query: string) => {
     const { reps: rows } = await fetchSfaSalesReps(query);
     const skip = new Set(excluded ? excluded.split("|") : []);
-    for (const rep of rows) reps.current.set(rep.id, { id: rep.id, name: rep.name, ...(rep.phone ? { phone: rep.phone } : {}) });
-    return rows.filter((rep) => !skip.has(rep.id)).map(repOption);
+    for (const rep of rows) reps.current.set(rep.id, pickSalesRep(rep));
+    return rows.filter((rep) => !skip.has(rep.id)).map((rep) => repOption(rep));
   }, [excluded]);
   return { loadOptions, find: (id: string) => reps.current.get(id) };
 }
@@ -52,13 +61,13 @@ export function AddSfaSalesRepSheet({
   initialQuery?: string;
   onCreated: (rep: PickedSalesRep) => void;
 }) {
-  const [form, setForm] = React.useState({ name: "", phone: "", email: "", regionName: "", areaName: "" });
+  const [form, setForm] = React.useState({ name: "", phone: "", email: "", tillNumber: "", regionName: "", areaName: "" });
   const [areas, setAreas] = React.useState<SfaSalesArea[]>([]);
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
-    setForm({ ...prefillFrom(initialQuery), email: "", regionName: "", areaName: "" });
+    setForm({ ...prefillFrom(initialQuery), email: "", tillNumber: "", regionName: "", areaName: "" });
     let active = true;
     fetchSfaSalesReps().then((data) => { if (active) setAreas(data.areas); }).catch(() => undefined);
     return () => { active = false; };
@@ -86,11 +95,12 @@ export function AddSfaSalesRepSheet({
         name: form.name.trim(),
         phone: form.phone.trim(),
         ...(form.email.trim() ? { email: form.email.trim() } : {}),
+        ...(form.tillNumber.trim() ? { tillNumber: form.tillNumber.trim() } : {}),
         regionName: form.regionName.trim(),
         areaName: form.areaName.trim(),
       });
       toast.success(rep.reused ? `${rep.name} is already a sales rep in SFA. Selected.` : `${rep.name} added to OdaFlow SFA.`);
-      onCreated({ id: rep.id, name: rep.name, ...(rep.phone ? { phone: rep.phone } : {}) });
+      onCreated(pickSalesRep(rep));
       onOpenChange(false);
     } catch (error) {
       toast.error(errorText(error, "Could not add the sales rep to OdaFlow SFA."));
@@ -120,6 +130,11 @@ export function AddSfaSalesRepSheet({
           <div className="space-y-1">
             <Label htmlFor="sfa-rep-email">Email (optional)</Label>
             <Input id="sfa-rep-email" type="email" value={form.email} onChange={set("email")} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="sfa-rep-till">M-Pesa till (optional)</Label>
+            <Input id="sfa-rep-till" inputMode="numeric" value={form.tillNumber} onChange={set("tillNumber")} placeholder="123456" />
+            <p className="text-xs text-muted-foreground">Prefills on sales orders when this rep is selected.</p>
           </div>
           <div className="space-y-1">
             <Label htmlFor="sfa-rep-area">Area</Label>
