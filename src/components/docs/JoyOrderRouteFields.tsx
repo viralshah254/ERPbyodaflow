@@ -40,7 +40,11 @@ export function JoyOrderRouteFields(props: {
     date, onDateChange, routes, route, savedRoute, onRouteChange, salesRep, onSalesRepChange, tillNumber, onTillChange,
     legacyPickStoreLabel, transferHref, loading, error, hasCustomer, captions = true,
   } = props;
-  const tills = [...new Set(route?.collectors.map((row) => row.tillNumber).filter(Boolean))];
+  const tills = [...new Set([
+    salesRep?.tillNumber,
+    tillNumber,
+    ...(route?.collectors.map((row) => row.tillNumber) ?? []),
+  ].filter(Boolean))];
 
   const routeOptions = React.useMemo<AsyncSearchableSelectOption[]>(
     () => routes.map((row) => ({
@@ -106,7 +110,7 @@ export function JoyOrderRouteFields(props: {
         <Label htmlFor="joy-till-number">M-Pesa till</Label>
         <select id="joy-till-number" className={selectClass} value={tills.includes(tillNumber) ? tillNumber : ""} disabled={!tills.length}
           onChange={(e) => onTillChange(e.target.value)}>
-          <option value="">{tills.length ? "Select till" : "No till on this route"}</option>
+          <option value="">{tills.length ? "Select till" : salesRep ? "No till for this sales rep" : "Select a sales rep first"}</option>
           {tills.map((till) => <option key={till} value={till}>{till}</option>)}
         </select>
       </div>

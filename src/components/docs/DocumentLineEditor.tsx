@@ -1435,10 +1435,18 @@ export function DocumentLineEditor({
     setSearchOpen(false);
   };
 
+  const [sheetFilter, setSheetFilter] = React.useState("");
+  const sheetFilterQuery = React.useDeferredValue(fixedSheet ? sheetFilter.trim().toLowerCase() : "");
   const displayedLines = React.useMemo(() => {
     if (!sheetFinishedGoods) return lines;
     const productsById = new Map(products.map((product) => [product.id, product]));
     return lines
+      .filter((line) => {
+        if (!sheetFilterQuery) return true;
+        const product = productsById.get(line.productId);
+        return [line.name, line.sku, product?.name, product?.code, product?.barcode]
+          .some((value) => value?.toLowerCase().includes(sheetFilterQuery));
+      })
       .map((line, index) => ({
         line,
         index,
@@ -1446,7 +1454,7 @@ export function DocumentLineEditor({
       }))
       .sort((a, b) => a.code - b.code || a.index - b.index)
       .map(({ line }) => line);
-  }, [lines, products, sheetFinishedGoods]);
+  }, [lines, products, sheetFinishedGoods, sheetFilterQuery]);
 
   React.useEffect(() => {
     const query = searchQuery.trim();
@@ -1801,6 +1809,31 @@ export function DocumentLineEditor({
         )
       ) : (
         <div className="min-w-0 space-y-2">
+          {fixedSheet ? (
+            <div className="relative max-w-md">
+              <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                aria-label="Find a product on the order sheet"
+                placeholder="Find by name, code or barcode"
+                className="h-9 pl-9"
+                value={sheetFilter}
+                onChange={(e) => setSheetFilter(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const first = displayedLines[0];
+                    if (first) editorRef.current?.querySelector<HTMLInputElement>(`[data-line-id="${CSS.escape(first.id)}"]`)?.focus();
+                  } else if (e.key === "Escape") {
+                    setSheetFilter("");
+                  }
+                }}
+              />
+            </div>
+          ) : null}
+          {fixedSheet && sheetFilterQuery && displayedLines.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No product on the sheet matches “{sheetFilter.trim()}”.</p>
+          ) : null}
           <div className="min-w-0 overflow-hidden rounded-md border">
             <LineTable className="w-full table-fixed border-collapse text-sm">
               <thead>
