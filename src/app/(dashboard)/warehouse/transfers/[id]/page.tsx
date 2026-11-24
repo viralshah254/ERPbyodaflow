@@ -164,9 +164,14 @@ export default function TransferDetailPage() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="flex flex-wrap items-center gap-2 font-medium">
-              <span>{t.fromWarehouse}</span><span aria-hidden="true">→</span>
+              {t.fromWarehouseId
+                ? <Link href={`/warehouse/transfers?warehouse=${encodeURIComponent(t.fromWarehouseId)}`} className="hover:underline" title={`Transfer history for ${t.fromWarehouse}`}>{t.fromWarehouse}</Link>
+                : <span>{t.fromWarehouse}</span>}
+              <span aria-hidden="true">→</span>
               {t.transitWarehouse && <><span>{t.transitWarehouse}</span><span aria-hidden="true">→</span></>}
-              <span>{t.toWarehouse}</span>
+              {t.toWarehouseId
+                ? <Link href={`/warehouse/transfers?warehouse=${encodeURIComponent(t.toWarehouseId)}`} className="hover:underline" title={`Transfer history for ${t.toWarehouse}`}>{t.toWarehouse}</Link>
+                : <span>{t.toWarehouse}</span>}
             </div>
             <p className="text-muted-foreground">{t.date}{t.reference ? ` · ${t.reference}` : ""}</p>
             {(canApprove || canTransit) && <p className="text-muted-foreground">Stock has yet to move. {canApprove ? "Approve the draft to make it ready for dispatch." : "Dispatch rechecks stock availability."}</p>}

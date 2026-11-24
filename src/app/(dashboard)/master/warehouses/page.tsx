@@ -193,6 +193,20 @@ export default function MasterWarehousesPage() {
         header: "Disposition",
         accessor: (r: WarehouseRow) => <WarehouseDispositionActions row={r} canWrite={canWrite} onChanged={reload} />,
       },
+      {
+        id: "transfers",
+        header: "Transfers",
+        accessor: (r: WarehouseRow) => (
+          <Link
+            href={`/warehouse/transfers?warehouse=${encodeURIComponent(r.id)}`}
+            onClick={(event) => event.stopPropagation()}
+            className="inline-flex items-center gap-1 whitespace-nowrap text-sm font-medium text-primary hover:underline"
+          >
+            <Icons.History className="h-3.5 w-3.5" aria-hidden />
+            History
+          </Link>
+        ),
+      },
     ],
     [canWrite, reload]
   );

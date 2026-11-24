@@ -44,6 +44,25 @@ export async function fetchTransfers(params?: { status?: string; search?: string
   return res.items ?? [];
 }
 
+export type TransferHistoryQuery = {
+  status?: string;
+  search?: string;
+  warehouseId?: string;
+  direction?: "in" | "out";
+  dateFrom?: string;
+  dateTo?: string;
+  offset?: number;
+};
+
+export async function fetchTransferHistory(query: TransferHistoryQuery): Promise<{ items: TransferRow[]; hasMore: boolean }> {
+  requireLiveApi("Warehouse transfers");
+  const { offset, ...rest } = query;
+  const res = await apiRequest<{ items: TransferRow[]; hasMore?: boolean }>("/api/warehouse/transfers", {
+    params: { ...listParams(rest), limit: "100", offset: String(offset ?? 0) },
+  });
+  return { items: res.items ?? [], hasMore: Boolean(res.hasMore) };
+}
+
 export async function fetchTransferById(id: string): Promise<TransferRow | null> {
   requireLiveApi("Warehouse transfer detail");
   try {
@@ -104,7 +123,7 @@ export async function approveTransferShortage(id: string, reviewVersion: string)
 }
 
 export function exportTransfersCsv(rows: TransferRow[]): void {
-  const headers = ["number", "date", "fromWarehouse", "toWarehouse", "status", "lineCount"];
+  const headers = ["number", "date", "fromWarehouse", "toWarehouse", "status", "lineCount", "products", "createdBy", "reference"];
   const csv = [
     headers.join(","),
     ...rows.map((row) =>
@@ -115,6 +134,9 @@ export function exportTransfersCsv(rows: TransferRow[]): void {
         row.toWarehouse,
         row.status,
         row.lines.length,
+        row.lines.map((line) => `${line.productName} ${line.quantity} ${line.unit ?? ""}`.trim()).join("; "),
+        row.createdBy ?? "",
+        row.reference ?? "",
       ]
         .map((value) => `"${String(value).replaceAll('"', '""')}"`)
         .join(",")
