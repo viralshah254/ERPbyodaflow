@@ -205,8 +205,9 @@ it("lists every active finished good on the fixed order sheet with no search, br
     return { items: finishedRows(1, 100), hasMore: true, nextCursor: "100" } as never;
   });
   render(<Harness fixedOrderSheet />);
-  expect(await screen.findByLabelText("Quantity for Finished 1")).toHaveValue("0");
-  expect(screen.getByLabelText("Quantity for Finished 101")).toHaveValue("0");
+  expect(await screen.findByLabelText("Quantity for Finished 1")).toHaveValue("");
+  expect(screen.getByLabelText("Quantity for Finished 1")).toHaveAttribute("placeholder", "0");
+  expect(screen.getByLabelText("Quantity for Finished 101")).toHaveValue("");
   expect(screen.queryByLabelText("Quantity for Chocolate cake base")).not.toBeInTheDocument();
   expect(fetchProductsPageApi).toHaveBeenCalledWith(expect.objectContaining({ itemRole: "FINISHED", status: "ACTIVE", limit: 100, cursor: "100" }));
   expect(screen.queryByRole("combobox", { name: "Search products to add" })).not.toBeInTheDocument();
