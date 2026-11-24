@@ -111,6 +111,8 @@ export interface User {
   mustChangePassword?: boolean;
   /** When true, this user has a screen-lock password. */
   lockPasswordSet?: boolean;
+  /** Minutes of inactivity before the screen locks. */
+  lockIdleMinutes?: number;
 }
 
 export interface Role {

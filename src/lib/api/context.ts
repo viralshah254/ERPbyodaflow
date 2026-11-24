@@ -1,3 +1,4 @@
+import { normalizeLockIdleMinutes } from "@/lib/auth/screen-lock";
 import { apiRequest, requireLiveApi } from "./client";
 import type { Branch, Org, Tenant, User } from "@/types/erp";
 import { parseCollectionsHold, type CollectionsHold } from "./collections-hold";
@@ -33,6 +34,7 @@ type BackendUser = {
   updatedAt?: string;
   mustChangePassword?: boolean;
   lockPasswordSet?: boolean;
+  lockIdleMinutes?: number;
 };
 
 type BackendOrg = {
@@ -118,6 +120,7 @@ function mapUser(user: BackendUser): User {
     updatedAt: mapDate(user.updatedAt),
     mustChangePassword: user.mustChangePassword,
     lockPasswordSet: user.lockPasswordSet === true,
+    lockIdleMinutes: normalizeLockIdleMinutes(user.lockIdleMinutes),
   };
 }
 

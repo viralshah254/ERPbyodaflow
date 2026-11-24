@@ -10,13 +10,16 @@ import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
 import { getTutorialForRoute } from "@/config/tutorial";
 import {
+  COMMAND_ACTION_ITEMS,
   COMMAND_NAV_FALLBACK_ITEMS,
   COMMAND_CREATE_ITEMS,
   COMMAND_COPILOT_ITEMS,
   getCreateDocHref,
   type CommandItem,
+  type CommandItemAction,
   type CommandItemNav,
 } from "@/config/command-palette";
+import { requestChangeLockPassword } from "@/lib/auth/screen-lock";
 import {
   computeDashboardSidebarSections,
   computeDashboardSidebarModules,
@@ -76,6 +79,7 @@ const GROUP_LABELS: Record<string, string> = {
   nav: "Navigate",
   create: "Create",
   copilot: "Copilot",
+  action: "Account",
   recent: "Recent",
 };
 
@@ -272,6 +276,17 @@ export function CommandPalette() {
     return scored.map((x) => x.item);
   }, [query, navItems]);
 
+  const filteredActions = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return [];
+    const tokens = q.split(/\s+/).filter(Boolean);
+    return COMMAND_ACTION_ITEMS
+      .map((item) => ({ item, score: scoreNavItem(item, tokens) }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((entry) => entry.item);
+  }, [query]);
+
   // Filter non-nav static items
   const filteredStatic = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -323,7 +338,14 @@ export function CommandPalette() {
         }
       : null;
 
-    const out: DisplayItem[] = [...paymentRecordingCommands(q)];
+    const out: DisplayItem[] = [
+      ...filteredActions.map((item) => ({
+        ...item,
+        _section: "Account",
+        _breadcrumb: "Password and how long before the screen locks",
+      })),
+      ...paymentRecordingCommands(q),
+    ];
     if (askAiItem) out.push(askAiItem);
 
     // ERP search results first when available
@@ -338,7 +360,7 @@ export function CommandPalette() {
     out.push(...(filteredStatic as DisplayItem[]));
 
     return out;
-  }, [query, recents, navItems, searchResults, filteredNav, filteredStatic, copilotEnabled]);
+  }, [query, recents, navItems, searchResults, filteredActions, filteredNav, filteredStatic, copilotEnabled]);
 
   // Keyboard shortcut
   React.useEffect(() => {
@@ -421,6 +443,11 @@ export function CommandPalette() {
 
   const handleSelect = React.useCallback(
     (item: DisplayItem) => {
+      if (item.group === "action" && "action" in item && (item as CommandItemAction).action === "lock-screen") {
+        setOpen(false);
+        requestChangeLockPassword();
+        return;
+      }
       // Ask AI
       if (item.group === "ask" && "prompt" in item) {
         setOpen(false);
@@ -686,7 +713,7 @@ export function CommandPalette() {
             </span>
             {!isEmptyQuery && (
               <span>
-                {paymentRecordingCommands(query).length + filteredNav.length + filteredStatic.length} pages · {searchResults.length} records
+                {paymentRecordingCommands(query).length + filteredActions.length + filteredNav.length + filteredStatic.length} pages · {searchResults.length} records
               </span>
             )}
           </div>

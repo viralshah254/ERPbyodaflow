@@ -142,7 +142,7 @@ export function Header() {
             }}
           >
             <Lock className="mr-2 h-4 w-4" />
-            <span>Change lock password</span>
+            <span>Lock screen</span>
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>

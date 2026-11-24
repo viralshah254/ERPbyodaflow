@@ -10,18 +10,38 @@ import { saveLockPassword, verifyLockPassword } from "@/lib/api/lock-password";
 import { signOutOfErp } from "@/lib/auth/sign-out-erp";
 import {
   CHANGE_LOCK_PASSWORD_EVENT,
+  DEFAULT_LOCK_IDLE_MINUTES,
+  formatLockDuration,
+  idleLockMessage,
   isIdle,
   isScreenLocked,
+  lockIdleMs,
   lockedStorageKey,
+  normalizeLockIdleMinutes,
+  parseLockIdleParts,
   readLastActivity,
+  splitLockIdle,
   setScreenLocked,
   touchActivity,
   writeLastActivity,
 } from "@/lib/auth/screen-lock";
 import { useAuthStore } from "@/stores/auth-store";
 
-const MIN_LOCK_PASSWORD_LENGTH = 6;
+const MIN_LOCK_PASSWORD_LENGTH = 4;
 const CHECK_MS = 15_000;
+const LOCK_IDLE_PRESETS = [
+  { label: "15 min", minutes: 15 },
+  { label: "20 min", minutes: 20 },
+  { label: "30 min", minutes: 30 },
+  { label: "1 hr", minutes: 60 },
+  { label: "1 hr 30 min", minutes: 90 },
+  { label: "2 hr", minutes: 120 },
+] as const;
+
+function idleFields(totalMinutes: unknown): { hours: string; minutes: string } {
+  const parts = splitLockIdle(totalMinutes);
+  return { hours: String(parts.hours), minutes: String(parts.minutes) };
+}
 
 function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error && err.message) return err.message;
@@ -32,10 +52,14 @@ export function ScreenLockGate() {
   const user = useAuthStore((s) => s.user);
   const userId = user?.userId;
   const needsSetup = Boolean(user) && user?.lockPasswordSet !== true;
+  const savedIdleMinutes = normalizeLockIdleMinutes(user?.lockIdleMinutes);
+  const idleMs = lockIdleMs(savedIdleMinutes);
   const [locked, setLocked] = useState(false);
   const [changeOpen, setChangeOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [idleHours, setIdleHours] = useState(idleFields(DEFAULT_LOCK_IDLE_MINUTES).hours);
+  const [idleMins, setIdleMins] = useState(idleFields(DEFAULT_LOCK_IDLE_MINUTES).minutes);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +74,9 @@ export function ScreenLockGate() {
   useEffect(() => {
     setPassword("");
     setConfirm("");
+    const fields = idleFields(useAuthStore.getState().user?.lockIdleMinutes);
+    setIdleHours(fields.hours);
+    setIdleMins(fields.minutes);
     setShowPassword(false);
     setShowConfirm(false);
     setError(null);
@@ -79,12 +106,12 @@ export function ScreenLockGate() {
         lockNow();
         return;
       }
-      if (isIdle(userId)) lockNow();
+      if (isIdle(userId, Date.now(), idleMs)) lockNow();
     };
 
     const onActivity = () => {
       if (lockedRef.current || isScreenLocked(userId)) return;
-      touchActivity(userId);
+      touchActivity(userId, Date.now(), idleMs);
     };
 
     const onStorage = (event: StorageEvent) => {
@@ -102,7 +129,8 @@ export function ScreenLockGate() {
     }
     window.addEventListener("storage", onStorage);
     document.addEventListener("visibilitychange", tick);
-    const timer = window.setInterval(tick, CHECK_MS);
+    const checkMs = Math.min(CHECK_MS, Math.max(5_000, Math.floor(idleMs / 4)));
+    const timer = window.setInterval(tick, checkMs);
     tick();
 
     return () => {
@@ -111,7 +139,7 @@ export function ScreenLockGate() {
       document.removeEventListener("visibilitychange", tick);
       window.clearInterval(timer);
     };
-  }, [userId, needsSetup]);
+  }, [userId, needsSetup, idleMs]);
 
   useEffect(() => {
     const open = () => {
@@ -161,22 +189,39 @@ export function ScreenLockGate() {
     }
   };
 
+  const parsedIdle = parseLockIdleParts(idleHours, idleMins);
+
   const saveNew = async () => {
-    if (password.length < MIN_LOCK_PASSWORD_LENGTH) {
-      setError(`Use at least ${MIN_LOCK_PASSWORD_LENGTH} characters.`);
+    if ("error" in parsedIdle) {
+      setError(parsedIdle.error);
       return;
     }
-    if (password !== confirm) {
-      setError("Passwords do not match.");
-      return;
+    const minutes = parsedIdle.minutes;
+    const keepPassword = !needsSetup && password.length === 0 && confirm.length === 0;
+    if (!keepPassword) {
+      if (password.length < MIN_LOCK_PASSWORD_LENGTH) {
+        setError(`Use at least ${MIN_LOCK_PASSWORD_LENGTH} characters.`);
+        return;
+      }
+      if (password !== confirm) {
+        setError("Passwords do not match.");
+        return;
+      }
     }
     setBusy(true);
     setError(null);
     try {
-      await saveLockPassword(password);
+      const saved = await saveLockPassword({
+        ...(keepPassword ? {} : { password }),
+        idleMinutes: minutes,
+      });
       const current = useAuthStore.getState().user;
       if (current) {
-        useAuthStore.getState().setUser({ ...current, lockPasswordSet: true });
+        useAuthStore.getState().setUser({
+          ...current,
+          lockPasswordSet: true,
+          lockIdleMinutes: saved.lockIdleMinutes,
+        });
         writeLastActivity(current.userId);
         setScreenLocked(current.userId, false);
       }
@@ -201,12 +246,13 @@ export function ScreenLockGate() {
     ? "Set a lock password"
     : locked
       ? "ERP locked"
-      : "Change lock password";
+      : "Lock screen";
+  const settingPassword = needsSetup || changeOpen;
   const description = needsSetup
-    ? "This password unlocks the ERP after it locks. It is separate from your sign-in password."
+    ? "This password unlocks the ERP after it locks. It is separate from your sign-in password. Use at least 4 characters, and choose how long to wait before the screen locks."
     : locked
-      ? "You were inactive for 20 minutes. Enter your lock password to continue."
-      : "Choose a new password for unlocking the ERP. Your sign-in password stays the same.";
+      ? idleLockMessage(savedIdleMinutes)
+      : "Choose a new lock password, or leave both password fields blank to keep the current one. Set how long to wait before the screen locks. Your sign-in password stays the same.";
 
   return (
     <div
@@ -235,15 +281,17 @@ export function ScreenLockGate() {
           >
             <div className="space-y-2">
               <Label htmlFor="screen-lock-password">
-                {needsSetup || changeOpen ? "Lock password" : "Password"}
+                {settingPassword ? "Lock password" : "Password"}
               </Label>
               <div className="relative">
                 <Input
                   id="screen-lock-password"
                   type={showPassword ? "text" : "password"}
-                  autoComplete="new-password"
+                  autoComplete={settingPassword ? "new-password" : "current-password"}
                   autoFocus
                   className="pr-10"
+                  minLength={settingPassword && password.length > 0 ? MIN_LOCK_PASSWORD_LENGTH : undefined}
+                  required={needsSetup}
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   disabled={busy || signingOut}
@@ -275,6 +323,8 @@ export function ScreenLockGate() {
                     type={showConfirm ? "text" : "password"}
                     autoComplete="new-password"
                     className="pr-10"
+                    minLength={confirm.length > 0 ? MIN_LOCK_PASSWORD_LENGTH : undefined}
+                    required={needsSetup}
                     value={confirm}
                     onChange={(event) => setConfirm(event.target.value)}
                     disabled={busy || signingOut}
@@ -298,10 +348,85 @@ export function ScreenLockGate() {
                 </div>
               </div>
             ) : null}
+            {settingPassword ? (
+              <fieldset className="space-y-2" disabled={busy || signingOut}>
+                <legend className="text-sm font-medium">Lock after</legend>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {LOCK_IDLE_PRESETS.map((preset) => {
+                    const selected =
+                      "minutes" in parsedIdle && parsedIdle.minutes === preset.minutes;
+                    return (
+                      <Button
+                        key={preset.minutes}
+                        type="button"
+                        size="sm"
+                        variant={selected ? "secondary" : "outline"}
+                        className="h-8 rounded-full px-2 text-xs"
+                        aria-pressed={selected}
+                        onClick={() => {
+                          const fields = idleFields(preset.minutes);
+                          setIdleHours(fields.hours);
+                          setIdleMins(fields.minutes);
+                          setError(null);
+                        }}
+                      >
+                        {preset.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label htmlFor="screen-lock-hours" className="sr-only">
+                    Hours
+                  </Label>
+                  <Input
+                    id="screen-lock-hours"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={24}
+                    step={1}
+                    required
+                    aria-label="Hours"
+                    className="w-20"
+                    value={idleHours}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setIdleHours(next);
+                      if (Number(next) >= 24) setIdleMins("0");
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">hr</span>
+                  <Label htmlFor="screen-lock-minutes" className="sr-only">
+                    Minutes
+                  </Label>
+                  <Input
+                    id="screen-lock-minutes"
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    max={59}
+                    step={1}
+                    required
+                    aria-label="Minutes"
+                    className="w-20"
+                    value={idleMins}
+                    disabled={Number(idleHours) >= 24}
+                    onChange={(event) => setIdleMins(event.target.value)}
+                  />
+                  <span className="text-sm text-muted-foreground">min</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {"minutes" in parsedIdle
+                    ? `Locks after ${formatLockDuration(parsedIdle.minutes)} of inactivity.`
+                    : "For example, 1 hr and 30 min, or 45 min."}
+                </p>
+              </fieldset>
+            ) : null}
             {error ? <p className="text-sm text-destructive">{error}</p> : null}
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button type="submit" className="flex-1" disabled={busy || signingOut}>
-                {busy ? "Please wait…" : locked && !needsSetup ? "Unlock" : "Save lock password"}
+                {busy ? "Please wait…" : locked && !needsSetup ? "Unlock" : "Save"}
               </Button>
               {changeOpen && !needsSetup && !locked ? (
                 <Button
