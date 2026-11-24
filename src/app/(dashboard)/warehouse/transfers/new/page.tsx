@@ -72,6 +72,108 @@ function writeStored(key: string, values: string[]) {
   }
 }
 
+function describeLine(line: TransferLineDraft, stock: TransferStockRow | undefined, units: ProductPackaging[] | undefined) {
+  const base = stock?.uom || line.unit || "EA";
+  const alternates = activeDocumentAlternates(units).filter((row) => row.uom !== base);
+  const unit = line.unit || base;
+  const factor = unit === base ? 1 : alternates.find((row) => row.uom === unit)?.unitsPer;
+  const qty = Number(line.qty);
+  const baseQty = qty * (factor ?? 0);
+  return { stock, base, alternates, unit, factor, qty, baseQty, over: Boolean(stock && baseQty > stock.available + 1e-9) };
+}
+
+function focusNextQuantity(current: HTMLInputElement) {
+  const inputs = [...document.querySelectorAll<HTMLInputElement>("input[data-transfer-qty]:not(:disabled)")];
+  inputs[inputs.indexOf(current) + 1]?.focus();
+}
+
+type UpdateLine = (productId: string, stockUnit: string, patch: Partial<TransferLineDraft>) => void;
+
+const TransferRow = React.memo(function TransferRow({ row, line: draft, units, hasDestination, busy, onUpdate, onLoadUnits }: {
+  row: TransferStockRow;
+  line: TransferLineDraft | undefined;
+  units: ProductPackaging[] | undefined;
+  hasDestination: boolean;
+  busy: boolean;
+  onUpdate: UpdateLine;
+  onLoadUnits: (productId: string) => void;
+}) {
+  const line = draft ?? { productId: row.productId, qty: "", unit: row.uom };
+  const { base, alternates, unit, factor, baseQty, over } = describeLine(line, row, units);
+  const hint = `transfer-stock-${encodeURIComponent(row.productId)}`;
+  const picked = Number(line.qty) > 0 && Boolean(factor);
+  const toNow = row.destination?.quantity ?? 0;
+  const empty = row.available <= 0;
+  return (
+    <tr className={cn("border-t align-top", over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "hover:bg-muted/30")}>
+      <th scope="row" className={cn("border-l-2 px-4 py-3 text-left font-medium", over ? "border-l-destructive" : picked ? "border-l-primary" : "border-l-transparent")}>
+        {row.name}
+        <span className="block text-xs font-normal text-muted-foreground">{[...new Set([row.sku, row.code, row.barcode].filter(Boolean))].join(" · ")}</span>
+      </th>
+      <td id={hint} className="px-3 py-3 text-right tabular-nums">
+        <p className={cn("font-semibold", over ? "text-destructive" : empty ? "text-muted-foreground" : "")}>{formatQty(row.available)} {base}</p>
+        {row.reserved > 0 && <p className="text-xs text-muted-foreground">{formatQty(row.quantity)} on hand · {formatQty(row.reserved)} reserved</p>}
+        {over && <p className="text-xs text-destructive">Reduce by {formatQty(baseQty - row.available)} {base}.</p>}
+        {!over && picked && <p className="text-xs text-muted-foreground">{formatQty(row.available - baseQty)} left{unit !== base ? ` · ${formatQty(baseQty)} ${base} moving` : ""}</p>}
+      </td>
+      <td className="px-3 py-3 text-right tabular-nums">
+        {!hasDestination ? <span className="text-muted-foreground">—</span> : (
+          <>
+            <p className={cn("font-semibold", toNow > 0 ? "" : "text-muted-foreground")}>{formatQty(toNow)} {base}</p>
+            {picked && !over && <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">→ {formatQty(toNow + baseQty)} after</p>}
+          </>
+        )}
+      </td>
+      <td className="w-[19rem] px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Input
+            data-transfer-qty
+            type="number"
+            inputMode="decimal"
+            min={0}
+            step="any"
+            placeholder="0"
+            value={line.qty}
+            className={cn("w-24 text-right tabular-nums", over && "border-destructive focus-visible:ring-destructive")}
+            aria-label={`Quantity for ${row.name} ${row.sku ?? ""}`.trim()}
+            aria-invalid={over || Number(line.qty) < 0}
+            aria-describedby={hint}
+            disabled={busy || empty}
+            onChange={(event) => onUpdate(row.productId, row.uom, { qty: event.target.value })}
+            onWheel={(event) => event.currentTarget.blur()}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                focusNextQuantity(event.currentTarget);
+              }
+            }}
+          />
+          <div className="w-28">
+            <Select value={unit} onValueChange={(next) => onUpdate(row.productId, row.uom, { unit: next })} onOpenChange={(open) => { if (open) onLoadUnits(row.productId); }} disabled={busy || empty}>
+              <SelectTrigger aria-label={`Unit for ${row.name}`}><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={base}>{base}</SelectItem>
+                {alternates.map((alternate) => <SelectItem key={alternate.uom} value={alternate.uom}>{alternate.uom} · {formatQty(alternate.unitsPer)} {base}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs text-muted-foreground"
+            disabled={busy || empty}
+            aria-label={`Transfer all ${row.name}`}
+            onClick={() => onUpdate(row.productId, row.uom, { qty: String(row.available), unit: base })}
+          >
+            All
+          </Button>
+        </div>
+      </td>
+    </tr>
+  );
+});
+
 function StorePanel(props: {
   tone: "from" | "to";
   children: React.ReactNode;
@@ -129,12 +231,13 @@ export default function NewTransferPage() {
 
   const stockByProduct = React.useMemo(() => new Map(sourceStock.map((row) => [row.productId, row])), [sourceStock]);
   const selectedLines = Object.values(lines).filter((line) => line.qty.trim() !== "" && Number(line.qty) !== 0);
+  const deferredSearch = React.useDeferredValue(search);
   const visibleStock = React.useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = deferredSearch.trim().toLowerCase();
     return sourceStock
       .filter((row) => [row.name, row.sku, row.code, row.barcode].some((value) => value?.toLowerCase().includes(query)))
       .sort((a, b) => (a.sku || a.name).localeCompare(b.sku || b.name, undefined, { numeric: true }));
-  }, [sourceStock, search]);
+  }, [sourceStock, deferredSearch]);
   const rows = selectedOnly ? visibleStock.filter((row) => Number(lines[row.productId]?.qty ?? 0) !== 0) : visibleStock;
   const alreadyThere = sourceStock.filter((row) => (row.destination?.quantity ?? 0) > 0).length;
 
@@ -222,36 +325,26 @@ export default function NewTransferPage() {
     setStockLoading(true);
   }
 
-  function updateLine(row: TransferStockRow, patch: Partial<TransferLineDraft>) {
+  const updateLine = React.useCallback<UpdateLine>((productId, stockUnit, patch) => {
     setLines((current) => ({
       ...current,
-      [row.productId]: { ...(current[row.productId] ?? { productId: row.productId, qty: "", unit: row.uom }), ...patch },
+      [productId]: { ...(current[productId] ?? { productId, qty: "", unit: stockUnit }), ...patch },
     }));
-  }
+  }, []);
 
-  function loadUnits(row: TransferStockRow) {
-    if (Object.hasOwn(packaging, row.productId)) return;
-    setPackaging((current) => ({ ...current, [row.productId]: [] }));
-    void fetchProductPackagingApi(row.productId)
-      .then((units) => setPackaging((current) => ({ ...current, [row.productId]: units })))
-      .catch(() => toast.error("Alternate units could not be loaded. You can use the stock unit."));
-  }
+  const requestedUnits = React.useRef(new Set<string>());
+  const loadUnits = React.useCallback((productId: string) => {
+    if (requestedUnits.current.has(productId)) return;
+    requestedUnits.current.add(productId);
+    void fetchProductPackagingApi(productId)
+      .then((units) => setPackaging((current) => ({ ...current, [productId]: units })))
+      .catch(() => {
+        requestedUnits.current.delete(productId);
+        toast.error("Alternate units could not be loaded. You can use the stock unit.");
+      });
+  }, []);
 
-  function focusNextQuantity(current: HTMLInputElement) {
-    const inputs = [...document.querySelectorAll<HTMLInputElement>("input[data-transfer-qty]:not(:disabled)")];
-    inputs[inputs.indexOf(current) + 1]?.focus();
-  }
-
-  const lineDetails = (line: TransferLineDraft) => {
-    const stock = stockByProduct.get(line.productId);
-    const base = stock?.uom || line.unit || "EA";
-    const alternates = activeDocumentAlternates(packaging[line.productId]).filter((row) => row.uom !== base);
-    const unit = line.unit || base;
-    const factor = unit === base ? 1 : alternates.find((row) => row.uom === unit)?.unitsPer;
-    const qty = Number(line.qty);
-    const baseQty = qty * (factor ?? 0);
-    return { stock, base, alternates, unit, factor, qty, baseQty, over: Boolean(stock && baseQty > stock.available + 1e-9) };
-  };
+  const lineDetails = (line: TransferLineDraft) => describeLine(line, stockByProduct.get(line.productId), packaging[line.productId]);
 
   const missingLines = stockLoading || stockError ? [] : selectedLines.filter((line) => !stockByProduct.has(line.productId));
   const hasValidLines = selectedLines.length > 0 && selectedLines.every((line) => {
@@ -585,81 +678,18 @@ export default function NewTransferPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row) => {
-                      const line = lines[row.productId] ?? { productId: row.productId, qty: "", unit: row.uom };
-                      const { base, alternates, unit, factor, baseQty, over } = lineDetails(line);
-                      const hint = `transfer-stock-${encodeURIComponent(row.productId)}`;
-                      const picked = Number(line.qty) > 0 && Boolean(factor);
-                      const toNow = row.destination?.quantity ?? 0;
-                      const empty = row.available <= 0;
-                      return (
-                        <tr key={row.productId} className={cn("border-t align-top transition-colors", over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "hover:bg-muted/30")}>
-                          <th scope="row" className={cn("border-l-2 px-4 py-3 text-left font-medium", over ? "border-l-destructive" : picked ? "border-l-primary" : "border-l-transparent")}>
-                            {row.name}
-                            <span className="block text-xs font-normal text-muted-foreground">{[...new Set([row.sku, row.code, row.barcode].filter(Boolean))].join(" · ")}</span>
-                          </th>
-                          <td id={hint} className="px-3 py-3 text-right tabular-nums">
-                            <p className={cn("font-semibold", over ? "text-destructive" : empty ? "text-muted-foreground" : "")}>{formatQty(row.available)} {base}</p>
-                            {row.reserved > 0 && <p className="text-xs text-muted-foreground">{formatQty(row.quantity)} on hand · {formatQty(row.reserved)} reserved</p>}
-                            {over && <p className="text-xs text-destructive">Reduce by {formatQty(baseQty - row.available)} {base}.</p>}
-                            {!over && picked && <p className="text-xs text-muted-foreground">{formatQty(row.available - baseQty)} left{unit !== base ? ` · ${formatQty(baseQty)} ${base} moving` : ""}</p>}
-                          </td>
-                          <td className="px-3 py-3 text-right tabular-nums">
-                            {!toWarehouseId ? <span className="text-muted-foreground">—</span> : (
-                              <>
-                                <p className={cn("font-semibold", toNow > 0 ? "" : "text-muted-foreground")}>{formatQty(toNow)} {base}</p>
-                                {picked && !over && <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">→ {formatQty(toNow + baseQty)} after</p>}
-                              </>
-                            )}
-                          </td>
-                          <td className="w-[19rem] px-3 py-2.5">
-                            <div className="flex items-center gap-2">
-                              <Input
-                                data-transfer-qty
-                                type="number"
-                                inputMode="decimal"
-                                min={0}
-                                step="any"
-                                placeholder="0"
-                                value={line.qty}
-                                className={cn("w-24 text-right tabular-nums", over && "border-destructive focus-visible:ring-destructive")}
-                                aria-label={`Quantity for ${row.name} ${row.sku ?? ""}`.trim()}
-                                aria-invalid={over || Number(line.qty) < 0}
-                                aria-describedby={hint}
-                                disabled={busy || empty}
-                                onChange={(event) => updateLine(row, { qty: event.target.value })}
-                                onKeyDown={(event) => {
-                                  if (event.key === "Enter") {
-                                    event.preventDefault();
-                                    focusNextQuantity(event.currentTarget);
-                                  }
-                                }}
-                              />
-                              <div className="w-28">
-                                <Select value={unit} onValueChange={(next) => updateLine(row, { unit: next })} onOpenChange={(open) => { if (open) loadUnits(row); }} disabled={busy || empty}>
-                                  <SelectTrigger aria-label={`Unit for ${row.name}`}><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value={base}>{base}</SelectItem>
-                                    {alternates.map((alternate) => <SelectItem key={alternate.uom} value={alternate.uom}>{alternate.uom} · {formatQty(alternate.unitsPer)} {base}</SelectItem>)}
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 px-2 text-xs text-muted-foreground"
-                                disabled={busy || empty}
-                                aria-label={`Transfer all ${row.name}`}
-                                onClick={() => updateLine(row, { qty: String(row.available), unit: base })}
-                              >
-                                All
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {rows.map((row) => (
+                      <TransferRow
+                        key={row.productId}
+                        row={row}
+                        line={lines[row.productId]}
+                        units={packaging[row.productId]}
+                        hasDestination={Boolean(toWarehouseId)}
+                        busy={busy}
+                        onUpdate={updateLine}
+                        onLoadUnits={loadUnits}
+                      />
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -692,7 +722,7 @@ export default function NewTransferPage() {
             </div>
           </details>
 
-          <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6">
+          <div className="sticky bottom-0 z-20 -mx-4 flex flex-wrap items-center gap-3 border-t bg-background px-4 py-3 sm:-mx-6 sm:px-6">
             <div className="mr-auto min-w-0 text-sm" aria-live="polite">
               <p className="font-medium">
                 {selectedLines.length} product{selectedLines.length === 1 ? "" : "s"} selected
