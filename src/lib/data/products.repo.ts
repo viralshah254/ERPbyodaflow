@@ -65,12 +65,10 @@ export async function fetchFinishedGoodsPage(opts: {
   cursor?: string | null;
   search?: string;
   limit?: number;
-  itemCodes?: { from: number; to: number };
 } = {}): Promise<{ items: ProductRow[]; nextCursor: string | null }> {
   const result = await fetchProductsPageApi({
     status: "ACTIVE",
     ...(opts.finishedGoodsOnly ? { itemRole: "FINISHED" as const } : {}),
-    ...(opts.itemCodes ? { itemCodes: opts.itemCodes } : {}),
     sellable: true,
     search: opts.search,
     limit: opts.limit ?? FINISHED_GOODS_PAGE_SIZE,
