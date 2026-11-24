@@ -15,7 +15,8 @@ import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
 import { t, manufacturingAreaLabel } from "@/lib/terminology";
-import { useTerminology } from "@/stores/orgContextStore";
+import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
+import { productionVoice } from "@/lib/manufacturing/production-language";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { cn } from "@/lib/utils";
 import {
@@ -41,6 +42,8 @@ const STATUS_OPTIONS = [
 export default function WorkOrdersPage() {
   const router = useRouter();
   const canWrite = useCanWriteManufacturing();
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const bakery = productionVoice(templateId) === "bakery";
   const terminology = useTerminology();
   const woLabel = t("workOrder", terminology);
   const areaLabel = manufacturingAreaLabel(terminology);
@@ -179,7 +182,9 @@ export default function WorkOrdersPage() {
         className: "whitespace-nowrap text-right",
         accessor: (r: ManufacturingWorkOrder) => <span className="tabular-nums text-sm">{r.openQuantity}</span>,
       },
-      { id: "dueDate", header: "Due date", className: "whitespace-nowrap", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" },
+      ...(bakery
+        ? []
+        : [{ id: "dueDate", header: "Due date", className: "whitespace-nowrap", accessor: (r: ManufacturingWorkOrder) => r.dueDate?.slice(0, 10) ?? "—" }]),
       {
         id: "bom",
         header: "BOM",
@@ -210,7 +215,7 @@ export default function WorkOrdersPage() {
           ),
       },
     ],
-    []
+    [bakery]
   );
 
   return (
