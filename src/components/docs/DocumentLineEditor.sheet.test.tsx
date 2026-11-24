@@ -215,6 +215,14 @@ it("lists every active finished good on the fixed order sheet with no search, br
   fireEvent.change(screen.getByLabelText("Quantity for Finished 1"), { target: { value: "3" } });
   fireEvent.blur(screen.getByLabelText("Quantity for Finished 1"));
   expect(screen.getByLabelText("Quantity for Finished 1")).toHaveValue("3");
+
+  const find = screen.getByRole("searchbox", { name: "Find a product on the order sheet" });
+  fireEvent.change(find, { target: { value: "Finished 101" } });
+  await waitFor(() => expect(screen.queryByLabelText("Quantity for Finished 1")).not.toBeInTheDocument());
+  fireEvent.keyDown(find, { key: "Enter" });
+  expect(screen.getByLabelText("Quantity for Finished 101")).toHaveFocus();
+  fireEvent.change(find, { target: { value: "" } });
+  expect(await screen.findByLabelText("Quantity for Finished 1")).toHaveValue("3");
 });
 
 it("finds a finished good that is not on the first page by asking the server", async () => {
