@@ -323,6 +323,18 @@ export async function generateJoyInvoices(id: string, salesOrderId?: string): Pr
   });
 }
 
+/** Invoices for the confirmed load, with delivery notes unless the route sends invoices only. */
+export async function createJoyRouteDocuments(
+  id: string,
+  opts: { deliveryNotes: boolean; salesOrderId?: string }
+): Promise<JoyLoadNote> {
+  requireLiveApi(LOADS);
+  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/documents`, {
+    method: "POST",
+    body: { deliveryNotes: opts.deliveryNotes, ...(opts.salesOrderId ? { salesOrderId: opts.salesOrderId } : {}) },
+  });
+}
+
 export async function cancelJoyLoadNote(id: string): Promise<JoyLoadNote> {
   requireLiveApi(LOADS);
   return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/cancel`, { method: "POST", body: {} });

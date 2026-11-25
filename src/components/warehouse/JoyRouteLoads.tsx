@@ -15,11 +15,11 @@ import {
   cancelJoyLoadNote,
   createJoyDeliveryNotes,
   createJoyLoadNote,
+  createJoyRouteDocuments,
   emailJoyTransferRequest,
   printJoyLoadNotePdf,
   printJoyTransferRequestPdf,
   fetchJoyLoadNotes,
-  generateJoyInvoices,
   markJoyLoadDeparted,
   recordJoyLoaded,
   setJoyLoadSalesReps,
@@ -143,7 +143,7 @@ function truckStage(note: JoyLoadNote): string {
   if (note.departedAt) return "Left";
   if (note.status === "OPEN") return "Confirm load";
   if (note.status === "AWAITING_FINANCE" || note.status === "INVOICING") return "Finance review";
-  if (note.status === "CONFIRMED") return "Delivery notes";
+  if (note.status === "CONFIRMED") return "Invoices & delivery notes";
   if (note.status === "INVOICED") return "Ready to leave";
   return note.status;
 }
@@ -455,17 +455,13 @@ function loadProgress(note: JoyLoadNote): ProgressStep[] {
     },
     { key: "load", label: "Load truck", done: loaded, hint: loaded ? formatWhenParts(note.loadedAt)?.compact : undefined },
     {
-      key: "notes",
-      label: "Delivery notes",
-      done: notesDone,
-      hint: loaded && packedOrders.length ? `${notesMade} of ${packedOrders.length}` : undefined,
-    },
-    {
-      key: "invoices",
-      label: "Invoices",
-      done: invoicesDone,
+      key: "documents",
+      label: "Invoices & delivery notes",
+      done: note.documentPlan === "delivery_note" ? notesDone : invoicesDone,
       hint: loaded && packedOrders.length
-        ? invoicesMade || note.documentPlan !== "delivery_note" ? `${invoicesMade} of ${packedOrders.length}` : "On standby"
+        ? note.documentPlan === "delivery_note" && !invoicesMade
+          ? `${notesMade} of ${packedOrders.length} delivery notes`
+          : `${invoicesMade} of ${packedOrders.length} done`
         : undefined,
     },
     { key: "left", label: "Truck left", done: Boolean(note.departedAt), hint: formatWhenParts(note.departedAt)?.compact },
@@ -1006,7 +1002,7 @@ function LoadingNoteCard({
                     rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
                   )
                     .then(async () => {
-                      toast.success(`${note.number} confirmed. Create a delivery note for each order.`);
+                      toast.success(`${note.number} confirmed. Create the invoices and delivery notes next.`);
                       await onChanged();
                     })
                     .catch(async (error) => {
@@ -1384,6 +1380,53 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
   );
 }
 
+type RouteDocuments = "both" | "invoice";
+
+const DOCUMENTS_KEY = (routeWarehouseId: string) => `odaflow.joy.routeDocuments.${routeWarehouseId}`;
+
+function readRouteDocuments(note: JoyLoadNote): RouteDocuments {
+  if (note.results.some((row) => row.invoiceId && !row.deliveryNoteId)) return "invoice";
+  if (note.results.some((row) => row.deliveryNoteId)) return "both";
+  try {
+    return window.localStorage.getItem(DOCUMENTS_KEY(note.routeWarehouseId)) === "invoice" ? "invoice" : "both";
+  } catch {
+    return "both";
+  }
+}
+
+function DocumentsChoice({ value, onChange, disabled }: { value: RouteDocuments; onChange: (value: RouteDocuments) => void; disabled: boolean }) {
+  const options: Array<{ value: RouteDocuments; label: string; hint: string }> = [
+    { value: "both", label: "Invoice + delivery note", hint: "The delivery note goes with the truck for the customer to sign." },
+    { value: "invoice", label: "Invoice only", hint: "No delivery note. The invoice goes with the truck and takes the stock out." },
+  ];
+  return (
+    <div role="radiogroup" aria-label="Documents for this route" className="grid gap-2 sm:grid-cols-2">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={value === option.value}
+          disabled={disabled}
+          onClick={() => onChange(option.value)}
+          className={cn(
+            "rounded-lg border px-3 py-2.5 text-left transition disabled:opacity-60",
+            value === option.value ? "border-primary bg-primary/[0.07] ring-1 ring-primary/40" : "bg-background hover:bg-muted/50",
+          )}
+        >
+          <span className="flex items-center gap-2 text-sm font-medium">
+            <span aria-hidden className={cn("grid size-4 place-items-center rounded-full border", value === option.value && "border-primary")}>
+              {value === option.value ? <span className="size-2 rounded-full bg-primary" /> : null}
+            </span>
+            {option.label}
+          </span>
+          <span className="mt-1 block text-xs text-muted-foreground">{option.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function ConfirmedNoteCard({
   note,
   canLoad,
@@ -1396,110 +1439,146 @@ function ConfirmedNoteCard({
   onChanged: () => Promise<void>;
 }) {
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [mode, setMode] = React.useState<RouteDocuments>(() => readRouteDocuments(note));
   const orders = ordersOnNote(note);
   const resultByOrder = new Map(note.results.map((row) => [row.salesOrderId, row]));
   const packed = (orderId: string) =>
-    note.lines.some((line) => line.allocations.some((row) => row.salesOrderId === orderId && row.invoiceQty > 0.0001));
-  const pendingNotes = orders.filter((order) => packed(order.id) && !resultByOrder.get(order.id)?.deliveryNoteId);
-  const pendingInvoices = orders.filter((order) => {
+    note.lines.some((line) => line.allocations.some((row) => row.salesOrderId === orderId && row.invoiceQty > EPS));
+  const pending = orders.filter((order) => packed(order.id) && !resultByOrder.get(order.id)?.invoiceId);
+  const pendingNotes = orders.filter((order) => {
     const row = resultByOrder.get(order.id);
-    return Boolean(row?.deliveryNoteId && !row.invoiceId);
+    return packed(order.id) && !row?.deliveryNoteId && !row?.invoiceId;
   });
+  const started = note.results.some((row) => row.invoiceId || row.deliveryNoteId);
+  const many = pending.length === 1 ? "" : "s";
+  const allLabel = mode === "invoice"
+    ? `Create ${pending.length} invoice${many}`
+    : `Create ${pending.length} invoice${many} and delivery note${many}`;
+
+  function chooseMode(next: RouteDocuments) {
+    setMode(next);
+    try {
+      window.localStorage.setItem(DOCUMENTS_KEY(note.routeWarehouseId), next);
+    } catch {
+      /* Private mode has no storage. */
+    }
+  }
+
   const run = (key: string, work: () => Promise<void>, failure: string) => {
     setBusy(key);
     void work()
-      .catch((error) => toast.error(errorMessage(error, failure)))
+      .catch(async (error) => {
+        toast.error(errorMessage(error, failure));
+        await onChanged();
+      })
       .finally(() => setBusy(null));
   };
+  const createDocuments = (order?: { id: string; number: string }) =>
+    run(order ? `doc:${order.id}` : "all", async () => {
+      await createJoyRouteDocuments(note.id, { deliveryNotes: mode === "both", salesOrderId: order?.id });
+      toast.success(order
+        ? `Documents created for ${order.number}.`
+        : mode === "invoice" ? `Invoices created for ${note.number}.` : `Invoices and delivery notes created for ${note.number}.`);
+      await onChanged();
+    }, "Could not create the documents");
+
   return (
     <Card id={`note-${note.id}`} className="min-w-0">
       <LoadNoteHeader note={note} routeHint="Loader note confirmed" />
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
           Print loader note
         </Button>
-        <div className="space-y-2 text-sm">
-          {orders.map((order) => {
-            const row = resultByOrder.get(order.id);
-            return (
-              <div key={order.id} className="flex flex-wrap items-center gap-2 border-t py-2">
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium">{order.number}</span>
-                  <span className="text-muted-foreground"> · {order.customer}</span>
-                </span>
-                {row?.deliveryNoteId ? (
-                  <Link className="text-primary hover:underline" href={`/docs/delivery-note/${row.deliveryNoteId}`}>
-                    {row.deliveryNoteNumber ?? "Delivery note"}
-                  </Link>
-                ) : canLoad && packed(order.id) ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy != null}
-                    onClick={() => run(`dn:${order.id}`, async () => {
-                      await createJoyDeliveryNotes(note.id, order.id);
-                      toast.success(`Delivery note created for ${order.number}.`);
-                      await onChanged();
-                    }, "Could not create the delivery note")}
-                  >
-                    {busy === `dn:${order.id}` ? "Working…" : "Create delivery note"}
-                  </Button>
-                ) : (
-                  <span className="text-muted-foreground">Nothing packed</span>
-                )}
-                {row?.creditNoteId ? (
-                  <Link className="text-primary hover:underline" href={`/docs/credit-note/${row.creditNoteId}`}>
-                    {row.creditNoteNumber ?? "Credit note"}
-                  </Link>
-                ) : null}
-                {row?.invoiceId ? (
-                  <Link className="text-primary hover:underline" href={`/docs/invoice/${row.invoiceId}`}>
-                    {row.invoiceNumber ?? "Invoice"}
-                  </Link>
-                ) : row?.deliveryNoteId && canFinance ? (
-                  <Button
-                    size="sm"
-                    disabled={busy != null}
-                    onClick={() => run(`inv:${order.id}`, async () => {
-                      await generateJoyInvoices(note.id, order.id);
-                      toast.success(`Invoice created for ${order.number}.`);
-                      await onChanged();
-                    }, "Could not create the invoice")}
-                  >
-                    {busy === `inv:${order.id}` ? "Working…" : "Generate invoice"}
-                  </Button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {canLoad && pendingNotes.length > 0 ? (
-            <Button
-              variant="outline"
-              disabled={busy != null}
-              onClick={() => run("dns", async () => {
-                await createJoyDeliveryNotes(note.id);
-                toast.success(`Delivery notes created for ${note.number}.`);
-                await onChanged();
-              }, "Could not create the delivery notes")}
-            >
-              {busy === "dns" ? "Working…" : "Create delivery notes"}
-            </Button>
+        <section aria-labelledby={`documents-${note.id}`} className="space-y-3 rounded-xl border bg-muted/20 p-3 sm:p-4">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 id={`documents-${note.id}`} className="font-semibold">Invoices and delivery notes</h3>
+            <span className="text-xs text-muted-foreground">
+              {orders.length - pending.length} of {orders.length} order{orders.length === 1 ? "" : "s"} done
+            </span>
+          </div>
+          {canFinance && pending.length > 0 ? (
+            <DocumentsChoice value={mode} onChange={chooseMode} disabled={busy != null} />
           ) : null}
-          {canFinance && pendingInvoices.length > 0 ? (
-            <Button
-              disabled={busy != null}
-              onClick={() => run("invs", async () => {
-                await generateJoyInvoices(note.id);
-                toast.success(`Invoices created for ${note.number}.`);
-                await onChanged();
-              }, "Could not create the invoices")}
-            >
-              {busy === "invs" ? "Working…" : "Generate invoices"}
-            </Button>
+          <ul className="divide-y rounded-lg border bg-background text-sm">
+            {orders.map((order) => {
+              const row = resultByOrder.get(order.id);
+              const waiting = packed(order.id) && !row?.invoiceId;
+              return (
+                <li key={order.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="font-medium">{order.number}</span>
+                    <span className="text-muted-foreground"> · {order.customer}</span>
+                  </span>
+                  {row?.invoiceId ? (
+                    <Link className="text-primary hover:underline" href={`/docs/invoice/${row.invoiceId}`} target="_blank" rel="noopener noreferrer">
+                      {row.invoiceNumber ?? "Invoice"}
+                    </Link>
+                  ) : null}
+                  {row?.deliveryNoteId ? (
+                    <Link className="text-primary hover:underline" href={`/docs/delivery-note/${row.deliveryNoteId}`} target="_blank" rel="noopener noreferrer">
+                      {row.deliveryNoteNumber ?? "Delivery note"}
+                    </Link>
+                  ) : row?.invoiceId ? (
+                    <span className="text-xs text-muted-foreground">No delivery note</span>
+                  ) : null}
+                  {row?.creditNoteId ? (
+                    <Link className="text-primary hover:underline" href={`/docs/credit-note/${row.creditNoteId}`} target="_blank" rel="noopener noreferrer">
+                      {row.creditNoteNumber ?? "Credit note"}
+                    </Link>
+                  ) : null}
+                  {!packed(order.id) ? (
+                    <span className="text-muted-foreground">Nothing packed</span>
+                  ) : waiting && canFinance ? (
+                    <Button size="sm" variant="outline" disabled={busy != null} onClick={() => createDocuments(order)}>
+                      {busy === `doc:${order.id}` ? "Working…" : row?.deliveryNoteId ? "Create invoice" : "Create"}
+                    </Button>
+                  ) : waiting && canLoad && !row?.deliveryNoteId ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy != null}
+                      onClick={() => run(`dn:${order.id}`, async () => {
+                        await createJoyDeliveryNotes(note.id, order.id);
+                        toast.success(`Delivery note created for ${order.number}.`);
+                        await onChanged();
+                      }, "Could not create the delivery note")}
+                    >
+                      {busy === `dn:${order.id}` ? "Working…" : "Create delivery note"}
+                    </Button>
+                  ) : waiting ? (
+                    <span className="text-xs text-muted-foreground">Waiting for finance</span>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+          {canFinance && pending.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button disabled={busy != null} onClick={() => createDocuments()}>
+                <ClipboardList className="mr-1.5 size-4" aria-hidden />
+                {busy === "all" ? "Working…" : allLabel}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {started ? "Picks up where it stopped. Nothing is made twice." : "Every order on this route, in one go. Stock leaves the route store as each one is made."}
+              </p>
+            </div>
+          ) : !canFinance && canLoad && pendingNotes.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                disabled={busy != null}
+                onClick={() => run("dns", async () => {
+                  await createJoyDeliveryNotes(note.id);
+                  toast.success(`Delivery notes created for ${note.number}.`);
+                  await onChanged();
+                }, "Could not create the delivery notes")}
+              >
+                {busy === "dns" ? "Working…" : "Create delivery notes"}
+              </Button>
+              <p className="text-xs text-muted-foreground">Finance creates the invoices.</p>
+            </div>
           ) : null}
-        </div>
+        </section>
       </CardContent>
     </Card>
   );
