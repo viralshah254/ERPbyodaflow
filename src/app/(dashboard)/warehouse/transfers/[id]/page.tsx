@@ -16,13 +16,37 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { approveTransferShortage, fetchTransferById, saveTransferReceiptCounts, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
+import { approveTransferShortage, downloadTransferPdf, fetchTransferById, saveTransferReceiptCounts, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
 import { useCanWriteInventory, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { transferBackLink } from "@/lib/warehouse/transfer-prefill";
-import { ArrowLeft } from "lucide-react";
+import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
+import { ArrowLeft, ArrowRight, Download } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+const STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  APPROVED: "Approved",
+  IN_TRANSIT: "In transit",
+  RECEIVED: "Received",
+  CANCELLED: "Cancelled",
+};
+
+function StoreStop({ label, name, href }: { label: string; name: string; href?: string }) {
+  const title = href ? (
+    <Link href={href} className="hover:underline" title={`Transfer history for ${name}`}>{name}</Link>
+  ) : (
+    <span>{name}</span>
+  );
+  return (
+    <div className="min-w-[10rem] flex-1">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-base font-semibold leading-snug">{title}</p>
+    </div>
+  );
+}
 
 function statusVariant(s: string): "default" | "secondary" | "outline" {
   if (s === "RECEIVED") return "secondary";
@@ -37,6 +61,7 @@ export default function TransferDetailPage() {
   const canApproveLoss = useHasPermission("finance.approve");
   const [confirmLoss, setConfirmLoss] = React.useState(false);
   const [working, setWorking] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
   const [receiptDraft, setReceiptDraft] = React.useState<Record<string, { quantity: string; reason: string; missingLots?: Record<string, string> }>>({});
   const [transfer, setTransfer] = React.useState<TransferRow | null | undefined>(undefined);
   const [openedWith, setOpenedWith] = React.useState("");
@@ -151,7 +176,19 @@ export default function TransferDetailPage() {
         sticky
         showCommandHint
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={downloading}
+              onClick={() => {
+                setDownloading(true);
+                void downloadTransferPdf(id, t.number, (message) => toast.error(message)).finally(() => setDownloading(false));
+              }}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+              {downloading ? "Preparing…" : "Download transfer PDF"}
+            </Button>
             {canWrite && canApprove && <Button size="sm" disabled={working} onClick={() => void perform(() => updateTransferStatus(id, "APPROVED"), "Transfer approved.")}>Approve</Button>}
             {canWrite && canTransit && <Button size="sm" disabled={working} onClick={() => void perform(() => updateTransferStatus(id, "IN_TRANSIT"), "Transfer dispatched.")}>Dispatch</Button>}
             {canWrite && canReceive && <Button size="sm" disabled={working || receiptChanges.length > 0 || needsReview} onClick={() => void perform(() => updateTransferStatus(id, "RECEIVED"), "Transfer received.")}>Receive</Button>}
@@ -170,23 +207,34 @@ export default function TransferDetailPage() {
         }
       />
       <div className="space-y-4 p-4 md:p-6">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Stock route</CardTitle>
-            <Badge variant={statusVariant(t.status)}>{t.status.replace("_", " ")}</Badge>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex flex-wrap items-center gap-2 font-medium">
-              {t.fromWarehouseId
-                ? <Link href={`/warehouse/transfers?warehouse=${encodeURIComponent(t.fromWarehouseId)}`} className="hover:underline" title={`Transfer history for ${t.fromWarehouse}`}>{t.fromWarehouse}</Link>
-                : <span>{t.fromWarehouse}</span>}
-              <span aria-hidden="true">→</span>
-              {t.transitWarehouse && <><span>{t.transitWarehouse}</span><span aria-hidden="true">→</span></>}
-              {t.toWarehouseId
-                ? <Link href={`/warehouse/transfers?warehouse=${encodeURIComponent(t.toWarehouseId)}`} className="hover:underline" title={`Transfer history for ${t.toWarehouse}`}>{t.toWarehouse}</Link>
-                : <span>{t.toWarehouse}</span>}
-            </div>
-            <p className="text-muted-foreground">{t.date}{t.reference ? ` · ${t.reference}` : ""}</p>
+        <Card className="overflow-hidden">
+          <div className="flex flex-wrap items-stretch gap-3 border-b bg-muted/25 px-4 py-4 sm:px-5">
+            <StoreStop label="From" name={t.fromWarehouse} href={t.fromWarehouseId ? `/warehouse/transfers?warehouse=${encodeURIComponent(t.fromWarehouseId)}` : undefined} />
+            <ArrowRight className="mt-6 hidden size-4 shrink-0 text-muted-foreground sm:block" aria-hidden />
+            {t.transitWarehouse ? (
+              <>
+                <StoreStop label="In transit" name={t.transitWarehouse} />
+                <ArrowRight className="mt-6 hidden size-4 shrink-0 text-muted-foreground sm:block" aria-hidden />
+              </>
+            ) : null}
+            <StoreStop label="To" name={t.toWarehouse} href={t.toWarehouseId ? `/warehouse/transfers?warehouse=${encodeURIComponent(t.toWarehouseId)}` : undefined} />
+            <Badge variant={statusVariant(t.status)} className="ml-auto self-start">{STATUS_LABEL[t.status] ?? t.status}</Badge>
+          </div>
+          <CardContent className="space-y-3 pt-4 text-sm">
+            <dl className="grid gap-3 sm:grid-cols-3">
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</dt>
+                <dd className="mt-0.5 font-medium tabular-nums">{t.date}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reference</dt>
+                <dd className="mt-0.5 font-medium">{t.reference || "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Created by</dt>
+                <dd className="mt-0.5 font-medium">{t.createdBy || "—"}</dd>
+              </div>
+            </dl>
             {(canApprove || canTransit) && <p className="text-muted-foreground">Stock has yet to move. {canApprove ? "Approve the draft to make it ready for dispatch." : "Dispatch rechecks stock availability."}</p>}
             {canReceive && <p className="text-muted-foreground">{t.transitWarehouse ? `Stock is in ${t.transitWarehouse}. Receipt moves it into ${t.toWarehouse}.` : `Dispatch is logged. Receipt posts the stock movement into ${t.toWarehouse}.`}</p>}
             {needsReview && (
@@ -220,18 +268,19 @@ export default function TransferDetailPage() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Products and receipt counts</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-3 space-y-0">
+            <CardTitle className="text-base">Products</CardTitle>
+            <span className="text-xs tabular-nums text-muted-foreground">{t.lines.length} product{t.lines.length === 1 ? "" : "s"}</span>
           </CardHeader>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>SKU</TableHead>
+                <TableRow className="bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="w-20">SKU</TableHead>
                   <TableHead>Product</TableHead>
-                  <TableHead>Requested</TableHead>
-                  <TableHead>Dispatched</TableHead>
-                  <TableHead>Received</TableHead>
+                  <TableHead className="text-right">Requested</TableHead>
+                  <TableHead className="text-right">Dispatched</TableHead>
+                  <TableHead className="text-right">Received</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -241,17 +290,17 @@ export default function TransferDetailPage() {
                   const unit = line.unit ?? "";
                   return (
                     <TableRow key={line.id}>
-                      <TableCell className="font-medium">{line.sku}</TableCell>
-                      <TableCell>
+                      <TableCell className="font-mono text-xs tabular-nums">{line.sku}</TableCell>
+                      <TableCell className={cn("font-medium", CAPS_ON_PRODUCT_CLASS)}>
                         {line.productName}
                         {!!line.lotNumbers?.length && <span className="block text-xs text-muted-foreground">Lots: {line.lotNumbers.join(", ")}</span>}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="text-right tabular-nums">
                         {line.quantity} {unit}
                         {line.enteredUom && line.enteredUom !== unit && <span className="block text-xs text-muted-foreground">Entered as {line.enteredQuantity} {line.enteredUom}</span>}
                       </TableCell>
-                      <TableCell>{canReceive || t.status === "RECEIVED" ? `${line.quantity} ${unit}` : "—"}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-right tabular-nums">{canReceive || t.status === "RECEIVED" ? `${line.quantity} ${unit}` : "—"}</TableCell>
+                      <TableCell className="text-right tabular-nums">
                         {showReceiptInput ? (
                           <div className="min-w-32 space-y-1">
                             <Input type="number" min={0} max={line.quantity} step="any" value={draft.quantity} aria-label={`Received quantity for ${line.sku}`} onChange={(event) => setReceiptDraft((current) => ({ ...current, [line.id]: { ...draft, quantity: event.target.value } }))} />
