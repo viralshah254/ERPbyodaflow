@@ -12,7 +12,7 @@ vi.mock("@/lib/rbac/use-write-guard", () => ({ useCanWriteInventory: () => true 
 const profile = vi.hoisted(() => ({ fixedOrderSheet: false }));
 vi.mock("@/lib/fmcg/operating-profile", () => ({ useOperatingProfile: () => profile }));
 vi.mock("@/lib/api/warehouse-transfers", () => ({ createTransfer: vi.fn().mockResolvedValue({ id: "draft-1" }), fetchTransferStock: vi.fn() }));
-vi.mock("@/lib/api/lookups", () => ({ fetchWarehouseOptions: vi.fn().mockResolvedValue([{ id: "source", label: "Finished Goods" }, { id: "destination", label: "Dispatch" }, { id: "choco", label: "CHOCO", transferSourceBlock: "Purpose not set", transferSourceIssue: { label: "Purpose not set", reason: "CHOCO has no purpose set, so the ERP cannot tell if its stock may be sent out.", fix: "Set its purpose to Storage, Receiving or Dispatch", href: "/master/warehouses?edit=choco" } }]) }));
+vi.mock("@/lib/api/lookups", () => ({ fetchWarehouseOptions: vi.fn().mockResolvedValue([{ id: "source", label: "Finished Goods" }, { id: "destination", label: "Dispatch" }, { id: "mar", label: "MAR - MARULA STORE", transferTargetIssue: { label: "Purpose not set", reason: "MAR - MARULA STORE has no purpose set, so the ERP will not put stock into it.", fix: "Set its purpose, for example Dispatch for a route store", href: "/master/warehouses?edit=mar" } }, { id: "choco", label: "CHOCO", transferSourceBlock: "Purpose not set", transferSourceIssue: { label: "Purpose not set", reason: "CHOCO has no purpose set, so the ERP cannot tell if its stock may be sent out.", fix: "Set its purpose to Storage, Receiving or Dispatch", href: "/master/warehouses?edit=choco" } }]) }));
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/components/ui/async-searchable-select", () => ({
@@ -276,4 +276,18 @@ it("lists what the loading note needs first, outlined in red when the store cann
   fireEvent.click(screen.getByRole("button", { name: "Transfer the other 2 from another store" }));
   expect(await screen.findByLabelText("From warehouse")).toHaveValue("");
   expect(screen.getByLabelText("Reference (optional)")).toHaveValue("Loader note LDN-0008");
+});
+
+it("explains a receiving store with no purpose and holds the transfer until it is set", async () => {
+  serveStock(() => [{ ...soap, quantity: 40, reserved: 0, available: 40 }]);
+  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source&to=mar&line=p%3A5");
+  render(<NewTransferPage />);
+  const notice = await screen.findByRole("alert", { name: "Store cannot receive stock" });
+  expect(notice).toHaveTextContent("MAR - MARULA STORE has no purpose set");
+  const fix = screen.getByRole("link", { name: /Set its purpose, for example Dispatch/ });
+  expect(fix).toHaveAttribute("href", "/master/warehouses?edit=mar");
+  expect(fix).toHaveAttribute("target", "_blank");
+  expect(await screen.findByRole("spinbutton", { name: "Quantity for Soap SKU-072" })).toHaveValue(5);
+  expect(screen.getByRole("button", { name: "Transfer now" })).toBeDisabled();
+  expect(screen.getByText("Set up MAR first. See the note under Send stock to.")).toBeInTheDocument();
 });
