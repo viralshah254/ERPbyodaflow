@@ -23,6 +23,7 @@ const api = vi.hoisted(() => ({
   allocate: vi.fn(),
   create: vi.fn(),
   printRequest: vi.fn(),
+  documents: vi.fn(),
   emailRequest: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
@@ -44,6 +45,7 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
   allocateJoyLoad: (...args: unknown[]) => api.allocate(...args),
   createJoyLoadNote: (...args: unknown[]) => api.create(...args),
   printJoyTransferRequestPdf: (...args: unknown[]) => api.printRequest(...args),
+  createJoyRouteDocuments: (...args: unknown[]) => api.documents(...args),
   emailJoyTransferRequest: (...args: unknown[]) => api.emailRequest(...args),
 }));
 vi.mock("@/lib/api/sfa-sales-reps", () => ({
@@ -400,4 +402,44 @@ it("opens a prefilled transfer for what the route lacks and only loads what the 
   fireEvent.change(await screen.findByLabelText("Email"), { target: { value: "store@joy.co.ke" } });
   fireEvent.click(screen.getByRole("button", { name: "Send request" }));
   await waitFor(() => expect(api.emailRequest).toHaveBeenCalledWith("n2", "store@joy.co.ke"));
+});
+
+it("makes every order's invoice, with or without delivery notes, in one step and remembers the choice for the route", async () => {
+  access.write = true;
+  window.localStorage.clear();
+  const order = (id: string, number: string, customer: string) => ({
+    salesOrderId: id, salesOrderNumber: number, customerName: customer, lineId: `${id}-l`, orderedQty: 5, invoiceQty: 5,
+  });
+  api.notes = [{
+    id: "n3",
+    number: "LDN-0011",
+    date: "2026-11-25T07:00:00.000Z",
+    createdAt: "2026-11-25T07:00:00.000Z",
+    loadedAt: "2026-11-25T09:06:00.000Z",
+    status: "CONFIRMED",
+    truck: "KCT 981Q",
+    routeWarehouseId: "mar",
+    routeWarehouseName: "MAR - MARULA STORE",
+    fulfilmentWarehouseId: "mar",
+    fulfilmentWarehouseName: "MAR - MARULA STORE",
+    fulfilmentFromOrder: true,
+    salesOrderIds: ["so-32", "so-33"],
+    lines: [{
+      productId: "cake", sku: "25", name: "JOY HALF DECORATED CAKE (550 GMS)", unit: "EA", orderedQty: 10, loadedQty: 10,
+      allocations: [order("so-32", "SO0032", "ANNOINTED"), order("so-33", "SO0033", "MAMA MBOGA")],
+    }],
+    results: [],
+  }];
+  api.documents.mockResolvedValue({});
+  render(<JoyLoaderNote noteId="n3" />);
+
+  expect(await screen.findByRole("button", { name: "Create 2 invoices and delivery notes" })).toBeInTheDocument();
+  expect(screen.getByRole("navigation", { name: "Load progress" })).toHaveTextContent("Invoices & delivery notes");
+  fireEvent.click(screen.getByRole("radio", { name: /Invoice only/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Create 2 invoices" }));
+  await waitFor(() => expect(api.documents).toHaveBeenCalledWith("n3", { deliveryNotes: false, salesOrderId: undefined }));
+  expect(window.localStorage.getItem("odaflow.joy.routeDocuments.mar")).toBe("invoice");
+
+  fireEvent.click(screen.getAllByRole("button", { name: "Create" })[0]!);
+  await waitFor(() => expect(api.documents).toHaveBeenLastCalledWith("n3", { deliveryNotes: false, salesOrderId: "so-32" }));
 });
