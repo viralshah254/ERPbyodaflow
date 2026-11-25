@@ -679,6 +679,34 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   );
 });
 
+function BlockedStoreNotice({ store, onDismiss }: { store: LookupOption; onDismiss: () => void }) {
+  const issue = store.transferSourceIssue;
+  return (
+    <div role="alert" aria-label="Store cannot send stock" className="flex items-start gap-2.5 rounded-lg border border-destructive/40 bg-destructive/[0.06] px-3 py-2.5 text-sm">
+      <Icons.AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+      <div className="min-w-0 flex-1 space-y-1">
+        <p className="font-medium text-foreground">{shortStore(store.label)} cannot send stock yet</p>
+        <p className="text-muted-foreground">{issue?.reason ?? `${store.label}: ${store.transferSourceBlock}.`}</p>
+        {issue ? (
+          <a
+            href={issue.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+          >
+            {issue.fix}
+            <Icons.ExternalLink className="h-3.5 w-3.5" aria-hidden />
+          </a>
+        ) : null}
+        <p className="text-xs text-muted-foreground">Come back to this tab when done. The store is picked for you once it can send.</p>
+      </div>
+      <button type="button" onClick={onDismiss} aria-label="Dismiss" className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <Icons.X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 function StorePanel(props: {
   tone: "from" | "to";
   children: React.ReactNode;
@@ -791,10 +819,39 @@ export default function NewTransferPage() {
     if (prefill.reference) setReference(prefill.reference);
   }, [recentToKey]);
 
+  /** A store the user tried to send from that cannot send yet. Explained under the picker with a link to fix it. */
+  const [blockedStore, setBlockedStore] = React.useState<LookupOption | null>(null);
+  const [warehouseReload, setWarehouseReload] = React.useState(0);
+
   React.useEffect(() => {
     if (!canWrite) return;
     void fetchWarehouseOptions({ includeTransferEligibility: true }).then(setWarehouses).catch((error: Error) => setWarehouseError(error.message));
-  }, [canWrite]);
+  }, [canWrite, warehouseReload]);
+
+  /** Fixed in the other tab: check again on return, and pick the store once it can send. */
+  React.useEffect(() => {
+    if (!blockedStore) return;
+    const recheck = () => {
+      if (document.visibilityState === "visible") setWarehouseReload((value) => value + 1);
+    };
+    window.addEventListener("focus", recheck);
+    document.addEventListener("visibilitychange", recheck);
+    return () => {
+      window.removeEventListener("focus", recheck);
+      document.removeEventListener("visibilitychange", recheck);
+    };
+  }, [blockedStore]);
+
+  React.useEffect(() => {
+    if (!blockedStore) return;
+    const now = warehouses.find((wh) => wh.id === blockedStore.id);
+    if (!now || now.transferSourceBlock) return;
+    setBlockedStore(null);
+    toast.success(`${now.label} can send stock now.`);
+    setFromWarehouseId(now.id);
+    setStockLoading(true);
+    setToWarehouseId((current) => (current === now.id ? "" : current));
+  }, [warehouses, blockedStore]);
 
   /** Start from the store used last time, unless the link chose one. */
   React.useEffect(() => {
@@ -911,11 +968,12 @@ export default function NewTransferPage() {
   }
 
   function chooseFrom(value: string) {
-    const block = warehouses.find((wh) => wh.id === value)?.transferSourceBlock;
-    if (block) {
-      toast.error(block);
+    const store = warehouses.find((wh) => wh.id === value);
+    if (store?.transferSourceBlock) {
+      setBlockedStore(store);
       return;
     }
+    setBlockedStore(null);
     if (value === fromWarehouseId) return;
     setFromWarehouseId(value);
     setStockLoading(Boolean(value));
@@ -924,9 +982,8 @@ export default function NewTransferPage() {
 
   function swapStores() {
     if (!toWarehouseId) return;
-    const block = toStore?.transferSourceBlock;
-    if (block) {
-      toast.error(`${toStore?.label} cannot send stock. ${block}`);
+    if (toStore?.transferSourceBlock) {
+      setBlockedStore(toStore);
       return;
     }
     const nextTo = fromWarehouseId;
@@ -1229,6 +1286,7 @@ export default function NewTransferPage() {
                   wrapLabels
                   minDropdownWidth={300}
                 />
+                {blockedStore ? <BlockedStoreNotice store={blockedStore} onDismiss={() => setBlockedStore(null)} /> : null}
               </StorePanel>
               <div className="relative flex items-center justify-center border-y py-1 md:border-x md:border-y-0 md:px-3 md:py-0">
                 <button

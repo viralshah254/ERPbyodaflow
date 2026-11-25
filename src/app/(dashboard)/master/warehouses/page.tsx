@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -46,6 +47,14 @@ function suggestNextWarehouseCode(existing: string[]): string {
   const max = numbers.length > 0 ? Math.max(...numbers) : 0;
   return `WH-${String(max + 1).padStart(3, "0")}`;
 }
+
+const WAREHOUSE_PURPOSES = [
+  { value: "STORAGE", label: "Storage", hint: "Holds stock that can be sold or sent to other stores." },
+  { value: "RECEIVING", label: "Receiving", hint: "Takes in deliveries and finished batches. Can send stock on." },
+  { value: "DISPATCH", label: "Dispatch", hint: "Picks and loads orders, such as a route store. Can send stock on." },
+  { value: "QUARANTINE", label: "Quarantine", hint: "Holds stock waiting for quality checks. Cannot transfer out." },
+  { value: "TRANSIT", label: "Transit", hint: "Goods on the road between stores. Cannot transfer out." },
+] as const;
 
 export default function MasterWarehousesPage() {
   const terminology = useTerminology();
@@ -134,6 +143,19 @@ export default function MasterWarehousesPage() {
     });
     setDrawerOpen(true);
   };
+
+  /** Links from a blocked transfer open the store straight in edit, e.g. /master/warehouses?edit=<id>. */
+  const editFromLink = React.useRef(false);
+  React.useEffect(() => {
+    if (editFromLink.current || loading || !canWrite) return;
+    const id = new URLSearchParams(window.location.search).get("edit");
+    if (!id) return;
+    editFromLink.current = true;
+    const row = rows.find((item) => item.id === id);
+    if (row) openEdit(row);
+    else toast.error("That store was not found. It may have been removed.");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, rows, canWrite]);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -330,18 +352,31 @@ export default function MasterWarehousesPage() {
             />
           </div>
           <div className="space-y-2">
-            <Label>Purpose</Label>
+            <Label htmlFor="warehouse-purpose">Purpose</Label>
             <Select
               value={form.purpose}
               onValueChange={(value) => setForm((current) => ({ ...current, purpose: value as typeof current.purpose }))}
             >
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger
+                id="warehouse-purpose"
+                aria-label="Purpose"
+                className={cn(!form.purpose && "border-destructive/60 ring-1 ring-destructive/30")}
+              >
+                <SelectValue placeholder="Choose what this store is for" />
+              </SelectTrigger>
               <SelectContent>
-                {["STORAGE", "RECEIVING", "QUARANTINE", "DISPATCH", "TRANSIT"].map((purpose) => (
-                  <SelectItem key={purpose} value={purpose}>{purpose}</SelectItem>
+                {WAREHOUSE_PURPOSES.map((purpose) => (
+                  <SelectItem key={purpose.value} value={purpose.value}>
+                    {purpose.label} · {purpose.hint}
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <p className={cn("text-xs", form.purpose ? "text-muted-foreground" : "text-destructive")}>
+              {form.purpose
+                ? WAREHOUSE_PURPOSES.find((purpose) => purpose.value === form.purpose)?.hint
+                : "Not set yet. Until it is, stock cannot be transferred out of this store."}
+            </p>
           </div>
           <div className="space-y-2">
             <Label>Capabilities</Label>
