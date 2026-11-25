@@ -8,6 +8,8 @@ export interface LookupOption {
   /** Why stock cannot be transferred out of this store. */
   transferSourceBlock?: string;
   transferSourceIssue?: TransferSourceIssue;
+  /** Why stock cannot be transferred into this store. */
+  transferTargetIssue?: TransferSourceIssue;
 }
 
 export async function fetchBranchOptions(): Promise<LookupOption[]> {
@@ -61,6 +63,25 @@ function transferSourceIssue(warehouse: {
   }
 }
 
+function transferTargetIssue(warehouse: { id: string; name: string; status?: string; purpose?: string }): TransferSourceIssue | undefined {
+  const href = `/master/warehouses?edit=${encodeURIComponent(warehouse.id)}`;
+  if (warehouse.status?.trim().toUpperCase() === "INACTIVE") {
+    return { label: "Switched off", reason: `${warehouse.name} is switched off, so it cannot receive stock.`, fix: "Switch the store back on", href };
+  }
+  const use = warehouse.purpose?.trim().toUpperCase();
+  if (!use) {
+    return {
+      label: "Purpose not set",
+      reason: `${warehouse.name} has no purpose set, so the ERP will not put stock into it.`,
+      fix: "Set its purpose, for example Dispatch for a route store",
+      href,
+    };
+  }
+  if (use === "TRANSIT") {
+    return { label: "Goods in transit", reason: `${warehouse.name} is a transit store. Transfers go to the real receiving store instead.`, fix: "Change its purpose", href };
+  }
+}
+
 export async function fetchWarehouseOptions({ includeTransferEligibility = false } = {}): Promise<LookupOption[]> {
   requireLiveApi("Warehouse options");
   const result: LookupOption[] = [], seen = new Set<string>();
@@ -75,8 +96,13 @@ export async function fetchWarehouseOptions({ includeTransferEligibility = false
         label: item.code ? `${item.code} - ${item.name}` : item.name,
         branchId: item.branchId,
         ...(includeTransferEligibility ? (() => {
-          const issue = transferSourceIssue({ ...item, name: item.code ? `${item.code} - ${item.name}` : item.name });
-          return issue ? { transferSourceBlock: issue.label, transferSourceIssue: issue } : {};
+          const named = { ...item, name: item.code ? `${item.code} - ${item.name}` : item.name };
+          const issue = transferSourceIssue(named);
+          const target = transferTargetIssue(named);
+          return {
+            ...(issue ? { transferSourceBlock: issue.label, transferSourceIssue: issue } : {}),
+            ...(target ? { transferTargetIssue: target } : {}),
+          };
         })() : {}),
       });
     }

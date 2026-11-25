@@ -167,11 +167,14 @@ function productCodes(row: TransferStockRow): string {
   return [...new Set([row.sku, row.code, row.barcode].filter(Boolean))].join(" · ");
 }
 
-function storeOptions(warehouses: LookupOption[], query: string, showBlock: boolean): AsyncSearchableSelectOption[] {
+function storeOptions(warehouses: LookupOption[], query: string, side: "from" | "to"): AsyncSearchableSelectOption[] {
   const needle = query.trim().toLowerCase();
   return warehouses
     .filter((wh) => !needle || wh.label.toLowerCase().includes(needle))
-    .map((wh) => ({ id: wh.id, label: wh.label, ...(showBlock && wh.transferSourceBlock ? { description: wh.transferSourceBlock } : {}) }));
+    .map((wh) => {
+      const tag = side === "from" ? wh.transferSourceBlock : wh.transferTargetIssue?.label;
+      return { id: wh.id, label: wh.label, ...(tag ? { description: tag } : {}) };
+    });
 }
 
 function todayInNairobi() {
@@ -679,13 +682,14 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   );
 });
 
-function BlockedStoreNotice({ store, onDismiss }: { store: LookupOption; onDismiss: () => void }) {
-  const issue = store.transferSourceIssue;
+function BlockedStoreNotice({ store, direction = "send", onDismiss }: { store: LookupOption; direction?: "send" | "receive"; onDismiss?: () => void }) {
+  const issue = direction === "send" ? store.transferSourceIssue : store.transferTargetIssue;
+  const verb = direction === "send" ? "send" : "receive";
   return (
-    <div role="alert" aria-label="Store cannot send stock" className="flex items-start gap-2.5 rounded-lg border border-destructive/40 bg-destructive/[0.06] px-3 py-2.5 text-sm">
+    <div role="alert" aria-label={`Store cannot ${verb} stock`} className="flex items-start gap-2.5 rounded-lg border border-destructive/40 bg-destructive/[0.06] px-3 py-2.5 text-sm">
       <Icons.AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
       <div className="min-w-0 flex-1 space-y-1">
-        <p className="font-medium text-foreground">{shortStore(store.label)} cannot send stock yet</p>
+        <p className="font-medium text-foreground">{shortStore(store.label)} cannot {verb} stock yet</p>
         <p className="text-muted-foreground">{issue?.reason ?? `${store.label}: ${store.transferSourceBlock}.`}</p>
         {issue ? (
           <a
@@ -698,11 +702,15 @@ function BlockedStoreNotice({ store, onDismiss }: { store: LookupOption; onDismi
             <Icons.ExternalLink className="h-3.5 w-3.5" aria-hidden />
           </a>
         ) : null}
-        <p className="text-xs text-muted-foreground">Come back to this tab when done. The store is picked for you once it can send.</p>
+        <p className="text-xs text-muted-foreground">
+          {direction === "send" ? "Come back to this tab when done. The store is picked for you once it can send." : "Come back to this tab when done. This clears by itself once the store is set."}
+        </p>
       </div>
-      <button type="button" onClick={onDismiss} aria-label="Dismiss" className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
-        <Icons.X className="h-4 w-4" />
-      </button>
+      {onDismiss ? (
+        <button type="button" onClick={onDismiss} aria-label="Dismiss" className="rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <Icons.X className="h-4 w-4" />
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -829,8 +837,9 @@ export default function NewTransferPage() {
   }, [canWrite, warehouseReload]);
 
   /** Fixed in the other tab: check again on return, and pick the store once it can send. */
+  const targetBlocked = Boolean(warehouses.find((wh) => wh.id === toWarehouseId)?.transferTargetIssue);
   React.useEffect(() => {
-    if (!blockedStore) return;
+    if (!blockedStore && !targetBlocked) return;
     const recheck = () => {
       if (document.visibilityState === "visible") setWarehouseReload((value) => value + 1);
     };
@@ -840,7 +849,7 @@ export default function NewTransferPage() {
       window.removeEventListener("focus", recheck);
       document.removeEventListener("visibilitychange", recheck);
     };
-  }, [blockedStore]);
+  }, [blockedStore, targetBlocked]);
 
   React.useEffect(() => {
     if (!blockedStore) return;
@@ -1057,9 +1066,10 @@ export default function NewTransferPage() {
     const { stock, factor, baseQty, over } = lineDetails(line);
     return Boolean(stock && factor && Number.isFinite(baseQty) && baseQty > 0 && !over);
   });
-  const ready = !busy && !stockLoading && !stockError && Boolean(date && fromWarehouseId && toWarehouseId) && hasValidLines;
+  const ready = !busy && !stockLoading && !stockError && Boolean(date && fromWarehouseId && toWarehouseId) && !toStore?.transferTargetIssue && hasValidLines;
   const blocker = !fromWarehouseId ? "Choose where the stock comes from."
     : !toWarehouseId ? "Choose where the stock goes."
+      : toStore?.transferTargetIssue ? `Set up ${shortStore(toStore.label)} first. See the note under Send stock to.`
       : !pickedIds.length ? (sheetMode ? "Enter a quantity for at least one product." : "Search for a product, or browse the store, to add it.")
         : !selectedLines.length ? "Enter a quantity for at least one product."
           : !hasValidLines ? "Fix the quantities marked in red."
@@ -1277,7 +1287,7 @@ export default function NewTransferPage() {
                   value={fromWarehouseId}
                   selectedOption={fromStore ?? null}
                   onValueChange={chooseFrom}
-                  loadOptions={async (query) => storeOptions(warehouses, query, true)}
+                  loadOptions={async (query) => storeOptions(warehouses, query, "from")}
                   reloadToken={warehouses.length}
                   searchDebounceMs={0}
                   placeholder="Choose a store"
@@ -1311,7 +1321,7 @@ export default function NewTransferPage() {
                   value={toWarehouseId}
                   selectedOption={toStore ?? null}
                   onValueChange={setToWarehouseId}
-                  loadOptions={async (query) => storeOptions(warehouses.filter((wh) => wh.id !== fromWarehouseId), query, false)}
+                  loadOptions={async (query) => storeOptions(warehouses.filter((wh) => wh.id !== fromWarehouseId), query, "to")}
                   reloadToken={`${warehouses.length}:${fromWarehouseId}`}
                   searchDebounceMs={0}
                   placeholder="Choose a store"
@@ -1320,6 +1330,7 @@ export default function NewTransferPage() {
                   wrapLabels
                   minDropdownWidth={300}
                 />
+                {toStore?.transferTargetIssue ? <BlockedStoreNotice store={toStore} direction="receive" /> : null}
               </StorePanel>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t bg-muted/30 px-4 py-2.5 sm:px-5">
