@@ -16,6 +16,7 @@ import { exportTransfersCsv, fetchTransferHistory, updateTransferStatus, type Tr
 import { fetchWarehouseOptions, type LookupOption } from "@/lib/api/lookups";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { formatActivityStamp, formatActivityWhen } from "@/lib/format/nairobi-datetime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -183,7 +184,23 @@ export default function WarehouseTransfersPage() {
           </span>
         ),
       },
-      { id: "date", header: "Date", accessor: (r: TransferRow) => <span className="whitespace-nowrap tabular-nums">{r.date}</span> },
+      {
+        id: "date",
+        header: "Date",
+        accessor: (r: TransferRow) => {
+          const instant = r.createdAt || r.date;
+          const relative = formatActivityWhen(instant);
+          const exact = formatActivityStamp(instant);
+          return (
+            <span className="block leading-snug">
+              <span className="block whitespace-nowrap">{relative}</span>
+              {exact && exact !== relative ? (
+                <span className="block whitespace-nowrap text-xs text-muted-foreground">{exact}</span>
+              ) : null}
+            </span>
+          );
+        },
+      },
       {
         id: "route",
         header: "From → To",

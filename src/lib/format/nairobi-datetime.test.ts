@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
-import { formatActivityWhenEat, formatDocumentCreatedLabel, formatNairobiRelativeTime } from "./nairobi-datetime";
+import { formatActivityStamp, formatActivityWhenEat, formatDocumentCreatedLabel, formatNairobiRelativeTime } from "./nairobi-datetime";
 
 describe("formatNairobiRelativeTime", () => {
   afterEach(() => {
@@ -36,6 +36,16 @@ describe("formatNairobiRelativeTime", () => {
 
   it("formats date-only fallback without time", () => {
     expect(formatDocumentCreatedLabel(undefined, "2026-07-30")).toBe("30th July");
+  });
+});
+
+describe("formatActivityStamp", () => {
+  it("writes an ordinal date and a Nairobi clock", () => {
+    expect(formatActivityStamp("2026-11-27T17:30:00.000Z")).toBe("27th Nov 2026, 8:30 pm");
+  });
+
+  it("omits the clock when only a date was stored", () => {
+    expect(formatActivityStamp("2026-11-04")).toBe("4th Nov 2026");
   });
 });
 

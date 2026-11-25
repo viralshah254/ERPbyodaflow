@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { transferBackLink } from "@/lib/warehouse/transfer-prefill";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
 import { ArrowLeft, ArrowRight, Download } from "lucide-react";
+import { formatActivityStamp, formatActivityWhen } from "@/lib/format/nairobi-datetime";
 import { cn } from "@/lib/utils";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -224,7 +225,10 @@ export default function TransferDetailPage() {
             <dl className="grid gap-3 sm:grid-cols-3">
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Date</dt>
-                <dd className="mt-0.5 font-medium tabular-nums">{t.date}</dd>
+                <dd className="mt-0.5 font-medium">
+                  <span className="block">{formatActivityWhen(t.createdAt || t.date)}</span>
+                  <span className="block text-xs font-normal text-muted-foreground">{formatActivityStamp(t.createdAt || t.date)}</span>
+                </dd>
               </div>
               <div>
                 <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reference</dt>

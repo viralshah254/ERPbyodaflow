@@ -59,6 +59,8 @@ const MONTH_NAMES = [
   "December",
 ];
 
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function formatClock(parts: ReturnType<typeof nairobiParts>): string {
   const hourNum = Number(parts.hour);
   const hour = Number.isFinite(hourNum) && hourNum % 12 === 0 ? "12" : parts.hour;
@@ -180,6 +182,18 @@ export function formatActivityWhenEat(value?: string | null): string {
   if (!parsed?.hasTime) return relative;
   const clock = formatClock(nairobiParts(parsed.date));
   return `${relative}, ${clock}`;
+}
+
+/** "27th Nov 2026, 8:30 pm". Date-only values omit the clock. */
+export function formatActivityStamp(value?: string | null): string {
+  if (!value?.trim()) return "";
+  const parsed = parseActivityInstant(value);
+  if (!parsed) return value.trim();
+  const parts = nairobiParts(parsed.date);
+  const month = MONTH_SHORT[parts.month - 1] ?? "";
+  const day = `${ordinal(parts.day)} ${month} ${parts.year}`;
+  if (!parsed.hasTime) return day;
+  return `${day}, ${formatClock(parts)}`;
 }
 
 /** Full date for tooltips and printed statements. */
