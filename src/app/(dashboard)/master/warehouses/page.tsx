@@ -53,7 +53,7 @@ const WAREHOUSE_PURPOSES = [
   { value: "RECEIVING", label: "Receiving", hint: "Takes in deliveries and finished batches. Can send stock on." },
   { value: "DISPATCH", label: "Dispatch", hint: "Picks and loads orders, such as a route store. Can send stock on." },
   { value: "QUARANTINE", label: "Quarantine", hint: "Holds stock waiting for quality checks. Cannot transfer out." },
-  { value: "TRANSIT", label: "Transit", hint: "Goods on the road between stores. Cannot transfer out." },
+  { value: "TRANSIT", label: "Transit", hint: "Route store. Takes transfers, sells and sends stock on, like Dispatch." },
 ] as const;
 
 export default function MasterWarehousesPage() {

@@ -84,7 +84,7 @@ export function WorkOrderPreparation({
   const savedOutputId = order.preparationDefaults?.outputWarehouseId || order.outputLines?.[0]?.warehouseId;
   const outputRecommendation = recommendOutputStore(catalog, savedOutputId);
   const outputRecommendedId = outputRecommendation?.id;
-  const outputReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, or Dispatch.";
+  const outputReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, Dispatch, or Transit.";
   const sortedInputs = React.useMemo(() => [...catalog].sort((a, b) => compareStoresForBatch(a, b, recommendedId, storeOptionLabel)), [catalog, recommendedId]);
   const sortedOutputs = React.useMemo(() => [...catalog].sort((a, b) => compareStoresForBatch(a, b, outputRecommendedId, storeOptionLabel)), [catalog, outputRecommendedId]);
   React.useEffect(() => {

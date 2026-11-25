@@ -4105,12 +4105,12 @@ function DynamicNextStepsPanel({
         steps.push({
           icon: <Icons.Truck className="h-4 w-4 text-blue-500" />,
           text: waitingToLeave
-            ? `On loader note ${joyLoadNote.number}. Mark the truck as left when it goes.`
+            ? `On pick list ${joyLoadNote.number}. Mark the truck as left when it goes.`
             : joyLoadNote.status === "OPEN"
-              ? `On loader note ${joyLoadNote.number}. Confirm the loader note after the truck is packed.`
+              ? `On pick list ${joyLoadNote.number}. Transfer the stock to the route store, then create this order's invoice or delivery note from the route.`
               : joyLoadNote.status === "CONFIRMED"
-                ? `Loader note ${joyLoadNote.number} is confirmed. Create this order's delivery note from the route.`
-                : `On loader note ${joyLoadNote.number}. Finance assigns the short across the orders.`,
+                ? `Pick list ${joyLoadNote.number} is confirmed. Create this order's invoice or delivery note from the route.`
+                : `On pick list ${joyLoadNote.number}. Finance assigns the short across the orders.`,
           href: routeLoadHref(joyLoadNote.id),
           actionLabel: waitingToLeave ? "Mark truck left" : `Open ${joyLoadNote.number}`,
           variant: "default",
