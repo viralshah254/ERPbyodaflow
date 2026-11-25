@@ -357,7 +357,7 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
   const formulaOutputId = bomById.current.get(bomId)?.outputWarehouseId;
   const outputRecommendation = recommendOutputStore(storeCatalog, formulaOutputId);
   const outputRecommendedId = outputRecommendation?.id;
-  const outputRecommendationReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, or Dispatch.";
+  const outputRecommendationReason = "Shelf store. A completed batch shows on the shelf when it is received into Storage, Receiving, Dispatch, or Transit.";
   const sortedInputs = React.useMemo(
     () => [...storeCatalog].sort((a, b) => compareStoresForBatch(a, b, recommendedId, storeOptionLabel)),
     [storeCatalog, recommendedId],

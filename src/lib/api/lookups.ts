@@ -40,21 +40,21 @@ function transferSourceIssue(warehouse: {
     return { label: "Switched off", reason: `${name} is switched off, so nothing can be sent from it.`, fix: "Switch the store back on", href };
   }
   const use = purpose?.trim().toUpperCase();
-  if (use === "TRANSIT") {
+  const disposition = stockDisposition?.trim().toUpperCase();
+  if (disposition === "TRANSIT") {
     return { label: "Goods in transit", reason: `${name} only holds goods on the road. They leave it when the receiving store confirms them.`, fix: "Open the store", href };
   }
   if (use === "QUARANTINE") {
     return { label: "Quality hold", reason: `${name} holds stock waiting for quality checks. It moves out when QC releases it.`, fix: "Open the store", href };
   }
-  if (use !== "STORAGE" && use !== "RECEIVING" && use !== "DISPATCH") {
+  if (use !== "STORAGE" && use !== "RECEIVING" && use !== "DISPATCH" && use !== "TRANSIT") {
     return {
       label: "Purpose not set",
       reason: `${name} has no purpose set, so the ERP cannot tell if its stock may be sent out.`,
-      fix: "Set its purpose to Storage, Receiving or Dispatch",
+      fix: "Set its purpose, for example Transit for a route store",
       href,
     };
   }
-  const disposition = stockDisposition?.trim().toUpperCase();
   const pending = dispositionPending?.trim().toUpperCase();
   const holdPending = pending === "QUARANTINE" || pending === "DAMAGED" || pending === "EXPIRED" || pending === "TRANSIT";
   if ((disposition && disposition !== "USABLE") || holdPending) {
@@ -63,7 +63,7 @@ function transferSourceIssue(warehouse: {
   }
 }
 
-function transferTargetIssue(warehouse: { id: string; name: string; status?: string; purpose?: string }): TransferSourceIssue | undefined {
+function transferTargetIssue(warehouse: { id: string; name: string; status?: string; purpose?: string; stockDisposition?: string }): TransferSourceIssue | undefined {
   const href = `/master/warehouses?edit=${encodeURIComponent(warehouse.id)}`;
   if (warehouse.status?.trim().toUpperCase() === "INACTIVE") {
     return { label: "Switched off", reason: `${warehouse.name} is switched off, so it cannot receive stock.`, fix: "Switch the store back on", href };
@@ -73,11 +73,11 @@ function transferTargetIssue(warehouse: { id: string; name: string; status?: str
     return {
       label: "Purpose not set",
       reason: `${warehouse.name} has no purpose set, so the ERP will not put stock into it.`,
-      fix: "Set its purpose, for example Dispatch for a route store",
+      fix: "Set its purpose, for example Transit for a route store",
       href,
     };
   }
-  if (use === "TRANSIT") {
+  if (warehouse.stockDisposition?.trim().toUpperCase() === "TRANSIT") {
     return { label: "Goods in transit", reason: `${warehouse.name} is a transit store. Transfers go to the real receiving store instead.`, fix: "Change its purpose", href };
   }
 }

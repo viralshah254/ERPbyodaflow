@@ -289,15 +289,6 @@ export async function setJoyLoadSalesReps(id: string, salesRepIds: string[]): Pr
   return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/sales-reps`, { method: "PUT", body: { salesRepIds } });
 }
 
-export async function recordJoyLoaded(
-  id: string,
-  lines: Array<{ productId: string; loadedQty: number }>,
-  documents: JoyLoadDocumentPlan = "both"
-): Promise<JoyLoadNote> {
-  requireLiveApi(LOADS);
-  return apiRequest(`/api/joy-dispatch/load-notes/${encodeURIComponent(id)}/loaded`, { method: "POST", body: { lines, documents } });
-}
-
 export async function allocateJoyLoad(
   id: string,
   allocations: Array<{ salesOrderId: string; lineId: string; quantity: number }>,
@@ -388,25 +379,7 @@ async function printPdfInNewTab(path: string, title: string, what: string, onErr
 }
 
 export function printJoyLoadNotePdf(note: { id: string; number: string }, onError: (message: string) => void) {
-  return printPdfInNewTab(`/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/pdf`, note.number, "loader note", onError);
-}
-
-/** What the route store still has to receive, for whoever does the transfer. */
-export function printJoyTransferRequestPdf(note: { id: string; number: string }, onError: (message: string) => void) {
-  return printPdfInNewTab(
-    `/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/transfer-request/pdf`,
-    `Transfer request ${note.number}`,
-    "transfer request",
-    onError
-  );
-}
-
-export async function emailJoyTransferRequest(noteId: string, to: string) {
-  requireLiveApi(LOADS);
-  return apiRequest<{ sent: boolean; to: string }>(`/api/joy-dispatch/load-notes/${encodeURIComponent(noteId)}/transfer-request/email`, {
-    method: "POST",
-    body: { to },
-  });
+  return printPdfInNewTab(`/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/pdf`, note.number, "pick list", onError);
 }
 
 export async function fetchJoyMovementSummary(warehouseId: string, from: string, to: string) {

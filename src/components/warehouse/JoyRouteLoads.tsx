@@ -16,26 +16,20 @@ import {
   createJoyDeliveryNotes,
   createJoyLoadNote,
   createJoyRouteDocuments,
-  emailJoyTransferRequest,
   printJoyLoadNotePdf,
-  printJoyTransferRequestPdf,
   fetchJoyLoadNotes,
   markJoyLoadDeparted,
-  recordJoyLoaded,
   setJoyLoadSalesReps,
   type JoyLoadDocumentPlan,
   type JoyLoadNote,
   type JoyLoadNotes,
-  type JoyLoadStockLine,
   type JoyWaitingRoute,
 } from "@/lib/api/joy-dispatch";
-import { ArrowRightLeft, Check, CheckCircle2, ChevronRight, ClipboardList, Mail, MapPin, Package, Printer, RefreshCw, Truck } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Check, ChevronRight, ClipboardList, ExternalLink, MapPin, Truck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SfaSalesRepsField, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
-import { routeLoadNoteHref, transferPrefillHref } from "@/lib/warehouse/transfer-prefill";
 
 function roundQty(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -141,9 +135,8 @@ export function loaderNotePath(id: string): string {
 
 function truckStage(note: JoyLoadNote): string {
   if (note.departedAt) return "Left";
-  if (note.status === "OPEN") return "Confirm load";
   if (note.status === "AWAITING_FINANCE" || note.status === "INVOICING") return "Finance review";
-  if (note.status === "CONFIRMED") return "Invoices & delivery notes";
+  if (note.status === "OPEN" || note.status === "CONFIRMED") return "Invoices & delivery notes";
   if (note.status === "INVOICED") return "Ready to leave";
   return note.status;
 }
@@ -183,7 +176,6 @@ type LoadMilestone = {
 function loadMilestones(note: JoyLoadNote): LoadMilestone[] {
   return [
     { key: "created", label: "Created", at: note.createdAt || note.date, icon: ClipboardList },
-    { key: "loaded", label: "Loaded", at: note.loadedAt, icon: Package },
     { key: "departed", label: "Left yard", at: note.departedAt, icon: Truck },
   ].filter((step): step is LoadMilestone & { at: string } => Boolean(step.at));
 }
@@ -413,52 +405,24 @@ function lineQtyByProduct(note: JoyLoadNote): Map<string, { loaded: number; unit
 
 const EPS = 0.0001;
 
-function stockShorts(note: JoyLoadNote): Array<{ line: LoadedLine; stock: JoyLoadStockLine }> {
-  const byProduct = new Map((note.stock ?? []).map((row) => [row.productId, row]));
-  return note.lines.flatMap((line) => {
-    const stock = byProduct.get(line.productId);
-    return stock && stock.shortQty > EPS ? [{ line, stock }] : [];
-  });
-}
-
-/** Transfer into the store this load picks from, with each short product and quantity filled in. */
-function loadTransferHref(note: JoyLoadNote, shorts: Array<{ line: LoadedLine; stock: JoyLoadStockLine }>): string {
-  return transferPrefillHref({
-    toWarehouseId: note.fulfilmentWarehouseId,
-    lines: shorts.map(({ line, stock }) => ({ productId: line.productId, quantity: stock.shortQty })),
-    reference: `Loader note ${note.number}`,
-    returnTo: "load",
-    backHref: routeLoadNoteHref(note.id),
-  });
-}
-
 type ProgressStep = { key: string; label: string; done: boolean; hint?: string };
 
 function loadProgress(note: JoyLoadNote): ProgressStep[] {
   const results = new Map(note.results.map((row) => [row.salesOrderId, row]));
   const packedOrders = [...new Set(note.lines.flatMap((line) =>
     line.allocations.filter((row) => row.invoiceQty > EPS).map((row) => row.salesOrderId)))];
-  const loaded = Boolean(note.loadedAt);
-  const shortCount = stockShorts(note).length;
-  const notesDone = loaded && packedOrders.length > 0 && packedOrders.every((id) => results.get(id)?.deliveryNoteId);
-  const invoicesDone = loaded && packedOrders.length > 0 && packedOrders.every((id) => results.get(id)?.invoiceId);
+  const notesDone = packedOrders.length > 0 && packedOrders.every((id) => results.get(id)?.deliveryNoteId);
+  const invoicesDone = packedOrders.length > 0 && packedOrders.every((id) => results.get(id)?.invoiceId);
   const notesMade = packedOrders.filter((id) => results.get(id)?.deliveryNoteId).length;
   const invoicesMade = packedOrders.filter((id) => results.get(id)?.invoiceId).length;
   const orderCount = note.salesOrderIds.length;
   return [
     { key: "orders", label: "Orders", done: true, hint: `${orderCount} order${orderCount === 1 ? "" : "s"}` },
     {
-      key: "stock",
-      label: "Stock at route",
-      done: loaded || (note.stock !== undefined && shortCount === 0),
-      hint: loaded ? "Ready" : note.stock === undefined ? undefined : shortCount ? `${shortCount} to transfer` : "Ready",
-    },
-    { key: "load", label: "Load truck", done: loaded, hint: loaded ? formatWhenParts(note.loadedAt)?.compact : undefined },
-    {
       key: "documents",
       label: "Invoices & delivery notes",
       done: note.documentPlan === "delivery_note" ? notesDone : invoicesDone,
-      hint: loaded && packedOrders.length
+      hint: packedOrders.length
         ? note.documentPlan === "delivery_note" && !invoicesMade
           ? `${notesMade} of ${packedOrders.length} delivery notes`
           : `${invoicesMade} of ${packedOrders.length} done`
@@ -509,167 +473,11 @@ function LoadProgress({ note }: { note: JoyLoadNote }) {
   );
 }
 
-/** What the pick store holds against this load, with a prefilled transfer for anything short. */
-const TRANSFER_EMAIL_KEY = "odaflow.joy.transferRequestEmail";
-
-/** Someone else may do the transfer. They get a printable request with only what has to move. */
-function TransferRequestActions({ note }: { note: JoyLoadNote }) {
-  const [open, setOpen] = React.useState(false);
-  const [to, setTo] = React.useState("");
-  const [sending, setSending] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!open || to) return;
-    try {
-      setTo(window.localStorage.getItem(TRANSFER_EMAIL_KEY) ?? "");
-    } catch {
-      /* Private mode has no storage. */
-    }
-  }, [open, to]);
-
-  async function send(event: React.FormEvent) {
-    event.preventDefault();
-    const email = to.trim();
-    if (!email) return;
-    setSending(true);
-    try {
-      await emailJoyTransferRequest(note.id, email);
-      try {
-        window.localStorage.setItem(TRANSFER_EMAIL_KEY, email);
-      } catch {
-        /* Private mode has no storage. */
-      }
-      toast.success(`Transfer request sent to ${email}.`);
-      setOpen(false);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not send the transfer request.");
-    } finally {
-      setSending(false);
-    }
-  }
-
-  return (
-    <>
-      <Button
-        size="sm"
-        variant="outline"
-        className="bg-background/80"
-        onClick={() => void printJoyTransferRequestPdf(note, (message) => toast.error(message))}
-      >
-        <Printer className="mr-1.5 size-3.5" aria-hidden />
-        Print request
-      </Button>
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild>
-          <Button size="sm" variant="outline" className="bg-background/80">
-            <Mail className="mr-1.5 size-3.5" aria-hidden />
-            Email request
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-80">
-          <form onSubmit={send} className="space-y-3">
-            <div className="space-y-1">
-              <p className="text-sm font-medium">Send the transfer request</p>
-              <p className="text-xs text-muted-foreground">
-                They get a PDF of what to move into {placeLabel(note.fulfilmentWarehouseName)}, and a link that opens the transfer filled in.
-              </p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor={`transfer-request-email-${note.id}`}>Email</Label>
-              <Input
-                id={`transfer-request-email-${note.id}`}
-                type="email"
-                autoComplete="email"
-                placeholder="storekeeper@company.com"
-                value={to}
-                onChange={(event) => setTo(event.target.value)}
-                required
-                autoFocus
-              />
-            </div>
-            <Button type="submit" size="sm" className="w-full" disabled={sending || !to.trim()}>
-              {sending ? "Sending…" : "Send request"}
-            </Button>
-          </form>
-        </PopoverContent>
-      </Popover>
-    </>
-  );
-}
-
-function RouteStockPanel({ note, checking, onRecheck, onlyWhenShort = false }: {
-  note: JoyLoadNote;
-  checking: boolean;
-  onRecheck: () => void;
-  /** After loading, a store that still covers the truck needs no banner. */
-  onlyWhenShort?: boolean;
-}) {
-  if (note.stock === undefined) return null;
-  const shorts = stockShorts(note);
-  const store = placeLabel(note.fulfilmentWarehouseName);
-  if (!shorts.length) {
-    if (onlyWhenShort) return null;
-    return (
-      <p className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/[0.06] px-3 py-2.5 text-sm text-emerald-900 dark:text-emerald-200">
-        <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden />
-        <span><span className="font-medium">{store}</span> holds everything this load needs.</span>
-      </p>
-    );
-  }
-  const units = roundQty(shorts.reduce((sum, row) => sum + row.stock.shortQty, 0));
-  return (
-    <section aria-label="Stock to transfer" className="overflow-hidden rounded-xl border border-amber-500/40 bg-amber-500/[0.05]">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-amber-500/25 bg-amber-500/10 px-4 py-3">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <ArrowRightLeft className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
-          <div className="min-w-0">
-            <p className="font-semibold text-amber-950 dark:text-amber-50">Transfer stock to {store}</p>
-            <p className="text-sm text-muted-foreground">
-              {shorts.length} product{shorts.length === 1 ? "" : "s"} · {units} units short. The transfer opens with these filled in.
-            </p>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm">
-            <a href={loadTransferHref(note, shorts)} target="_blank" rel="noreferrer">
-              <ArrowRightLeft className="mr-1.5 size-3.5" aria-hidden />
-              Transfer {shorts.length} product{shorts.length === 1 ? "" : "s"}
-            </a>
-          </Button>
-          <TransferRequestActions note={note} />
-          <Button size="sm" variant="outline" className="bg-background/80" disabled={checking} onClick={onRecheck}>
-            <RefreshCw className={cn("mr-1.5 size-3.5", checking && "animate-spin")} aria-hidden />
-            {checking ? "Checking…" : "Check stock again"}
-          </Button>
-        </div>
-      </div>
-      <ul className="divide-y divide-amber-500/20">
-        {shorts.map(({ line, stock }) => (
-          <li key={line.productId} className="flex items-center gap-3 px-4 py-2 text-sm">
-            <span className="min-w-0 flex-1">
-              {line.sku ? <span className="block text-[11px] font-medium leading-none text-muted-foreground">SKU {line.sku}</span> : null}
-              <span className={cn("block leading-snug", line.sku && "mt-1", CAPS_ON_PRODUCT_CLASS)}>{line.name}</span>
-            </span>
-            <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
-              {stock.availableQty} in store · needs {stock.neededQty}
-            </span>
-            <span className="inline-flex h-7 min-w-[4.5rem] shrink-0 items-center justify-center rounded-md bg-amber-500/15 px-2 text-xs font-semibold tabular-nums text-amber-900 dark:text-amber-100">
-              +{stock.shortQty} {line.unit ?? ""}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-
 function WaitingRouteCard({
   route,
   trucks,
   busyTrucks,
   canLoad,
-  dispatchName,
   activeNote,
   focused,
   onChanged,
@@ -678,7 +486,6 @@ function WaitingRouteCard({
   trucks: string[];
   busyTrucks: string[];
   canLoad: boolean;
-  dispatchName: string;
   activeNote?: JoyLoadNote;
   focused?: boolean;
   onChanged: () => Promise<void>;
@@ -687,7 +494,6 @@ function WaitingRouteCard({
   const [truck, setTruck] = React.useState("");
   const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
-  const shortCount = route.products.filter((product) => (product.shortQty ?? 0) > 0.0001).length;
   const truckOptions = React.useMemo(
     () =>
       trucks.map((plate) => ({
@@ -707,7 +513,6 @@ function WaitingRouteCard({
     },
     [truckOptions],
   );
-  const pickStoreName = placeLabel(route.sourceWarehouseName || dispatchName);
   const totalUnits = roundQty(route.products.reduce((sum, product) => sum + product.orderedQty, 0));
   return (
     <Card id={`route-${route.warehouseId}`} className={focused ? "min-w-0 ring-2 ring-primary" : "min-w-0"}>
@@ -726,49 +531,24 @@ function WaitingRouteCard({
                 <th className="w-20 px-3 py-2 font-medium">SKU</th>
                 <th className="px-3 py-2 font-medium">Product</th>
                 <th className="w-24 px-3 py-2 text-right font-medium">Ordered</th>
-                <th className="w-28 px-3 py-2 text-right font-medium">In store</th>
               </tr>
             </thead>
             <tbody>
-              {route.products.map((product) => {
-                const short = (product.shortQty ?? 0) > EPS;
-                return (
-                  <tr key={product.productId} className={cn("border-t", short && "bg-amber-500/[0.07]")}>
-                    <td className={cn("border-l-2 px-3 py-1.5 align-top tabular-nums", short ? "border-l-amber-500" : "border-l-transparent")}>
-                      {product.sku ?? ""}
-                    </td>
-                    <td className={`break-words px-3 py-1.5 align-top ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
-                    <td className="px-3 py-1.5 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
-                    <td className="px-3 py-1.5 text-right align-top tabular-nums">
-                      {short ? (
-                        <>
-                          <span className="block text-muted-foreground">{product.availableQty ?? 0}</span>
-                          <span className="block text-xs font-medium text-amber-700 dark:text-amber-400">Transfer {product.shortQty}</span>
-                        </>
-                      ) : (
-                        <Check className="ml-auto size-4 text-emerald-600 dark:text-emerald-400" aria-label="In stock" />
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
+              {route.products.map((product) => (
+                <tr key={product.productId} className="border-t">
+                  <td className="px-3 py-1.5 align-top tabular-nums">{product.sku ?? ""}</td>
+                  <td className={`break-words px-3 py-1.5 align-top ${CAPS_ON_PRODUCT_CLASS}`}>{product.name}</td>
+                  <td className="px-3 py-1.5 text-right align-top font-medium tabular-nums">{product.orderedQty}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-        {shortCount > 0 && !activeNote ? (
-          <p className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/[0.07] px-3 py-2.5 text-sm">
-            <ArrowRightLeft className="mt-0.5 size-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
-            <span>
-              {pickStoreName} needs {shortCount} more product{shortCount === 1 ? "" : "s"} for these orders.
-              Create the loading note to print the sheet, then transfer the stock from it before the truck loads.
-            </span>
-          </p>
-        ) : null}
         {activeNote ? (
           <p className="rounded-md border bg-muted/50 p-3 text-sm">
             Waiting for {activeNote.number} to clear.{" "}
             <Link className="text-primary underline" href={loaderNotePath(activeNote.id)}>
-              Open loader note
+              Open pick list
             </Link>
           </p>
         ) : canLoad ? (
@@ -813,255 +593,88 @@ function WaitingRouteCard({
                   salesRepIds: salesReps.map((rep) => rep.id),
                 })
                   .then((note) => {
-                    toast.success(shortCount
-                      ? `Loader note ${note.number} created for ${note.truck}. Transfer ${shortCount} product${shortCount === 1 ? "" : "s"} to ${pickStoreName} before loading.`
-                      : `Loader note ${note.number} created for ${note.truck}.`);
+                    toast.success(`Pick list ${note.number} created for ${note.truck}.`);
                     router.push(loaderNotePath(note.id));
                   })
-                  .catch((error) => toast.error(errorMessage(error, "Could not create the loading note")))
+                  .catch((error) => toast.error(errorMessage(error, "Could not create the pick list")))
                   .finally(() => setBusy(false));
               }}
             >
-              Create loading note
+              Create pick list
             </Button>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">Warehouse staff choose the truck and create the note.</p>
+          <p className="text-sm text-muted-foreground">Warehouse staff choose the truck and create the pick list.</p>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function LoadingNoteCard({
-  note,
-  canLoad,
-  dispatchName,
-  checking,
-  onRecheck,
-  onChanged,
-  onCancelled,
-}: {
-  note: JoyLoadNote;
-  canLoad: boolean;
-  dispatchName: string;
-  checking: boolean;
-  onRecheck: () => void;
-  onChanged: () => Promise<void>;
-  onCancelled?: () => void;
-}) {
-  const router = useRouter();
-  const [loaded, setLoaded] = React.useState<Record<string, string>>({});
-  const [busyPlan, setBusyPlan] = React.useState<JoyLoadDocumentPlan | "cancel" | null>(null);
-  const busy = busyPlan != null;
-  const stockBy = new Map((note.stock ?? []).map((row) => [row.productId, row]));
+/** Why an invoice or delivery note stopped at the route store. */
+type RouteStoreProblem = { kind: "purpose" | "stock"; message: string };
+
+function routeStoreProblem(error: unknown): RouteStoreProblem | null {
+  const message = error instanceof Error ? error.message : "";
+  if (/cannot fulfil a sale/i.test(message)) return { kind: "purpose", message };
+  if (/not enough stock in/i.test(message)) return { kind: "stock", message };
+  return null;
+}
+
+function RouteStoreProblemPanel({ note, problem }: { note: JoyLoadNote; problem: RouteStoreProblem }) {
   const store = placeLabel(note.fulfilmentWarehouseName);
-  const rows = note.lines.map((line) => {
-    const qty = parseQty(loaded[line.productId], line.orderedQty);
-    const inStore = stockBy.get(line.productId)?.availableQty;
-    return {
-      line,
-      qty,
-      inStore,
-      short: roundQty(line.orderedQty - qty),
-      over: inStore !== undefined && Number.isFinite(qty) && qty - inStore > EPS,
-    };
-  });
-  const invalid = rows.some((row) => !Number.isFinite(row.qty) || row.qty < 0 || row.qty > row.line.orderedQty);
-  const overCount = rows.filter((row) => row.over).length;
-  const blocked = invalid || overCount > 0;
-  const full = !invalid && rows.every((row) => Math.abs(row.short) < EPS);
-  const loadWhatIsInStock = () => setLoaded((current) => {
-    const next = { ...current };
-    for (const row of rows) {
-      if (row.over && row.inStore !== undefined) next[row.line.productId] = String(roundQty(Math.max(0, row.inStore)));
-    }
-    return next;
-  });
+  if (problem.kind === "purpose") {
+    const href = note.fulfilmentWarehouseId
+      ? `/master/warehouses?edit=${encodeURIComponent(note.fulfilmentWarehouseId)}`
+      : "/master/warehouses";
+    return (
+      <div role="alert" className="space-y-1.5 rounded-lg border border-red-500/40 bg-red-500/[0.06] px-3 py-2.5 text-sm">
+        <p className="font-medium">{store} cannot supply invoices or delivery notes yet</p>
+        <p className="text-muted-foreground">Set its purpose, for example Transit for a route store, then create again.</p>
+        <Link
+          className="inline-flex items-center gap-1 font-medium text-primary underline-offset-2 hover:underline"
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Set the purpose of {store}
+          <ExternalLink className="size-3.5" aria-hidden />
+        </Link>
+      </div>
+    );
+  }
+  const byProduct = new Map(note.lines.map((line) => [line.productId, line]));
+  const shorts = (note.stock ?? []).filter((row) => row.shortQty > EPS);
   return (
-    <Card id={`note-${note.id}`} className="min-w-0">
-      <LoadNoteHeader
-        note={note}
-        routeHint={`Picked from ${placeLabel(note.fulfilmentFromOrder ? note.fulfilmentWarehouseName : dispatchName || note.fulfilmentWarehouseName)}`}
-      />
-      <CardContent className="space-y-4">
-        <OrderRoster orders={ordersOnNote(note)} />
-        <RouteStockPanel note={note} checking={checking} onRecheck={onRecheck} />
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold">Loading sheet</h3>
-          <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
-            Print loader note
-          </Button>
-        </div>
-        <div className="overflow-x-auto rounded-lg border">
-        <table className="w-full min-w-[36rem] table-fixed text-sm">
-          <thead className="bg-muted/30 text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="w-20 px-3 py-2 font-medium">SKU</th>
-              <th className="px-3 py-2 font-medium">Product</th>
-              <th className="w-20 px-3 py-2 text-right font-medium">Ordered</th>
-              {note.stock !== undefined ? <th className="w-20 px-3 py-2 text-right font-medium">In store</th> : null}
-              <th className="w-28 px-3 py-2 text-right font-medium">Loaded</th>
-              <th className="w-32 px-3 py-2" />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(({ line, short, inStore, over }) => (
-              <tr
-                key={line.productId}
-                className={cn("border-t", over ? "bg-red-500/[0.06]" : Math.abs(short) > EPS ? "bg-amber-500/[0.07]" : "")}
-              >
-                <td className={cn("border-l-2 px-3 py-1.5 align-middle tabular-nums", over ? "border-l-red-500" : Math.abs(short) > EPS ? "border-l-amber-500" : "border-l-transparent")}>
-                  {line.sku ?? ""}
-                </td>
-                <td className={`break-words px-3 py-1.5 align-middle ${CAPS_ON_PRODUCT_CLASS}`}>{line.name}</td>
-                <td className="px-3 py-1.5 text-right align-middle tabular-nums">{line.orderedQty}</td>
-                {note.stock !== undefined ? (
-                  <td className={cn("px-3 py-1.5 text-right align-middle tabular-nums", inStore !== undefined && inStore + EPS < line.orderedQty ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground")}>
-                    {inStore ?? "—"}
-                  </td>
-                ) : null}
-                <td className="px-3 py-1.5">
-                  <div className="flex justify-end">
-                    <Input
-                      className={cn(QTY_INPUT, over && "border-red-500 focus-visible:ring-red-500")}
-                      inputMode="decimal"
-                      aria-label={`Loaded quantity for ${line.name}`}
-                      aria-invalid={over || undefined}
-                      disabled={!canLoad}
-                      value={loaded[line.productId] ?? String(line.orderedQty)}
-                      onChange={(event) => setLoaded((current) => ({ ...current, [line.productId]: event.target.value }))}
-                    />
-                  </div>
-                </td>
-                <td className="px-3 py-1.5 text-xs">
-                  {over ? (
-                    <span className="font-medium text-red-600 dark:text-red-400">Only {inStore} in store</span>
-                  ) : short > EPS ? (
-                    <span className="text-amber-700 dark:text-amber-400">Short {short}</span>
-                  ) : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-        {canLoad ? (
-          <div className="space-y-3">
-            {overCount > 0 ? (
-              <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-red-500/40 bg-red-500/[0.06] px-3 py-2.5 text-sm">
-                <p className="min-w-0 flex-1">
-                  {store} holds less than the loaded quantity on {overCount} product{overCount === 1 ? "" : "s"}.
-                  Transfer the stock in, or load only what is in the store.
-                </p>
-                <Button size="sm" variant="outline" className="bg-background" disabled={busy} onClick={loadWhatIsInStock}>
-                  Load what is in stock
-                </Button>
-              </div>
-            ) : null}
-            {full ? (
-              note.results.some((row) => row.deliveryNoteId || row.invoiceId) ? (
-              <LoadDocumentActions
-                busyPlan={busyPlan === "cancel" ? null : busyPlan}
-                disabled={blocked}
-                locked={null}
-                onChoose={(plan) => {
-                  setBusyPlan(plan);
-                  void recordJoyLoaded(
-                    note.id,
-                    rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty })),
-                    plan
-                  )
-                    .then(async (updated) => {
-                      toast.success(
-                        plan === "delivery_note"
-                          ? `${note.number} loaded in full. Delivery notes are ready. Invoices are on standby.`
-                          : `${note.number} loaded in full. Invoices and delivery notes are ready.`
-                      );
-                      const href = createdDocumentsHref(plan, updated);
-                      if (href) {
-                        router.push(href);
-                        return;
-                      }
-                      await onChanged();
-                    })
-                    .catch(async (error) => {
-                      toast.error(errorMessage(error, "Could not record the load"));
-                      await onChanged();
-                    })
-                    .finally(() => setBusyPlan(null));
-                }}
-              />
-              ) : (
-              <Button
-                disabled={blocked || busy}
-                onClick={() => {
-                  setBusyPlan("delivery_note");
-                  void recordJoyLoaded(
-                    note.id,
-                    rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
-                  )
-                    .then(async () => {
-                      toast.success(`${note.number} confirmed. Create the invoices and delivery notes next.`);
-                      await onChanged();
-                    })
-                    .catch(async (error) => {
-                      toast.error(errorMessage(error, "Could not confirm the loader note"));
-                      await onChanged();
-                    })
-                    .finally(() => setBusyPlan(null));
-                }}
-              >
-                {busy ? "Working…" : "Confirm loader note"}
-              </Button>
-              )
-            ) : (
-              <Button
-                disabled={blocked || busy}
-                onClick={() => {
-                  setBusyPlan("both");
-                  void recordJoyLoaded(
-                    note.id,
-                    rows.map((row) => ({ productId: row.line.productId, loadedQty: row.qty }))
-                  )
-                    .then(async () => {
-                      toast.success(`${note.number} is short. Finance assigns the short across the orders.`);
-                      await onChanged();
-                    })
-                    .catch(async (error) => {
-                      toast.error(errorMessage(error, "Could not record the load"));
-                      await onChanged();
-                    })
-                    .finally(() => setBusyPlan(null));
-                }}
-              >
-                {busy ? "Working…" : "Confirm short load"}
-              </Button>
-            )}
-            <button
-              type="button"
-              className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
-              disabled={busy}
-              onClick={() => {
-                setBusyPlan("cancel");
-                void cancelJoyLoadNote(note.id)
-                  .then(async () => {
-                    toast.success(`${note.number} cancelled. Its orders are waiting again.`);
-                    if (onCancelled) onCancelled();
-                    else await onChanged();
-                  })
-                  .catch((error) => toast.error(errorMessage(error, "Could not cancel")))
-                  .finally(() => setBusyPlan(null));
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">The warehouse records what went on the truck.</p>
-        )}
-      </CardContent>
-    </Card>
+    <div role="alert" className="overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/[0.06] text-sm">
+      <div className="border-b border-amber-500/25 bg-amber-500/10 px-3 py-2.5">
+        <p className="font-medium">Not in {store} yet</p>
+        <p className="text-muted-foreground">Transfer these to {store} using the pick list, then create again.</p>
+      </div>
+      {shorts.length ? (
+        <ul className="divide-y divide-amber-500/20">
+          {shorts.map((row) => {
+            const line = byProduct.get(row.productId);
+            return (
+              <li key={row.productId} className="flex items-center gap-3 px-3 py-2">
+                <span className="min-w-0 flex-1">
+                  {line?.sku ? <span className="block text-[11px] font-medium leading-none text-muted-foreground">SKU {line.sku}</span> : null}
+                  <span className={cn("block leading-snug", line?.sku && "mt-1", CAPS_ON_PRODUCT_CLASS)}>{line?.name ?? row.productId}</span>
+                </span>
+                <span className="shrink-0 text-right text-xs tabular-nums text-muted-foreground">
+                  needs {row.neededQty} · has {row.availableQty}
+                </span>
+                <span className="inline-flex h-7 min-w-[4.5rem] shrink-0 items-center justify-center rounded-md bg-amber-500/15 px-2 text-xs font-semibold tabular-nums">
+                  {row.shortQty} {line?.unit ?? ""}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="px-3 py-2.5">{problem.message}</p>
+      )}
+    </div>
   );
 }
 
@@ -1364,16 +977,16 @@ function FinanceNoteCard({ note, canFinance, onChanged }: { note: JoyLoadNote; c
                   await onChanged();
                 })
                 .catch(async (error) => {
-                  toast.error(errorMessage(error, "Could not confirm the loader note"));
+                  toast.error(errorMessage(error, "Could not confirm the pick list"));
                   await onChanged();
                 })
                 .finally(() => setBusyPlan(null));
             }}
           >
-            {busy ? "Working…" : "Confirm loader note"}
+            {busy ? "Working…" : "Confirm pick list"}
           </Button>
         ) : (
-          <p className="text-sm text-muted-foreground">Finance assigns the short across the orders, then the loader note can be confirmed.</p>
+          <p className="text-sm text-muted-foreground">Finance assigns the short across the orders, then the pick list can be confirmed.</p>
         )}
       </CardContent>
     </Card>
@@ -1432,13 +1045,16 @@ function ConfirmedNoteCard({
   canLoad,
   canFinance,
   onChanged,
+  onCancelled,
 }: {
   note: JoyLoadNote;
   canLoad: boolean;
   canFinance: boolean;
   onChanged: () => Promise<void>;
+  onCancelled?: () => void;
 }) {
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [problem, setProblem] = React.useState<RouteStoreProblem | null>(null);
   const [mode, setMode] = React.useState<RouteDocuments>(() => readRouteDocuments(note));
   const orders = ordersOnNote(note);
   const resultByOrder = new Map(note.results.map((row) => [row.salesOrderId, row]));
@@ -1467,8 +1083,11 @@ function ConfirmedNoteCard({
   const run = (key: string, work: () => Promise<void>, failure: string) => {
     setBusy(key);
     void work()
+      .then(() => setProblem(null))
       .catch(async (error) => {
-        toast.error(errorMessage(error, failure));
+        const found = routeStoreProblem(error);
+        setProblem(found);
+        if (!found) toast.error(errorMessage(error, failure));
         await onChanged();
       })
       .finally(() => setBusy(null));
@@ -1484,11 +1103,29 @@ function ConfirmedNoteCard({
 
   return (
     <Card id={`note-${note.id}`} className="min-w-0">
-      <LoadNoteHeader note={note} routeHint="Loader note confirmed" />
+      <LoadNoteHeader note={note} routeHint={`Picked from ${placeLabel(note.fulfilmentWarehouseName)}`} />
       <CardContent className="space-y-4">
-        <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
-          Print loader note
-        </Button>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => void printJoyLoadNotePdf(note, (message) => toast.error(message))}>
+            Print pick list
+          </Button>
+          {canLoad && !started ? (
+            <button
+              type="button"
+              className="text-sm text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+              disabled={busy != null}
+              onClick={() => run("cancel", async () => {
+                await cancelJoyLoadNote(note.id);
+                toast.success(`${note.number} cancelled. Its orders are waiting again.`);
+                if (onCancelled) onCancelled();
+                else await onChanged();
+              }, "Could not cancel")}
+            >
+              Cancel pick list
+            </button>
+          ) : null}
+        </div>
+        {problem ? <RouteStoreProblemPanel note={note} problem={problem} /> : null}
         <section aria-labelledby={`documents-${note.id}`} className="space-y-3 rounded-xl border bg-muted/20 p-3 sm:p-4">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h3 id={`documents-${note.id}`} className="font-semibold">Invoices and delivery notes</h3>
@@ -1698,7 +1335,7 @@ function TruckLoadTable({ notes }: { notes: JoyLoadNote[] }) {
       <table className="w-full min-w-[40rem] text-sm">
         <thead className="text-left text-xs text-muted-foreground">
           <tr>
-            <th className="px-3 py-2 font-medium">Loader note</th>
+            <th className="px-3 py-2 font-medium">Pick list</th>
             <th className="px-3 py-2 font-medium">Truck</th>
             <th className="px-3 py-2 font-medium">Route</th>
             <th className="px-3 py-2 font-medium">Created</th>
@@ -1718,7 +1355,7 @@ function TruckLoadTable({ notes }: { notes: JoyLoadNote[] }) {
                 <td className="px-3 py-2.5 text-muted-foreground">{truckStage(note)}</td>
                 <td className="px-3 py-2.5 text-right">
                   <Link className="font-medium text-primary hover:underline" href={loaderNotePath(note.id)}>
-                    Open loader note
+                    Open pick list
                   </Link>
                 </td>
               </tr>
@@ -1790,7 +1427,6 @@ function JoyRouteLoadsInner() {
                 trucks={data.trucks}
                 busyTrucks={data.busyTrucks}
                 canLoad={canLoad}
-                dispatchName={data.dispatchWarehouseName}
                 onChanged={reload}
                 focused={route.warehouseId === focusWarehouse}
                 activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
@@ -1799,7 +1435,7 @@ function JoyRouteLoadsInner() {
               />
             ))}
           </Section>,
-          <Section key="trucks" id="step-trucks" title="Trucks" empty="No truck is on a loader note.">
+          <Section key="trucks" id="step-trucks" title="Trucks" empty="No truck is on a pick list.">
             {onTheRoad.length ? <TruckLoadTable notes={onTheRoad} /> : null}
           </Section>,
         ]
@@ -1835,7 +1471,7 @@ function JoyRouteLoadsInner() {
         <p className="text-sm text-muted-foreground">
           {openedRoute
             ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order.`
-            : `Choose a route and a truck. Open the loader note to confirm what was picked against what was ordered.`}
+            : `Choose a route and a truck, then create the pick list for dispatch. Transfer the stock to the route store, then create the invoices and delivery notes.`}
         </p>
       )}
       {financeView ? financeBlock : step === "leave" ? [...leaveBlocks, ...loadBlocks] : [...loadBlocks, ...leaveBlocks]}
@@ -1874,7 +1510,7 @@ function LoadNoteSalesReps({ note, canEdit, onSaved }: { note: JoyLoadNote; canE
                   setBusy(true);
                   void setJoyLoadSalesReps(note.id, reps.map((rep) => rep.id))
                     .then(async () => {
-                      toast.success("Sales reps saved. The loader note PDF now shows them.");
+                      toast.success("Sales reps saved. The pick list PDF now shows them.");
                       await onSaved();
                     })
                     .catch((error) => toast.error(errorMessage(error, "Could not save the sales reps")))
@@ -1902,49 +1538,32 @@ export function JoyLoaderNote({ noteId }: { noteId: string }) {
   const canFinance = useHasPermission("finance.write");
   const canSell = useHasPermission("sales.write");
   const [data, setData] = React.useState<JoyLoadNotes | null>(null);
-  const [checking, setChecking] = React.useState(false);
 
   const reload = React.useCallback(async () => {
     try {
       setData(await fetchJoyLoadNotes());
     } catch (error) {
-      toast.error(errorMessage(error, "Could not load the loader note"));
+      toast.error(errorMessage(error, "Could not load the pick list"));
     }
   }, []);
-
-  const recheck = React.useCallback(() => {
-    setChecking(true);
-    void reload().finally(() => setChecking(false));
-  }, [reload]);
 
   React.useEffect(() => {
     void reload();
   }, [reload]);
 
   const note = data?.notes.find((item) => item.id === noteId);
-  const waitingOnStock = note ? stockShorts(note).length > 0 : false;
-
-  /** Back from the transfer tab: the route may hold the stock now. */
-  React.useEffect(() => {
-    if (!waitingOnStock) return;
-    const onVisible = () => {
-      if (document.visibilityState === "visible") recheck();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [waitingOnStock, recheck]);
   const back = (
     <Link className="text-sm text-muted-foreground hover:text-foreground hover:underline" href="/warehouse/route-pick-lists">
       Route loads
     </Link>
   );
 
-  if (!data) return <p className="p-3 text-sm text-muted-foreground">Loading the loader note…</p>;
+  if (!data) return <p className="p-3 text-sm text-muted-foreground">Loading the pick list…</p>;
   if (!note) {
     return (
       <div className="space-y-3 p-3 sm:px-5">
         {back}
-        <p className="text-sm text-muted-foreground">This loader note is no longer on the board.</p>
+        <p className="text-sm text-muted-foreground">This pick list is no longer on the board.</p>
       </div>
     );
   }
@@ -1974,23 +1593,16 @@ export function JoyLoaderNote({ noteId }: { noteId: string }) {
       </div>
       {note.status !== "CANCELLED" ? <LoadProgress note={note} /> : null}
       <LoadNoteSalesReps note={note} canEdit={canLoad || canSell} onSaved={reload} />
-      {note.status === "AWAITING_FINANCE" || note.status === "CONFIRMED" ? (
-        <RouteStockPanel note={note} checking={checking} onRecheck={recheck} onlyWhenShort />
-      ) : null}
-      {note.status === "OPEN" ? (
-        <LoadingNoteCard
+      {note.status === "AWAITING_FINANCE" || note.status === "INVOICING" ? (
+        <FinanceNoteCard note={note} canFinance={canFinance} onChanged={reload} />
+      ) : note.status === "OPEN" || note.status === "CONFIRMED" ? (
+        <ConfirmedNoteCard
           note={note}
           canLoad={canLoad}
-          dispatchName={data.dispatchWarehouseName}
-          checking={checking}
-          onRecheck={recheck}
+          canFinance={canFinance}
           onChanged={reload}
           onCancelled={() => router.push("/warehouse/route-pick-lists")}
         />
-      ) : note.status === "AWAITING_FINANCE" || note.status === "INVOICING" ? (
-        <FinanceNoteCard note={note} canFinance={canFinance} onChanged={reload} />
-      ) : note.status === "CONFIRMED" ? (
-        <ConfirmedNoteCard note={note} canLoad={canLoad} canFinance={canFinance} onChanged={reload} />
       ) : note.status === "INVOICED" && !note.departedAt ? (
         <ReadyToLeaveCard note={note} canLoad={canLoad} onChanged={reload} />
       ) : (

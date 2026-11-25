@@ -22,9 +22,7 @@ const api = vi.hoisted(() => ({
   trucks: [] as string[],
   allocate: vi.fn(),
   create: vi.fn(),
-  printRequest: vi.fn(),
   documents: vi.fn(),
-  emailRequest: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(location.search),
@@ -44,9 +42,7 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
   setJoyRouteSourceStore: vi.fn().mockResolvedValue({ moved: 1 }),
   allocateJoyLoad: (...args: unknown[]) => api.allocate(...args),
   createJoyLoadNote: (...args: unknown[]) => api.create(...args),
-  printJoyTransferRequestPdf: (...args: unknown[]) => api.printRequest(...args),
   createJoyRouteDocuments: (...args: unknown[]) => api.documents(...args),
-  emailJoyTransferRequest: (...args: unknown[]) => api.emailRequest(...args),
 }));
 vi.mock("@/lib/api/sfa-sales-reps", () => ({
   fetchSfaSalesReps: vi.fn().mockResolvedValue({ reps: [], areas: [] }),
@@ -139,8 +135,8 @@ it("lists a finance truck with its note, plate, route, and created time", async 
   const created = new Date("2026-11-17T13:12:00.000Z");
   const createdLabel = `${created.toLocaleString(undefined, { day: "numeric", month: "short" })} · ${created.toLocaleString(undefined, { hour: "numeric", minute: "2-digit" })}`;
   expect(screen.getByText(createdLabel)).toBeVisible();
-  expect(screen.getByRole("link", { name: "Open loader note" })).toHaveAttribute("href", "/warehouse/route-pick-lists/n1");
-  expect(screen.queryByRole("button", { name: "Confirm loader note" })).toBeNull();
+  expect(screen.getByRole("link", { name: "Open pick list" })).toHaveAttribute("href", "/warehouse/route-pick-lists/n1");
+  expect(screen.queryByRole("button", { name: "Confirm pick list" })).toBeNull();
 });
 
 it("shows the order and customer on the loader note page", async () => {
@@ -259,7 +255,7 @@ it("opens the delivery note after finance creates one", async () => {
     results: [{ salesOrderId: "so-811", deliveryNoteId: "dn-1", deliveryNoteNumber: "DN1", stockIssued: true }],
   });
   render(<JoyLoaderNote noteId="n1" />);
-  fireEvent.click(await screen.findByRole("button", { name: "Confirm loader note" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Confirm pick list" }));
   await waitFor(() => expect(api.allocate).toHaveBeenCalled());
   expect(navigation.push).not.toHaveBeenCalled();
 });
@@ -319,13 +315,13 @@ it("starts a route's loader note with the reps on its orders and sends them when
   await user.click(document.getElementById("load-truck-meru")!);
   await waitFor(() => expect(screen.getByRole("button", { name: "KDA 123A" })).toBeVisible());
   await user.click(screen.getByRole("button", { name: "KDA 123A" }));
-  fireEvent.click(screen.getByRole("button", { name: "Create loading note" }));
+  fireEvent.click(screen.getByRole("button", { name: "Create pick list" }));
   await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({
     warehouseId: "meru", truck: "KDA 123A", salesRepIds: ["sfa-ann"],
   })));
 });
 
-it("shows what to transfer for short products and still creates the loading note", async () => {
+it("creates the pick list from the orders without any route stock warnings", async () => {
   access.write = true;
   api.trucks = ["KDA 123A"];
   api.waiting = [{
@@ -343,18 +339,21 @@ it("shows what to transfer for short products and still creates the loading note
   api.create.mockResolvedValue({ id: "note-1", number: "LN-1", truck: "KDA 123A" });
   const user = userEvent.setup();
   render(<JoyRouteLoads />);
-  expect(await screen.findByText("Transfer 6")).toBeVisible();
-  expect(screen.getByText(/needs 1 more product for these orders/)).toBeVisible();
+  expect(await screen.findByText("JOY MUFFINS CHOCO")).toBeVisible();
+  expect(screen.queryByText("Transfer 6")).toBeNull();
+  expect(screen.queryByText("In store")).toBeNull();
   await user.click(document.getElementById("load-truck-meru")!);
   await user.click(await screen.findByRole("button", { name: "KDA 123A" }));
-  const create = screen.getByRole("button", { name: "Create loading note" });
+  const create = screen.getByRole("button", { name: "Create pick list" });
   expect(create).toBeEnabled();
   fireEvent.click(create);
   await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ warehouseId: "meru", truck: "KDA 123A" })));
 });
 
-it("opens a prefilled transfer for what the route lacks and only loads what the store holds", async () => {
+it("goes from the pick list straight to invoices and lists what to transfer when the route store is short", async () => {
   access.write = true;
+  api.documents.mockReset();
+  api.documents.mockRejectedValueOnce(new Error("Not enough stock in KAJIADO-SUN - KAJIADO SUN. Transfer these to KAJIADO-SUN - KAJIADO SUN, then try again: JOY HALF DECORATED CAKE (550 GMS): needs 10 EA, has 3."));
   api.notes = [{
     id: "n2",
     number: "LDN-0007",
@@ -385,23 +384,43 @@ it("opens a prefilled transfer for what the route lacks and only loads what the 
     results: [],
   }];
   render(<JoyLoaderNote noteId="n2" />);
-  const transfer = await screen.findByRole("link", { name: "Transfer 1 product" });
-  expect(transfer).toHaveAttribute("href", "/warehouse/transfers/new?to=kajiado&line=cake%3A7&ref=Loader+note+LDN-0007&return=load&back=%2Fwarehouse%2Froute-pick-lists%2Fn2");
-  expect(transfer).toHaveAttribute("target", "_blank");
-  expect(screen.getByRole("navigation", { name: "Load progress" })).toHaveTextContent("1 to transfer");
-  expect(screen.getByText("Only 3 in store")).toBeVisible();
-  expect(screen.getByRole("button", { name: "Confirm loader note" })).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Load what is in stock" }));
-  expect(screen.getByLabelText("Loaded quantity for JOY HALF DECORATED CAKE (550 GMS)")).toHaveValue("3");
-  expect(screen.getByRole("button", { name: "Confirm short load" })).toBeEnabled();
+  const create = await screen.findByRole("button", { name: "Create 1 invoice and delivery note" });
+  expect(screen.queryByRole("button", { name: /Confirm/ })).toBeNull();
+  expect(screen.queryByText("Load truck")).toBeNull();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByRole("button", { name: "Cancel pick list" })).toBeEnabled();
+  fireEvent.click(create);
+  const panel = await screen.findByRole("alert");
+  expect(panel).toHaveTextContent("Transfer these to KAJIADO-SUN - KAJIADO SUN using the pick list");
+  expect(panel).toHaveTextContent("JOY HALF DECORATED CAKE (550 GMS)");
+  expect(panel).toHaveTextContent("needs 10 · has 3");
+  expect(panel).not.toHaveTextContent("MANDAZI");
+});
 
-  fireEvent.click(screen.getByRole("button", { name: "Print request" }));
-  expect(api.printRequest).toHaveBeenCalledWith(expect.objectContaining({ id: "n2", number: "LDN-0007" }), expect.any(Function));
-  api.emailRequest.mockResolvedValueOnce({ sent: true, to: "store@joy.co.ke" });
-  fireEvent.click(screen.getByRole("button", { name: "Email request" }));
-  fireEvent.change(await screen.findByLabelText("Email"), { target: { value: "store@joy.co.ke" } });
-  fireEvent.click(screen.getByRole("button", { name: "Send request" }));
-  await waitFor(() => expect(api.emailRequest).toHaveBeenCalledWith("n2", "store@joy.co.ke"));
+it("links to the route store's purpose when it cannot supply invoices", async () => {
+  access.write = true;
+  api.documents.mockReset();
+  api.documents.mockRejectedValueOnce(new Error("CAREST cannot fulfil a sale or production issue. Set its purpose to Storage, Receiving, Dispatch or Transit."));
+  api.notes = [{
+    id: "n4",
+    number: "LDN-0015",
+    date: "2026-11-25T11:29:00.000Z",
+    status: "CONFIRMED",
+    truck: "KCT 981Q",
+    routeWarehouseId: "carest",
+    routeWarehouseName: "CAREST",
+    fulfilmentWarehouseId: "carest",
+    fulfilmentWarehouseName: "CAREST",
+    salesOrderIds: ["so-23"],
+    lines: [{
+      productId: "cake", name: "JOY QUEEN CAKES", unit: "EA", orderedQty: 5, loadedQty: 5,
+      allocations: [{ salesOrderId: "so-23", salesOrderNumber: "SO0023", customerName: "NAIVAS LIMITED", lineId: "l1", orderedQty: 5, invoiceQty: 5 }],
+    }],
+    results: [],
+  }];
+  render(<JoyLoaderNote noteId="n4" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Create 1 invoice and delivery note" }));
+  expect(await screen.findByRole("link", { name: /Set the purpose of CAREST/ })).toHaveAttribute("href", "/master/warehouses?edit=carest");
 });
 
 it("makes every order's invoice, with or without delivery notes, in one step and remembers the choice for the route", async () => {
