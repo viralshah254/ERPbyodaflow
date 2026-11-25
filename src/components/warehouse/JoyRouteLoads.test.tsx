@@ -319,7 +319,7 @@ it("starts a route's loader note with the reps on its orders and sends them when
   })));
 });
 
-it("flags short products in the pick store and blocks the loading note", async () => {
+it("shows what to transfer for short products and still creates the loading note", async () => {
   access.write = true;
   api.trucks = ["KDA 123A"];
   api.waiting = [{
@@ -334,12 +334,58 @@ it("flags short products in the pick store and blocks the loading note", async (
       { productId: "p2", sku: "1", name: "JOY QUEEN CAKES", orderedQty: 1 },
     ],
   }];
+  api.create.mockResolvedValue({ id: "note-1", number: "LN-1", truck: "KDA 123A" });
   const user = userEvent.setup();
   render(<JoyRouteLoads />);
-  expect(await screen.findByText("Not enough stock: 4 available, short 6")).toBeVisible();
-  expect(screen.getByRole("alert")).toHaveTextContent("short on 1 product");
+  expect(await screen.findByText("Transfer 6")).toBeVisible();
+  expect(screen.getByText(/needs 1 more product for these orders/)).toBeVisible();
   await user.click(document.getElementById("load-truck-meru")!);
   await user.click(await screen.findByRole("button", { name: "KDA 123A" }));
-  expect(screen.getByRole("button", { name: "Create loading note" })).toBeDisabled();
-  expect(api.create).not.toHaveBeenCalled();
+  const create = screen.getByRole("button", { name: "Create loading note" });
+  expect(create).toBeEnabled();
+  fireEvent.click(create);
+  await waitFor(() => expect(api.create).toHaveBeenCalledWith(expect.objectContaining({ warehouseId: "meru", truck: "KDA 123A" })));
+});
+
+it("opens a prefilled transfer for what the route lacks and only loads what the store holds", async () => {
+  access.write = true;
+  api.notes = [{
+    id: "n2",
+    number: "LDN-0007",
+    date: "2026-11-25T07:00:00.000Z",
+    createdAt: "2026-11-25T07:00:00.000Z",
+    status: "OPEN",
+    truck: "KDA 123A",
+    routeWarehouseId: "kajiado",
+    routeWarehouseName: "KAJIADO-SUN - KAJIADO SUN",
+    fulfilmentWarehouseId: "kajiado",
+    fulfilmentWarehouseName: "KAJIADO-SUN - KAJIADO SUN",
+    fulfilmentFromOrder: true,
+    salesOrderIds: ["so-3"],
+    lines: [
+      {
+        productId: "cake", sku: "25", name: "JOY HALF DECORATED CAKE (550 GMS)", unit: "EA", orderedQty: 10,
+        allocations: [{ salesOrderId: "so-3", salesOrderNumber: "500020", customerName: "Shop", lineId: "l1", orderedQty: 10, invoiceQty: 10 }],
+      },
+      {
+        productId: "bites", sku: "29", name: "JOY SUPER BITES MANDAZI (180 GMS)", unit: "EA", orderedQty: 4,
+        allocations: [{ salesOrderId: "so-3", salesOrderNumber: "500020", customerName: "Shop", lineId: "l2", orderedQty: 4, invoiceQty: 4 }],
+      },
+    ],
+    stock: [
+      { productId: "cake", neededQty: 10, availableQty: 3, shortQty: 7 },
+      { productId: "bites", neededQty: 4, availableQty: 4, shortQty: 0 },
+    ],
+    results: [],
+  }];
+  render(<JoyLoaderNote noteId="n2" />);
+  const transfer = await screen.findByRole("link", { name: "Transfer 1 product" });
+  expect(transfer).toHaveAttribute("href", "/warehouse/transfers/new?to=kajiado&line=cake%3A7&ref=Loader+note+LDN-0007&return=load");
+  expect(transfer).toHaveAttribute("target", "_blank");
+  expect(screen.getByRole("navigation", { name: "Load progress" })).toHaveTextContent("1 to transfer");
+  expect(screen.getByText("Only 3 in store")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Confirm loader note" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Load what is in stock" }));
+  expect(screen.getByLabelText("Loaded quantity for JOY HALF DECORATED CAKE (550 GMS)")).toHaveValue("3");
+  expect(screen.getByRole("button", { name: "Confirm short load" })).toBeEnabled();
 });

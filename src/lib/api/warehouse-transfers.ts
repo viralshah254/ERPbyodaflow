@@ -27,6 +27,8 @@ export type TransferStockQuery = {
   search?: string;
   /** Only these products. Used to refresh the products already in a transfer. */
   productIds?: string[];
+  /** Only products of this material type. */
+  itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   limit?: number;
   offset?: number;
 };
@@ -39,6 +41,7 @@ export async function fetchTransferStock(query: TransferStockQuery): Promise<{ i
       toWarehouseId: query.toWarehouseId,
       search: query.search?.trim(),
       productIds: query.productIds?.join(","),
+      itemRole: query.itemRole,
       limit: String(query.limit ?? 25),
       offset: String(query.offset ?? 0),
     }),

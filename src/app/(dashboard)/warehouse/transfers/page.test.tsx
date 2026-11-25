@@ -9,6 +9,8 @@ vi.mock("@/components/layout/page-header", () => ({ PageHeader: ({ actions }: { 
 vi.mock("@/components/layout/page-shell", () => ({ LIST_PAGE_SHELL_CLASS: "", LIST_PAGE_BODY_CLASS: "", LIST_TABLE_SURFACE_CLASS: "", PageShell: ({ children }: { children: React.ReactNode }) => <main>{children}</main> }));
 vi.mock("@/components/copilot/ExplainThis", () => ({ ExplainThis: () => null }));
 vi.mock("@/lib/rbac/use-write-guard", () => ({ useCanWriteInventory: () => true }));
+const profile = vi.hoisted(() => ({ fixedOrderSheet: false }));
+vi.mock("@/lib/fmcg/operating-profile", () => ({ useOperatingProfile: () => profile }));
 vi.mock("@/lib/api/warehouse-transfers", () => ({ createTransfer: vi.fn().mockResolvedValue({ id: "draft-1" }), fetchTransferStock: vi.fn() }));
 vi.mock("@/lib/api/lookups", () => ({ fetchWarehouseOptions: vi.fn().mockResolvedValue([{ id: "source", label: "Finished Goods" }, { id: "destination", label: "Dispatch" }, { id: "choco", label: "CHOCO", transferSourceBlock: "Needs classification" }]) }));
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]) }));
@@ -49,6 +51,7 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
   window.localStorage.clear();
   vi.mocked(fetchTransferStock).mockReset();
+  profile.fixedOrderSheet = false;
 });
 
 type StockRow = Awaited<ReturnType<typeof fetchTransferStock>>["items"][number];
@@ -58,6 +61,7 @@ function serveStock(rows: (toWarehouseId?: string) => StockRow[]) {
   vi.mocked(fetchTransferStock).mockImplementation(async (query) => {
     let items = rows(query.toWarehouseId);
     if (query.productIds) items = items.filter((row) => query.productIds!.includes(row.productId));
+    if (query.itemRole) items = items.filter((row) => (row as StockRow & { itemRole?: string }).itemRole === query.itemRole);
     if (query.search) items = items.filter((row) => row.name.toLowerCase().includes(query.search!.toLowerCase()));
     const offset = query.offset ?? 0;
     return { items: items.slice(offset, offset + (query.limit ?? 25)), total: items.length, hasMore: offset + (query.limit ?? 25) < items.length };
@@ -180,3 +184,48 @@ it("opens from a finished batch with the output store, product and quantity alre
   })));
 });
 
+
+it("lists finished goods by default, filters by material type and search, and keeps a loading note's quantities first", async () => {
+  profile.fixedOrderSheet = true;
+  const cake = { productId: "cake", sku: "25", name: "Half decorated cake", uom: "EA", quantity: 30, reserved: 0, available: 30, itemRole: "FINISHED" };
+  const bites = { productId: "bites", sku: "29", name: "Super bites mandazi", uom: "EA", quantity: 50, reserved: 0, available: 50, itemRole: "FINISHED" };
+  const flour = { productId: "flour", sku: "RM-1", name: "Flour", uom: "KG", quantity: 90, reserved: 0, available: 90, itemRole: "RAW" };
+  serveStock(() => [bites, cake, flour]);
+  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source&to=destination&line=cake%3A7&ref=Loader+note+LDN-0007&return=load");
+  render(<NewTransferPage />);
+  expect(await screen.findByRole("spinbutton", { name: "Quantity for Half decorated cake 25" })).toHaveValue(7);
+  expect(screen.getByRole("spinbutton", { name: "Quantity for Super bites mandazi 29" })).toHaveValue(null);
+  expect(screen.queryByRole("spinbutton", { name: /Quantity for Flour/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Browse" })).toBeNull();
+  expect(screen.queryByRole("button", { name: /Remove/ })).toBeNull();
+  const quantities = screen.getAllByRole("spinbutton", { name: /Quantity for/ });
+  expect(quantities.map((input) => input.getAttribute("aria-label"))).toEqual(["Quantity for Half decorated cake 25", "Quantity for Super bites mandazi 29"]);
+  expect(fetchTransferStock).toHaveBeenCalledWith(expect.objectContaining({ warehouseId: "source", itemRole: "FINISHED", limit: 100 }));
+
+  fireEvent.change(screen.getByRole("searchbox", { name: "Filter finished goods" }), { target: { value: "mandazi" } });
+  expect(screen.queryByRole("spinbutton", { name: "Quantity for Half decorated cake 25" })).toBeNull();
+  fireEvent.change(screen.getByRole("spinbutton", { name: "Quantity for Super bites mandazi 29" }), { target: { value: "5" } });
+  fireEvent.change(screen.getByRole("searchbox", { name: "Filter finished goods" }), { target: { value: "" } });
+
+  expect(screen.getByRole("radio", { name: "Finished goods" })).toHaveAttribute("aria-checked", "true");
+  fireEvent.click(screen.getByRole("radio", { name: "Raw materials" }));
+  expect(await screen.findByRole("spinbutton", { name: "Quantity for Flour RM-1" })).toHaveValue(null);
+  expect(fetchTransferStock).toHaveBeenCalledWith(expect.objectContaining({ warehouseId: "source", itemRole: "RAW" }));
+  expect(screen.getByRole("spinbutton", { name: "Quantity for Half decorated cake 25" })).toHaveValue(7);
+  expect(screen.getByRole("spinbutton", { name: "Quantity for Super bites mandazi 29" })).toHaveValue(5);
+  expect(screen.queryByRole("button", { name: "Browse" })).toBeNull();
+  fireEvent.click(screen.getByRole("radio", { name: "All stock" }));
+  await waitFor(() => expect(fetchTransferStock).toHaveBeenLastCalledWith(expect.not.objectContaining({ itemRole: expect.anything() })));
+  expect(await screen.findByRole("spinbutton", { name: "Quantity for Flour RM-1" })).toBeInTheDocument();
+
+  vi.mocked(createTransfer).mockResolvedValueOnce({ id: "t-2", number: "TRF-0010", status: "RECEIVED" });
+  fireEvent.click(screen.getByRole("button", { name: "Transfer now" }));
+  await waitFor(() => expect(createTransfer).toHaveBeenLastCalledWith(expect.objectContaining({
+    reference: "Loader note LDN-0007",
+    lines: [
+      { productId: "cake", sku: "25", productName: "Half decorated cake", quantity: 7, unit: "EA" },
+      { productId: "bites", sku: "29", productName: "Super bites mandazi", quantity: 5, unit: "EA" },
+    ],
+  })));
+  expect(await screen.findByRole("button", { name: "Back to the loading note" })).toBeInTheDocument();
+});

@@ -4,9 +4,16 @@ export type TransferPrefill = {
   toWarehouseId?: string;
   lines: Array<{ productId: string; quantity: number }>;
   reference?: string;
-  /** Opened in its own tab from an unsaved order; the done screen offers to go back. */
-  returnToOrder?: boolean;
+  /** Opened in its own tab; the done screen offers to go back to the order or the loading note. */
+  returnTo?: TransferReturnTo;
 };
+
+export type TransferReturnTo = "order" | "load";
+
+export function parseTransferReturnTo(search: string): TransferReturnTo | null {
+  const value = new URLSearchParams(search).get("return");
+  return value === "order" || value === "load" ? value : null;
+}
 
 export function transferPrefillHref(prefill: TransferPrefill): string {
   const params = new URLSearchParams();
@@ -16,7 +23,7 @@ export function transferPrefillHref(prefill: TransferPrefill): string {
     if (line.productId && line.quantity > 0) params.append("line", `${line.productId}:${line.quantity}`);
   }
   if (prefill.reference?.trim()) params.set("ref", prefill.reference.trim());
-  if (prefill.returnToOrder) params.set("return", "order");
+  if (prefill.returnTo) params.set("return", prefill.returnTo);
   const query = params.toString();
   return query ? `/warehouse/transfers/new?${query}` : "/warehouse/transfers/new";
 }

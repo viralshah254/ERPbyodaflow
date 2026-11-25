@@ -20,7 +20,8 @@ import { fetchProductPackagingApi } from "@/lib/api/product-master";
 import { activeDocumentAlternates } from "@/lib/docs/default-line-uom";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
-import { parseTransferPrefill } from "@/lib/warehouse/transfer-prefill";
+import { parseTransferPrefill, parseTransferReturnTo, type TransferReturnTo } from "@/lib/warehouse/transfer-prefill";
+import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { useAuthStore } from "@/stores/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +37,118 @@ type DoneTransfer = {
 const RECENT_LIMIT = 5;
 const SEARCH_INPUT_ID = "transfer-product-search";
 const BROWSE_PAGE = 30;
+const SHEET_PAGE = 100;
+const SHEET_MAX_PAGES = 10;
+
+type ItemRoleFilter = "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
+type ProductScope = ItemRoleFilter | "all";
+
+const SCOPES: Array<{ value: ProductScope; label: string; noun: string; plural: string }> = [
+  { value: "FINISHED", label: "Finished goods", noun: "finished good", plural: "finished goods" },
+  { value: "RAW", label: "Raw materials", noun: "raw material", plural: "raw materials" },
+  { value: "PACKAGING", label: "Packaging", noun: "packaging item", plural: "packaging items" },
+  { value: "SEMI", label: "Semi-finished", noun: "semi-finished item", plural: "semi-finished items" },
+  { value: "all", label: "All stock", noun: "product", plural: "products" },
+];
+
+function scopeInfo(scope: ProductScope) {
+  return SCOPES.find((row) => row.value === scope) ?? SCOPES[0];
+}
+
+/** Every product of one material type the source store holds, in item-code order. */
+async function fetchStockSheet(warehouseId: string, toWarehouseId: string | undefined, scope: ProductScope): Promise<TransferStockRow[]> {
+  const rows: TransferStockRow[] = [];
+  for (let page = 0; page < SHEET_MAX_PAGES; page += 1) {
+    const result = await fetchTransferStock({
+      warehouseId,
+      toWarehouseId,
+      ...(scope === "all" ? {} : { itemRole: scope }),
+      limit: SHEET_PAGE,
+      offset: rows.length,
+    });
+    rows.push(...result.items);
+    if (!result.hasMore || !result.items.length) break;
+  }
+  return rows;
+}
+
+function matchesProduct(row: TransferStockRow, needle: string): boolean {
+  return !needle || [row.name, row.sku, row.code, row.barcode].some((value) => value?.toLowerCase().includes(needle));
+}
+
+function SheetFilter({ text, onText, onlyEntered, onOnlyEntered, enteredCount, fromShort, plural, disabled }: {
+  text: string;
+  onText: (value: string) => void;
+  onlyEntered: boolean;
+  onOnlyEntered: (value: boolean) => void;
+  enteredCount: number;
+  fromShort: string;
+  plural: string;
+  disabled: boolean;
+}) {
+  return (
+    <div className="flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
+      <div className="relative min-w-0 flex-1">
+        <Icons.Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+        <Input
+          id={SEARCH_INPUT_ID}
+          type="search"
+          aria-label={`Filter ${plural}`}
+          autoComplete="off"
+          className="h-11 pl-9 text-base sm:text-sm"
+          placeholder={`Filter ${fromShort} ${plural} by name, SKU, code or barcode`}
+          disabled={disabled}
+          value={text}
+          onChange={(event) => onText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onText("");
+            if (event.key === "Enter") {
+              event.preventDefault();
+              document.querySelector<HTMLInputElement>("input[data-transfer-qty]:not(:disabled)")?.focus();
+            }
+          }}
+        />
+      </div>
+      <Button
+        type="button"
+        variant={onlyEntered ? "secondary" : "outline"}
+        className="h-11 shrink-0"
+        aria-pressed={onlyEntered}
+        disabled={disabled || (!enteredCount && !onlyEntered)}
+        onClick={() => onOnlyEntered(!onlyEntered)}
+      >
+        <Icons.ListChecks className="mr-2 h-4 w-4" aria-hidden />
+        With a quantity
+        <span className="ml-1.5 rounded-full bg-background/80 px-1.5 text-xs tabular-nums">{enteredCount}</span>
+      </Button>
+    </div>
+  );
+}
+
+function ScopeFilter({ scope, onScope, disabled }: { scope: ProductScope; onScope: (scope: ProductScope) => void; disabled: boolean }) {
+  return (
+    <div role="radiogroup" aria-label="Material type" className="flex flex-wrap gap-1.5">
+      {SCOPES.map((row) => (
+        <button
+          key={row.value}
+          type="button"
+          role="radio"
+          aria-checked={scope === row.value}
+          disabled={disabled}
+          onClick={() => onScope(row.value)}
+          className={cn(
+            "rounded-full border px-3 py-1 text-xs font-medium transition disabled:opacity-50",
+            scope === row.value
+              ? "border-primary bg-primary text-primary-foreground shadow-sm"
+              : "bg-background text-muted-foreground hover:bg-muted hover:text-foreground",
+          )}
+        >
+          {row.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function formatQty(n: number): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
@@ -427,7 +540,8 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   busy: boolean;
   onUpdate: UpdateLine;
   onLoadUnits: (productId: string) => void;
-  onRemove: (productId: string) => void;
+  /** Left out on the stock sheet, where every row stays listed. */
+  onRemove?: (productId: string) => void;
 }) {
   const line = draft ?? { productId: row.productId, qty: "", unit: row.uom };
   const { base, alternates, unit, factor, baseQty, over } = describeLine(line, row, units);
@@ -499,18 +613,20 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
           >
             All
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-            disabled={busy}
-            aria-label={`Remove ${row.name}`}
-            title="Remove from this transfer"
-            onClick={() => onRemove(row.productId)}
-          >
-            <Icons.X className="h-4 w-4" />
-          </Button>
+          {onRemove ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+              disabled={busy}
+              aria-label={`Remove ${row.name}`}
+              title="Remove from this transfer"
+              onClick={() => onRemove(row.productId)}
+            >
+              <Icons.X className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </td>
     </tr>
@@ -544,9 +660,16 @@ export default function NewTransferPage() {
   const [warehouseError, setWarehouseError] = React.useState("");
   const [saving, setSaving] = React.useState<"post" | "draft" | null>(null);
   const [done, setDone] = React.useState<DoneTransfer | null>(null);
-  const [openedFromOrder, setOpenedFromOrder] = React.useState(false);
+  const [returnTo, setReturnTo] = React.useState<TransferReturnTo | null>(null);
   const [recentTo, setRecentTo] = React.useState<string[]>([]);
   const [browseOpen, setBrowseOpen] = React.useState(false);
+  const profile = useOperatingProfile(orgId);
+  const [scope, setScope] = React.useState<ProductScope>("FINISHED");
+  /** Orgs on the fixed sales order sheet transfer the same way: every product of the chosen type listed, type the quantity. */
+  const sheetMode = profile.fixedOrderSheet;
+  const scopeLabel = scopeInfo(scope);
+  const [sheetText, setSheetText] = React.useState("");
+  const [onlyEntered, setOnlyEntered] = React.useState(false);
 
   const [warehouses, setWarehouses] = React.useState<LookupOption[]>([]);
   const [packaging, setPackaging] = React.useState<Record<string, ProductPackaging[]>>({});
@@ -569,6 +692,8 @@ export default function NewTransferPage() {
   const [sourceGrnId, setSourceGrnId] = React.useState("");
   const prefilledFrom = React.useRef(false);
   const pickedRef = React.useRef<string[]>([]);
+  const linesRef = React.useRef(lines);
+  linesRef.current = lines;
 
   const fromStore = warehouses.find((wh) => wh.id === fromWarehouseId);
   const toStore = warehouses.find((wh) => wh.id === toWarehouseId);
@@ -583,12 +708,18 @@ export default function NewTransferPage() {
     return line && line.qty.trim() !== "" && Number(line.qty) !== 0 ? [line] : [];
   });
 
+  const sheetNeedle = sheetText.trim().toLowerCase();
+  const enteredCount = pickedIds.filter((id) => Number(lines[id]?.qty) > 0).length;
+  const visibleRows = sheetMode
+    ? pickedRows.filter((row) => matchesProduct(row, sheetNeedle) && (!onlyEntered || Number(lines[row.productId]?.qty) > 0))
+    : pickedRows;
+
   React.useEffect(() => {
     pickedRef.current = pickedIds;
   }, [pickedIds]);
 
   React.useEffect(() => {
-    setOpenedFromOrder(new URLSearchParams(window.location.search).get("return") === "order");
+    setReturnTo(parseTransferReturnTo(window.location.search));
     setRecentTo(readStored(recentToKey));
     const prefill = parseTransferPrefill(window.location.search);
     if (!prefill) return;
@@ -618,8 +749,45 @@ export default function NewTransferPage() {
     if (store) setFromWarehouseId((current) => current || (store.id === toWarehouseId ? "" : store.id));
   }, [warehouses, lastFromKey, toWarehouseId]);
 
+  /** Stock sheet: list every product of the chosen type in the source store. Products already given a quantity stay, first. */
+  React.useEffect(() => {
+    if (!sheetMode || !fromWarehouseId) return;
+    let cancelled = false;
+    const to = toWarehouseId || undefined;
+    const keep = pickedRef.current.filter((id) => Number(linesRef.current[id]?.qty) > 0);
+    setStockLoading(true);
+    setStockError("");
+    void fetchStockSheet(fromWarehouseId, to, scope)
+      .then(async (sheet) => {
+        const listed = new Set(sheet.map((row) => row.productId));
+        const extraIds = keep.filter((id) => !listed.has(id));
+        const extras = extraIds.length
+          ? (await fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: to, productIds: extraIds, limit: 100 })).items
+          : [];
+        if (cancelled) return;
+        const ids = [...keep, ...sheet.map((row) => row.productId).filter((id) => !keep.includes(id))];
+        pickedRef.current = ids;
+        setPickedIds(ids);
+        setStockRows(Object.fromEntries([...sheet, ...extras].map((row) => [row.productId, row])));
+        setSourceTotal(sheet.length);
+      })
+      .catch((error: Error) => {
+        if (cancelled) return;
+        setStockRows({});
+        setSourceTotal(null);
+        setStockError(error.message || "Warehouse stock could not load.");
+      })
+      .finally(() => {
+        if (!cancelled) setStockLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sheetMode, scope, fromWarehouseId, toWarehouseId, stockRefresh]);
+
   /** Re-read stock for the products already in the transfer whenever either store changes. */
   React.useEffect(() => {
+    if (sheetMode) return;
     if (!fromWarehouseId) {
       setStockRows({});
       setSourceTotal(null);
@@ -657,7 +825,14 @@ export default function NewTransferPage() {
     return () => {
       cancelled = true;
     };
-  }, [fromWarehouseId, toWarehouseId, stockRefresh]);
+  }, [sheetMode, fromWarehouseId, toWarehouseId, stockRefresh]);
+
+  function chooseScope(next: ProductScope) {
+    if (next === scope) return;
+    setSheetText("");
+    setOnlyEntered(false);
+    setScope(next);
+  }
 
   function chooseFrom(value: string) {
     const block = warehouses.find((wh) => wh.id === value)?.transferSourceBlock;
@@ -741,7 +916,7 @@ export default function NewTransferPage() {
   const ready = !busy && !stockLoading && !stockError && Boolean(date && fromWarehouseId && toWarehouseId) && hasValidLines;
   const blocker = !fromWarehouseId ? "Choose where the stock comes from."
     : !toWarehouseId ? "Choose where the stock goes."
-      : !pickedIds.length ? "Search for a product, or browse the store, to add it."
+      : !pickedIds.length ? (sheetMode ? "Enter a quantity for at least one product." : "Search for a product, or browse the store, to add it.")
         : !selectedLines.length ? "Enter a quantity for at least one product."
           : !hasValidLines ? "Fix the quantities marked in red."
             : "";
@@ -815,8 +990,8 @@ export default function NewTransferPage() {
     }
   };
 
-  /** The order opened this page in its own tab. Closing it returns to the unsaved order. */
-  function backToOrder() {
+  /** The order or loading note opened this page in its own tab. Closing it returns there. */
+  function goBack() {
     window.close();
     window.setTimeout(() => router.back(), 300);
   }
@@ -874,13 +1049,13 @@ export default function NewTransferPage() {
             ))}
           </ul>
           <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 p-4 sm:px-6">
-            {openedFromOrder ? (
-              <Button onClick={backToOrder}>
+            {returnTo ? (
+              <Button onClick={goBack}>
                 <Icons.ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-                Back to the order
+                {returnTo === "load" ? "Back to the loading note" : "Back to the order"}
               </Button>
             ) : null}
-            <Button variant={openedFromOrder ? "outline" : "default"} onClick={() => startAgain(false)}>
+            <Button variant={returnTo ? "outline" : "default"} onClick={() => startAgain(false)}>
               <Icons.Plus className="mr-2 h-4 w-4" aria-hidden />
               Transfer to another store
             </Button>
@@ -910,7 +1085,9 @@ export default function NewTransferPage() {
                 footer={!fromWarehouseId ? "The store holding the stock, for example the production store."
                   : stockLoading && sourceTotal === null ? "Loading stock…"
                     : stockError ? null
-                      : sourceTotal !== null ? `${sourceTotal} product${sourceTotal === 1 ? "" : "s"} in stock` : null}
+                      : sourceTotal !== null
+                        ? `${sourceTotal} ${sheetMode ? (sourceTotal === 1 ? scopeLabel.noun : scopeLabel.plural) : sourceTotal === 1 ? "product" : "products"} in stock`
+                        : null}
               >
                 <Label htmlFor="transfer-from-warehouse" className="sr-only">From warehouse</Label>
                 <AsyncSearchableSelect
@@ -1005,26 +1182,71 @@ export default function NewTransferPage() {
 
           <section className="rounded-xl border bg-card shadow-sm" aria-labelledby="transfer-products">
             <div className="space-y-3 border-b p-3 sm:p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <h2 id="transfer-products" className="font-semibold">Products to transfer</h2>
-                {pickedIds.length ? (
-                  <span className="text-xs text-muted-foreground">{pickedIds.length} added · {selectedLines.length} with a quantity</span>
-                ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                <div className="flex min-w-0 items-baseline gap-3">
+                  <h2 id="transfer-products" className="font-semibold">{sheetMode ? scopeLabel.label : "Products to transfer"}</h2>
+                  {sheetMode && pickedIds.length ? (
+                    <span className="text-xs text-muted-foreground">{pickedRows.length} listed · {selectedLines.length} with a quantity</span>
+                  ) : !sheetMode && pickedIds.length ? (
+                    <span className="text-xs text-muted-foreground">{pickedIds.length} added · {selectedLines.length} with a quantity</span>
+                  ) : null}
+                </div>
               </div>
-              <ProductSearch
-                fromWarehouseId={fromWarehouseId}
-                toWarehouseId={toWarehouseId}
-                fromShort={fromShort}
-                toShort={toShort}
-                pickedIds={pickedSet}
-                disabled={busy}
-                onPick={pickFromSearch}
-                onBrowse={() => setBrowseOpen(true)}
-              />
+              {sheetMode ? <ScopeFilter scope={scope} onScope={chooseScope} disabled={busy} /> : null}
+              {sheetMode ? (
+                <SheetFilter
+                  text={sheetText}
+                  onText={setSheetText}
+                  onlyEntered={onlyEntered}
+                  onOnlyEntered={setOnlyEntered}
+                  enteredCount={enteredCount}
+                  fromShort={fromShort}
+                  plural={scopeLabel.plural}
+                  disabled={busy || !fromWarehouseId}
+                />
+              ) : (
+                <ProductSearch
+                  fromWarehouseId={fromWarehouseId}
+                  toWarehouseId={toWarehouseId}
+                  fromShort={fromShort}
+                  toShort={toShort}
+                  pickedIds={pickedSet}
+                  disabled={busy}
+                  onPick={pickFromSearch}
+                  onBrowse={() => setBrowseOpen(true)}
+                />
+              )}
             </div>
             {stockError ? (
               <p role="alert" className="p-4 text-sm text-destructive">{stockError}{" "}
                 <button type="button" className="underline" onClick={() => setStockRefresh((value) => value + 1)}>Retry</button></p>
+            ) : sheetMode && !fromWarehouseId ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Icons.Warehouse className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
+                <p className="text-sm font-medium">Choose the store the stock comes from</p>
+                <p className="max-w-sm text-sm text-muted-foreground">Every {scopeLabel.noun} it holds is listed here. Type the quantity to move.</p>
+              </div>
+            ) : sheetMode && stockLoading && !pickedRows.length ? (
+              <div role="status" className="space-y-2 p-4">
+                <span className="sr-only">Loading {scopeLabel.plural}…</span>
+                {[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-11 animate-pulse rounded-md bg-muted/60" />)}
+              </div>
+            ) : sheetMode && !pickedRows.length ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Icons.PackageSearch className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
+                <p className="text-sm font-medium">No {scopeLabel.plural} in stock at {fromShort}</p>
+                <p className="max-w-sm text-sm text-muted-foreground">Choose another store or material type.</p>
+                {scope !== "all" ? (
+                  <Button type="button" variant="outline" size="sm" className="mt-1" onClick={() => chooseScope("all")}>Show all stock</Button>
+                ) : null}
+              </div>
+            ) : sheetMode && !visibleRows.length ? (
+              <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {onlyEntered && !sheetNeedle ? "No quantities entered yet." : `No ${scopeLabel.noun} matches “${sheetText.trim()}”.`}
+                </p>
+                <Button type="button" variant="ghost" size="sm" onClick={() => { setSheetText(""); setOnlyEntered(false); }}>Show every {scopeLabel.noun}</Button>
+              </div>
             ) : !pickedIds.length ? (
               <div className="flex flex-col items-center gap-2 px-4 py-12 text-center">
                 <span className="grid h-10 w-10 place-items-center rounded-full bg-muted"><Icons.PackageSearch className="h-5 w-5 text-muted-foreground" aria-hidden /></span>
@@ -1054,7 +1276,7 @@ export default function NewTransferPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pickedRows.map((row) => (
+                    {visibleRows.map((row) => (
                       <TransferRow
                         key={row.productId}
                         row={row}
@@ -1064,7 +1286,7 @@ export default function NewTransferPage() {
                         busy={busy}
                         onUpdate={updateLine}
                         onLoadUnits={loadUnits}
-                        onRemove={removeProduct}
+                        onRemove={sheetMode ? undefined : removeProduct}
                       />
                     ))}
                   </tbody>

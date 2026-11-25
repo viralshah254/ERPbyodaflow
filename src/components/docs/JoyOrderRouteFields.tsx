@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { ArrowRightLeft } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
@@ -28,8 +28,6 @@ export function JoyOrderRouteFields(props: {
   onTillChange: (value: string) => void;
   /** Set on orders saved before route stock: the store they still pick from. */
   legacyPickStoreLabel?: string | null;
-  /** Opens Transfer stock into the chosen route. */
-  transferHref?: string;
   loading: boolean;
   error?: string;
   hasCustomer: boolean;
@@ -38,7 +36,7 @@ export function JoyOrderRouteFields(props: {
 }) {
   const {
     date, onDateChange, routes, route, savedRoute, onRouteChange, salesRep, onSalesRepChange, tillNumber, onTillChange,
-    legacyPickStoreLabel, transferHref, loading, error, hasCustomer, captions = true,
+    legacyPickStoreLabel, loading, error, hasCustomer, captions = true,
   } = props;
   const tills = [...new Set([
     salesRep?.tillNumber,
@@ -90,16 +88,11 @@ export function JoyOrderRouteFields(props: {
           <p className="text-xs text-muted-foreground">
             Saved before route stock. Still picked from <span className="font-medium text-foreground">{legacyPickStoreLabel}</span>.
           </p>
-        ) : route && transferHref ? (
-          <a
-            href={transferHref}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1.5 pt-0.5 text-sm font-medium text-primary hover:underline"
-          >
-            <ArrowRightLeft className="h-3.5 w-3.5" aria-hidden />
-            Transfer stock to this route
-          </a>
+        ) : route && captions ? (
+          <p className="flex items-start gap-1.5 pt-0.5 text-xs text-muted-foreground">
+            <ClipboardList className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span>No stock needed to save. The route&rsquo;s loading note totals its orders and lists what to transfer.</span>
+          </p>
         ) : null}
       </div>
       <div className="space-y-1">
