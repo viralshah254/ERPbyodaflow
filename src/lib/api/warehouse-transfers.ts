@@ -2,7 +2,7 @@
  * Warehouse transfers API — inter-warehouse stock transfers.
  */
 
-import { apiRequest, downloadTextFile, requireLiveApi } from "@/lib/api/client";
+import { apiRequest, downloadFile, downloadTextFile, requireLiveApi } from "@/lib/api/client";
 import type { TransferRow, TransferStatus } from "@/lib/types/warehouse";
 
 export type { TransferRow, TransferStatus };
@@ -94,6 +94,11 @@ export async function fetchTransferHistory(query: TransferHistoryQuery): Promise
     params: { ...listParams(rest), limit: "100", offset: String(offset ?? 0) },
   });
   return { items: res.items ?? [], hasMore: Boolean(res.hasMore) };
+}
+
+/** The transfer note: products requested, dispatched and received. */
+export function downloadTransferPdf(id: string, number: string, onError: (message: string) => void): Promise<boolean> {
+  return downloadFile(`/api/warehouse/transfers/${encodeURIComponent(id)}/pdf`, `${number}.pdf`, onError);
 }
 
 export async function fetchTransferById(id: string): Promise<TransferRow | null> {

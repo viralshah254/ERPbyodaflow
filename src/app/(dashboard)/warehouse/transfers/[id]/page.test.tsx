@@ -1,7 +1,7 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { approveTransferShortage, fetchTransferById, saveTransferReceiptCounts } from "@/lib/api/warehouse-transfers";
+import { approveTransferShortage, downloadTransferPdf, fetchTransferById, saveTransferReceiptCounts } from "@/lib/api/warehouse-transfers";
 import type { TransferRow } from "@/lib/types/warehouse";
 import TransferDetailPage from "./page";
 
@@ -16,6 +16,7 @@ vi.mock("@/lib/api/warehouse-transfers", () => ({
   saveTransferReceiptCounts: vi.fn(),
   approveTransferShortage: vi.fn(),
   updateTransferStatus: vi.fn(),
+  downloadTransferPdf: vi.fn().mockResolvedValue(true),
 }));
 
 it("requires the missing count by lot and explicitly confirms the Finance write-off", async () => {
@@ -60,5 +61,7 @@ it("leads back to the loading note the transfer was made for", async () => {
   window.history.replaceState(null, "", "/warehouse/transfers/t1");
   render(<TransferDetailPage />);
   expect(await screen.findByRole("link", { name: "Back to route pick lists" })).toHaveAttribute("href", "/warehouse/route-pick-lists");
+  fireEvent.click(screen.getByRole("button", { name: "Download transfer PDF" }));
+  expect(downloadTransferPdf).toHaveBeenCalledWith("t1", "TRF-2", expect.any(Function));
   window.history.replaceState(null, "", "/");
 });
