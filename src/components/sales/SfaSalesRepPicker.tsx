@@ -25,7 +25,7 @@ export function pickSalesRep(rep: PickedSalesRep): PickedSalesRep {
 const repOption = (rep: PickedSalesRep & { areaName?: string; isActive?: boolean }): AsyncSearchableSelectOption => ({
   id: rep.id,
   label: rep.name,
-  description: [rep.phone, rep.areaName, rep.isActive === false ? "Inactive" : undefined].filter(Boolean).join(" · ") || undefined,
+  description: [rep.phone, rep.areaName].filter(Boolean).join(" · ") || undefined,
 });
 
 function errorText(error: unknown, fallback: string) {

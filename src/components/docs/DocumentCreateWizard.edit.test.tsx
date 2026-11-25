@@ -339,7 +339,7 @@ it("keeps routes without collection settings usable during rollout", async () =>
   expect(await screen.findByText(/Step 2 of 3/)).toBeInTheDocument();
 });
 
-it("has no pick store on a new Joy order and says stock is settled on the loading note", async () => {
+it("has no pick store on a new Joy order", async () => {
   vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
     { id: "legacy", label: "Existing route" }, { id: "fg", label: "FG - Finished Goods" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
   ]);
@@ -350,6 +350,6 @@ it("has no pick store on a new Joy order and says stock is settled on the loadin
   await waitFor(() => expect(route).toHaveTextContent("Existing route"));
   fireEvent.change(route, { target: { value: "legacy" } });
   expect(screen.queryByLabelText("Pick from store")).not.toBeInTheDocument();
-  expect(await screen.findByText(/No stock needed to save/)).toBeVisible();
+  expect(screen.queryByText(/No stock needed to save/)).not.toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Transfer stock to this route" })).not.toBeInTheDocument();
 });

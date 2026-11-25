@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { ClipboardList } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
@@ -48,7 +47,7 @@ export function JoyOrderRouteFields(props: {
     () => routes.map((row) => ({
       id: row.id,
       label: row.name,
-      description: row.collectors.length ? undefined : "No till configured",
+      description: undefined,
     })),
     [routes],
   );
@@ -79,19 +78,13 @@ export function JoyOrderRouteFields(props: {
           <p className="text-xs text-muted-foreground">
             {loading ? "Loading delivery routes…" : error ? error : !hasCustomer ? "Choose a customer first." : !date ? "Choose a delivery date."
               : !routes.length ? "Create a route store to continue."
-                : route && !route.collectors.length ? "This route has no till configured. You can still save the order."
-                  : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
-                  : "The first route you save for this outlet and weekday becomes its default."}
+              : savedRoute ? "The saved weekday route is suggested. Changes here apply to this order."
+              : "The first route you save for this outlet and weekday becomes its default."}
           </p>
         ) : error ? <p className="text-xs text-destructive">{error}</p> : null}
         {legacyPickStoreLabel ? (
           <p className="text-xs text-muted-foreground">
             Saved before route stock. Still picked from <span className="font-medium text-foreground">{legacyPickStoreLabel}</span>.
-          </p>
-        ) : route && captions ? (
-          <p className="flex items-start gap-1.5 pt-0.5 text-xs text-muted-foreground">
-            <ClipboardList className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
-            <span>No stock needed to save. The route&rsquo;s loading note totals its orders and lists what to transfer.</span>
           </p>
         ) : null}
       </div>
