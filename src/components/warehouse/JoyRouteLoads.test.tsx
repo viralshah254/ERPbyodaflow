@@ -384,7 +384,7 @@ it("opens a prefilled transfer for what the route lacks and only loads what the 
   }];
   render(<JoyLoaderNote noteId="n2" />);
   const transfer = await screen.findByRole("link", { name: "Transfer 1 product" });
-  expect(transfer).toHaveAttribute("href", "/warehouse/transfers/new?to=kajiado&line=cake%3A7&ref=Loader+note+LDN-0007&return=load");
+  expect(transfer).toHaveAttribute("href", "/warehouse/transfers/new?to=kajiado&line=cake%3A7&ref=Loader+note+LDN-0007&return=load&back=%2Fwarehouse%2Froute-pick-lists%2Fn2");
   expect(transfer).toHaveAttribute("target", "_blank");
   expect(screen.getByRole("navigation", { name: "Load progress" })).toHaveTextContent("1 to transfer");
   expect(screen.getByText("Only 3 in store")).toBeVisible();

@@ -45,3 +45,20 @@ it("requires the missing count by lot and explicitly confirms the Finance write-
   fireEvent.click(screen.getByRole("button", { name: "Confirm write-off and receipt" }));
   expect(approveTransferShortage).toHaveBeenCalledWith("t1", "review-v2");
 });
+
+it("leads back to the loading note the transfer was made for", async () => {
+  const transfer: TransferRow = {
+    id: "t1", number: "TRF-2", date: "2026-11-25", fromWarehouse: "DISPATCH", toWarehouse: "MAR", status: "DRAFT",
+    reference: "Loader note LDN-0012", lines: [{ id: "line", sku: "CAKE", productName: "Cake", quantity: 3, unit: "EA" }],
+  };
+  vi.mocked(fetchTransferById).mockResolvedValue(transfer);
+  window.history.replaceState(null, "", "/warehouse/transfers/t1?back=%2Fwarehouse%2Froute-pick-lists%2Fn12");
+  const { unmount } = render(<TransferDetailPage />);
+  expect(await screen.findByRole("link", { name: "Back to the loading note" })).toHaveAttribute("href", "/warehouse/route-pick-lists/n12");
+  unmount();
+
+  window.history.replaceState(null, "", "/warehouse/transfers/t1");
+  render(<TransferDetailPage />);
+  expect(await screen.findByRole("link", { name: "Back to route pick lists" })).toHaveAttribute("href", "/warehouse/route-pick-lists");
+  window.history.replaceState(null, "", "/");
+});

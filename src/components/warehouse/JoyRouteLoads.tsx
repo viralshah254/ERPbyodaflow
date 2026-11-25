@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SfaSalesRepsField, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
 import { AsyncSearchableSelect, type AsyncSearchableSelectOption } from "@/components/ui/async-searchable-select";
-import { transferPrefillHref } from "@/lib/warehouse/transfer-prefill";
+import { routeLoadNoteHref, transferPrefillHref } from "@/lib/warehouse/transfer-prefill";
 
 function roundQty(n: number): number {
   return Math.round(n * 10000) / 10000;
@@ -428,6 +428,7 @@ function loadTransferHref(note: JoyLoadNote, shorts: Array<{ line: LoadedLine; s
     lines: shorts.map(({ line, stock }) => ({ productId: line.productId, quantity: stock.shortQty })),
     reference: `Loader note ${note.number}`,
     returnTo: "load",
+    backHref: routeLoadNoteHref(note.id),
   });
 }
 
