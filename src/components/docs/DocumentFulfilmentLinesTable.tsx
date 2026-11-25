@@ -172,6 +172,7 @@ export function DocumentFulfilmentLinesTable({
   sourceDocStatus,
   showAlternateCurrency = true,
   fmcgOrg = false,
+  hideUom = false,
 }: {
   lines: FulfilmentLine[];
   currency: string;
@@ -181,6 +182,7 @@ export function DocumentFulfilmentLinesTable({
   sourceDocStatus?: string;
   showAlternateCurrency?: boolean;
   fmcgOrg?: boolean;
+  hideUom?: boolean;
 }) {
   const isDn = docType === "delivery-note";
   const resolved = React.useMemo(() => {
@@ -296,7 +298,7 @@ export function DocumentFulfilmentLinesTable({
               <tr role="row">
                 <th scope="col" role="columnheader" className={cn(thClass, "text-left")}>Product</th>
                 <th scope="col" role="columnheader" className={cn(thClass, "text-left")}>Status</th>
-                <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>UOM</th>
+                {hideUom ? null : <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>UOM</th>}
                 <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>Ordered</th>
                 <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>{isDn ? "On truck" : "Shipped"}</th>
                 <th scope="col" role="columnheader" className={cn(thClass, "text-right")}>{isDn ? "Not packed" : "Backorder"}</th>
@@ -334,9 +336,11 @@ export function DocumentFulfilmentLinesTable({
                       </Badge>
                     </td>
 
+                    {hideUom ? null : (
                     <td role="cell" data-line-label="UOM" className={cn(tdClass, "text-right")}>
                       <LinePackingCell unit={r.line.unit} packing={r.line.packing} />
                     </td>
+                    )}
                     <td role="cell" data-line-label="Ordered" className={cn(tdClass, "text-right tabular-nums")}>{fmtQty(r.ordered)}</td>
                     <td role="cell" data-line-label={isDn ? "On truck" : "Shipped"}
                       className={cn(

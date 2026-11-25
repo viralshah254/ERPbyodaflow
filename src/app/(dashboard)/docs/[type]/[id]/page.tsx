@@ -56,7 +56,7 @@ import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
-import { requiresStampedDeliveryNote } from "@/config/industry";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, requiresStampedDeliveryNote } from "@/config/industry";
 import { DeliveryNoteEditHistory } from "@/components/docs/DeliveryNoteEditHistory";
 import {
   addDocumentCommentApi,
@@ -1644,6 +1644,9 @@ export default function DocViewPage() {
     )
   );
   const lineLayout = showReceiptVariance ? "document-lines-receipt" : isPurchaseDoc ? "document-lines-purchase" : "";
+  const hideSalesUom =
+    canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID &&
+    (type === "invoice" || type === "delivery-note");
   const canApplyPriceTagInDetails = type === "quote" || type === "sales-order" || type === "credit-note";
   const documentPriceTag = (
     <DocumentPriceTagControl
@@ -2652,13 +2655,14 @@ export default function DocViewPage() {
                     sourceDocStatus={document?.sourceDocument?.status}
                     showAlternateCurrency={type !== "delivery-note"}
                     fmcgOrg={fmcgOrg}
+                    hideUom={hideSalesUom}
                   />
                 ) : (
                   <>
-                  <div className={`document-lines rounded border ${lineLayout}`}>
+                  <div className={`document-lines rounded border ${lineLayout}${hideSalesUom ? " document-lines-no-uom" : ""}`}>
                     <div className="document-line-grid document-line-head border-b px-2.5 py-2 text-xs font-medium text-muted-foreground">
                       <span>Description</span>
-                      <span className="text-right">UOM</span>
+                      {hideSalesUom ? null : <span className="text-right">UOM</span>}
                       {isGrnDoc ? (
                         <>
                           {showReceiptVariance && <span className="text-right">Ordered</span>}
@@ -2741,7 +2745,7 @@ export default function DocViewPage() {
                               </p>
                             ) : null}
                           </div>
-                          <LinePackingCell unit={line.unit} packing={line.packing} />
+                          {hideSalesUom ? null : <LinePackingCell unit={line.unit} packing={line.packing} />}
                           {isGrnDoc ? (
                             <>
                               {showReceiptVariance && (
