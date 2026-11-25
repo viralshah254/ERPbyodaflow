@@ -51,6 +51,8 @@ it("filters history by store and direction, and keeps the filter in the link", a
   expect(await screen.findByText("Choco muffin")).toBeInTheDocument();
   expect(screen.getByText("+1 more product")).toBeInTheDocument();
   expect(screen.getByText("Jane Wanjiku")).toBeInTheDocument();
+  expect(screen.getByText("24th Nov 2026")).toBeInTheDocument();
+  expect(screen.queryByText("2026-11-24")).toBeNull();
   expect(screen.getByText(/0 sent out · 1 received/)).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "Sent out" }));
