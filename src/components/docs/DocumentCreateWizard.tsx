@@ -40,7 +40,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
-import { transferPrefillHref } from "@/lib/warehouse/transfer-prefill";
 import Link from "next/link";
 import {
   DocumentLineEditor,
@@ -926,15 +925,15 @@ export function DocumentCreateWizard({
   const legacyRouteSourceId = isEditMode && existingDocument?.warehouseId?.trim() && existingDocument.sourceWarehouseId !== existingDocument.warehouseId
     ? existingDocument.sourceWarehouseId || routeDispatchStore?.id || ""
     : null;
-  const routePickStoreId = legacyRouteSourceId ?? activeCollectionRoute?.id ?? "";
   const legacyRouteSourceLabel = legacyRouteSourceId === null ? null
     : (fieldOptions.warehouse ?? []).find((store) => store.id === legacyRouteSourceId)?.label ?? routeDispatchStore?.label ?? "DISPATCH";
 
-  /** FMCG sales orders: the store the stock leaves from. Route orders pick from their route warehouse. */
-  const stockCheckStoreId = type !== "sales-order" || !fmcgOrg || !isApiConfigured()
+  /** FMCG sales orders: the store the stock leaves from. Route orders take no stock check; the route's
+   * loading note totals its orders and lists what to transfer before the truck loads. */
+  const stockCheckStoreId = type !== "sales-order" || !fmcgOrg || !isApiConfigured() || joyRouteOrderEnabled
     ? ""
     : routeDeliveryStore
-      ? (joyRouteOrderEnabled ? routePickStoreId : "") || routeDispatchStore?.id || ""
+      ? routeDispatchStore?.id || ""
       : String(watchedWarehouse ?? "").trim();
   const stockCheckStoreLabel = (fieldOptions.warehouse ?? []).find((store) => store.id === stockCheckStoreId)?.label ?? "the chosen store";
   const stockCheckLines = React.useMemo(() => {
@@ -997,14 +996,6 @@ export function DocumentCreateWizard({
     document.addEventListener("visibilitychange", recheck);
     return () => document.removeEventListener("visibilitychange", recheck);
   }, [stockShortCount]);
-  const routeTransferHref = (short?: Record<string, { need: number; available: number }>) => transferPrefillHref({
-    toWarehouseId: activeCollectionRoute?.id,
-    lines: Object.entries(short ?? {}).map(([productId, row]) => ({
-      productId,
-      quantity: Math.round(Math.max(0, row.need - row.available) * 10000) / 10000,
-    })),
-    returnToOrder: true,
-  });
   /** Blocks saving while the store cannot cover the order, or while the latest check is still running. */
   const stockBlockReason = !stockCheckKey
     ? undefined
@@ -1013,7 +1004,7 @@ export function DocumentCreateWizard({
       : stockCheckCurrent.error
         ? `Could not check stock: ${stockCheckCurrent.error}`
         : stockShortCount > 0
-          ? `${stockCheckStoreLabel} does not have enough stock for ${stockShortCount} product${stockShortCount === 1 ? "" : "s"}. ${joyRouteOrderEnabled && routePickStoreId === activeCollectionRoute?.id ? "Transfer the stock to this route first." : "Change the store or update the stock."}`
+          ? `${stockCheckStoreLabel} does not have enough stock for ${stockShortCount} product${stockShortCount === 1 ? "" : "s"}. Change the store or update the stock.`
           : undefined;
 
   React.useEffect(() => {
@@ -3125,7 +3116,6 @@ export function DocumentCreateWizard({
                   tillNumber={routeTill}
                   onTillChange={setRouteTillChoice}
                   legacyPickStoreLabel={legacyRouteSourceLabel}
-                  transferHref={activeCollectionRoute ? routeTransferHref(stockShortByProductId) : undefined}
                   hasCustomer={!!selectedPartyId}
                   captions={!isEditMode}
                   loading={!!selectedPartyId && !!routeDeliveryDate && !activeRouteLookup}
@@ -3661,19 +3651,6 @@ export function DocumentCreateWizard({
                 </li>
               ))}
             </ul>
-          ) : null}
-          {stockShortCount > 0 && joyRouteOrderEnabled && activeCollectionRoute && routePickStoreId === activeCollectionRoute.id ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Button size="sm" asChild>
-                <a href={routeTransferHref(stockShortByProductId)} target="_blank" rel="noreferrer">
-                  <Icons.ArrowRightLeft className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-                  Transfer the missing stock to {activeCollectionRoute.name}
-                </a>
-              </Button>
-              <Button size="sm" variant="outline" onClick={() => setStockCheckNonce((value) => value + 1)}>
-                Check stock again
-              </Button>
-            </div>
           ) : null}
         </div>
       ) : null}

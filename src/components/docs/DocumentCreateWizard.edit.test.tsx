@@ -100,7 +100,7 @@ function doc(type: "sales-order" | "invoice"): DocumentDetailRecord {
     ...(type === "sales-order" ? { warehouseId: "wh-c4-friday" } : {}),
     lines: [{ id: "original-line", productId: "queen", productSku: "1", description: "Queen cakes", qty: 2, unit: "PCS", unitPrice: 43.1, amount: 86.2, tax: 11.89, taxCodeId: "vat" }] };
 }
-beforeEach(() => { vi.mocked(deleteDocumentDraftApi).mockClear(); vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); vi.mocked(previewDocumentPostingApi).mockClear(); state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; state.lineByLine = false; });
+beforeEach(() => { vi.mocked(deleteDocumentDraftApi).mockClear(); vi.mocked(patchDocumentApi).mockReset().mockResolvedValue(doc("invoice")); vi.mocked(previewDocumentPostingApi).mockClear(); state.push.mockClear(); state.defaults.mockClear(); state.taxDefaults.mockClear(); state.orgId = "org-sfa-6a890b7765042fb41c9d89a6"; state.lineByLine = false; vi.mocked(checkStockApi).mockClear(); });
 it.each(["sales-order", "invoice"] as const)("opens existing %s inline without autosaving and saves only positive lines explicitly", async (type) => {
   render(<DocumentCreateWizard type={type} mode="edit" existingDocument={doc(type)} />);
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
@@ -220,7 +220,7 @@ it("keeps the saved pick store on a Joy order raised before route stock", async 
   await screen.findByTestId("edit-sheet");
   const review = screen.getAllByRole("button", { name: "Review & Submit" });
   await waitFor(() => expect(review[review.length - 1]).toBeEnabled());
-  expect(checkStockApi).toHaveBeenLastCalledWith("fg", [{ productId: "queen", quantity: 2 }]);
+  expect(checkStockApi).not.toHaveBeenCalled();
   fireEvent.click(review[review.length - 1]);
   fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
@@ -253,7 +253,7 @@ it("picks an order on its route warehouse and keeps the route on edit", async ()
   await screen.findByTestId("edit-sheet");
   const review = screen.getAllByRole("button", { name: "Review & Submit" });
   await waitFor(() => expect(review[review.length - 1]).toBeEnabled());
-  expect(checkStockApi).toHaveBeenLastCalledWith("legacy", [{ productId: "queen", quantity: 2 }]);
+  expect(checkStockApi).not.toHaveBeenCalled();
   fireEvent.click(review[review.length - 1]);
   fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
   await waitFor(() => expect(patchDocumentApi).toHaveBeenCalledTimes(1));
@@ -263,7 +263,7 @@ it("picks an order on its route warehouse and keeps the route on edit", async ()
   }));
 });
 
-it("blocks a Joy sales order while the pick store is short and names the short product", async () => {
+it("saves a Joy route order without a stock check, since the loading note lists what to transfer", async () => {
   vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
     { id: "legacy", label: "Existing route" }, { id: "fg", label: "FG - Finished Goods" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
   ]);
@@ -277,12 +277,10 @@ it("blocks a Joy sales order while the pick store is short and names the short p
   await waitFor(() => expect(screen.getByRole("tab", { name: /2 Lines/ })).toBeEnabled());
   fireEvent.click(screen.getByRole("tab", { name: /2 Lines/ }));
   await screen.findByTestId("edit-sheet");
-  const alert = await screen.findByRole("alert");
-  expect(alert).toHaveTextContent("FG - Finished Goods does not have enough stock for 1 product");
-  expect(alert).toHaveTextContent("Queen cakes: 0 available, needs 2");
-  expect(checkStockApi).toHaveBeenLastCalledWith("fg", [{ productId: "queen", quantity: 2 }]);
   const review = screen.getAllByRole("button", { name: "Review & Submit" });
-  expect(review[review.length - 1]).toBeDisabled();
+  await waitFor(() => expect(review[review.length - 1]).toBeEnabled());
+  expect(screen.queryByText(/does not have enough stock/)).not.toBeInTheDocument();
+  expect(checkStockApi).not.toHaveBeenCalled();
   vi.mocked(checkStockApi).mockResolvedValue([]);
 });
 
@@ -341,7 +339,7 @@ it("keeps routes without collection settings usable during rollout", async () =>
   expect(await screen.findByText(/Step 2 of 3/)).toBeInTheDocument();
 });
 
-it("has no pick store on a new Joy order and links to a transfer into the chosen route", async () => {
+it("has no pick store on a new Joy order and says stock is settled on the loading note", async () => {
   vi.mocked(fetchWarehouseOptions).mockResolvedValueOnce([
     { id: "legacy", label: "Existing route" }, { id: "fg", label: "FG - Finished Goods" }, { id: "dispatch", label: "DISPATCH - Dispatch" },
   ]);
@@ -352,7 +350,6 @@ it("has no pick store on a new Joy order and links to a transfer into the chosen
   await waitFor(() => expect(route).toHaveTextContent("Existing route"));
   fireEvent.change(route, { target: { value: "legacy" } });
   expect(screen.queryByLabelText("Pick from store")).not.toBeInTheDocument();
-  const transfer = await screen.findByRole("link", { name: "Transfer stock to this route" });
-  expect(transfer).toHaveAttribute("href", "/warehouse/transfers/new?to=legacy&return=order");
-  expect(transfer).toHaveAttribute("target", "_blank");
+  expect(await screen.findByText(/No stock needed to save/)).toBeVisible();
+  expect(screen.queryByRole("link", { name: "Transfer stock to this route" })).not.toBeInTheDocument();
 });

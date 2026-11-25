@@ -145,7 +145,7 @@ export type JoyRouteOrder = {
   orderedAt?: string;
   lines: JoyRouteOrderLine[];
 };
-/** `availableQty` and `shortQty` are set only when the pick store cannot cover the orders. */
+/** `availableQty` and `shortQty` are set only when the pick store cannot cover the orders yet. */
 export type JoyRouteProduct = {
   productId: string; sku?: string; name: string; unit?: string; orderedQty: number; availableQty?: number; shortQty?: number;
 };
@@ -167,6 +167,7 @@ export type LoadSalesRep = { id: string; name: string; phone?: string };
 export type JoyLoadNoteStatus = "OPEN" | "AWAITING_FINANCE" | "CONFIRMED" | "INVOICING" | "INVOICED" | "CANCELLED";
 /** "both" sends the invoice with the delivery note. "delivery_note" leaves the invoice on standby. */
 export type JoyLoadDocumentPlan = "both" | "delivery_note";
+export type JoyLoadStockLine = { productId: string; neededQty: number; availableQty: number; shortQty: number };
 export type JoyLoadAllocation = {
   salesOrderId: string;
   salesOrderNumber: string;
@@ -220,6 +221,8 @@ export type JoyLoadNote = {
     orders: Array<{ id: string; number: string }>;
   }>;
   valuationIssues?: Array<{ productId: string; name: string; sku?: string }>;
+  /** Pick-store stock against what the note still needs. Set until the stock is issued. */
+  stock?: JoyLoadStockLine[];
   lastError?: string;
   loadedAt?: string;
   invoicedAt?: string;
