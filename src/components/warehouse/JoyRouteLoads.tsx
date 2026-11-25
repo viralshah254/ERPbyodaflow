@@ -15,7 +15,9 @@ import {
   cancelJoyLoadNote,
   createJoyDeliveryNotes,
   createJoyLoadNote,
+  emailJoyTransferRequest,
   printJoyLoadNotePdf,
+  printJoyTransferRequestPdf,
   fetchJoyLoadNotes,
   generateJoyInvoices,
   markJoyLoadDeparted,
@@ -27,7 +29,8 @@ import {
   type JoyLoadStockLine,
   type JoyWaitingRoute,
 } from "@/lib/api/joy-dispatch";
-import { ArrowRightLeft, Check, CheckCircle2, ChevronRight, ClipboardList, MapPin, Package, RefreshCw, Truck } from "lucide-react";
+import { ArrowRightLeft, Check, CheckCircle2, ChevronRight, ClipboardList, Mail, MapPin, Package, Printer, RefreshCw, Truck } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { SfaSalesRepsField, type PickedSalesRep } from "@/components/sales/SfaSalesRepPicker";
@@ -510,6 +513,93 @@ function LoadProgress({ note }: { note: JoyLoadNote }) {
 }
 
 /** What the pick store holds against this load, with a prefilled transfer for anything short. */
+const TRANSFER_EMAIL_KEY = "odaflow.joy.transferRequestEmail";
+
+/** Someone else may do the transfer. They get a printable request with only what has to move. */
+function TransferRequestActions({ note }: { note: JoyLoadNote }) {
+  const [open, setOpen] = React.useState(false);
+  const [to, setTo] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open || to) return;
+    try {
+      setTo(window.localStorage.getItem(TRANSFER_EMAIL_KEY) ?? "");
+    } catch {
+      /* Private mode has no storage. */
+    }
+  }, [open, to]);
+
+  async function send(event: React.FormEvent) {
+    event.preventDefault();
+    const email = to.trim();
+    if (!email) return;
+    setSending(true);
+    try {
+      await emailJoyTransferRequest(note.id, email);
+      try {
+        window.localStorage.setItem(TRANSFER_EMAIL_KEY, email);
+      } catch {
+        /* Private mode has no storage. */
+      }
+      toast.success(`Transfer request sent to ${email}.`);
+      setOpen(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not send the transfer request.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="bg-background/80"
+        onClick={() => void printJoyTransferRequestPdf(note, (message) => toast.error(message))}
+      >
+        <Printer className="mr-1.5 size-3.5" aria-hidden />
+        Print request
+      </Button>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button size="sm" variant="outline" className="bg-background/80">
+            <Mail className="mr-1.5 size-3.5" aria-hidden />
+            Email request
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="end" className="w-80">
+          <form onSubmit={send} className="space-y-3">
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Send the transfer request</p>
+              <p className="text-xs text-muted-foreground">
+                They get a PDF of what to move into {placeLabel(note.fulfilmentWarehouseName)}, and a link that opens the transfer filled in.
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`transfer-request-email-${note.id}`}>Email</Label>
+              <Input
+                id={`transfer-request-email-${note.id}`}
+                type="email"
+                autoComplete="email"
+                placeholder="storekeeper@company.com"
+                value={to}
+                onChange={(event) => setTo(event.target.value)}
+                required
+                autoFocus
+              />
+            </div>
+            <Button type="submit" size="sm" className="w-full" disabled={sending || !to.trim()}>
+              {sending ? "Sending…" : "Send request"}
+            </Button>
+          </form>
+        </PopoverContent>
+      </Popover>
+    </>
+  );
+}
+
 function RouteStockPanel({ note, checking, onRecheck, onlyWhenShort = false }: {
   note: JoyLoadNote;
   checking: boolean;
@@ -549,6 +639,7 @@ function RouteStockPanel({ note, checking, onRecheck, onlyWhenShort = false }: {
               Transfer {shorts.length} product{shorts.length === 1 ? "" : "s"}
             </a>
           </Button>
+          <TransferRequestActions note={note} />
           <Button size="sm" variant="outline" className="bg-background/80" disabled={checking} onClick={onRecheck}>
             <RefreshCw className={cn("mr-1.5 size-3.5", checking && "animate-spin")} aria-hidden />
             {checking ? "Checking…" : "Check stock again"}

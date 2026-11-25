@@ -334,28 +334,28 @@ export async function markJoyLoadDeparted(id: string): Promise<JoyLoadNote> {
 }
 
 /** Opens the browser print dialog for the loader note. The window must be opened before the PDF fetch so the click still counts as the user gesture. */
-export async function printJoyLoadNotePdf(note: { id: string; number: string }, onError: (message: string) => void) {
+async function printPdfInNewTab(path: string, title: string, what: string, onError: (message: string) => void) {
   requireLiveApi(LOADS);
   const popup = window.open("", "_blank");
   if (!popup) {
-    onError("Allow pop-ups to print the loader note.");
+    onError(`Allow pop-ups to print the ${what}.`);
     return;
   }
-  popup.document.title = note.number;
-  popup.document.body.textContent = "Preparing the loader note…";
+  popup.document.title = title;
+  popup.document.body.textContent = `Preparing the ${what}…`;
   try {
-    const blob = await fetchApiBinary(`/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/pdf`);
+    const blob = await fetchApiBinary(path);
     if (!blob || blob.size === 0) {
       popup.close();
-      onError("Could not load the loader note for printing.");
+      onError(`Could not load the ${what} for printing.`);
       return;
     }
     const typed = blob.type.includes("pdf") ? blob : new Blob([blob], { type: "application/pdf" });
     const url = URL.createObjectURL(typed);
-    const title = note.number.replace(/[&<>"']/g, "");
+    const safeTitle = title.replace(/[&<>"']/g, "");
     popup.document.open();
     popup.document.write(
-      `<!doctype html><html><head><title>${title}</title><style>html,body{margin:0;height:100%}embed{width:100%;height:100%;border:0}</style></head><body><embed type="application/pdf" src="${url}"></body></html>`
+      `<!doctype html><html><head><title>${safeTitle}</title><style>html,body{margin:0;height:100%}embed{width:100%;height:100%;border:0}</style></head><body><embed type="application/pdf" src="${url}"></body></html>`
     );
     popup.document.close();
     const print = () => {
@@ -371,8 +371,30 @@ export async function printJoyLoadNotePdf(note: { id: string; number: string }, 
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   } catch (error) {
     popup.close();
-    onError(error instanceof Error ? error.message : "Could not print the loader note.");
+    onError(error instanceof Error ? error.message : `Could not print the ${what}.`);
   }
+}
+
+export function printJoyLoadNotePdf(note: { id: string; number: string }, onError: (message: string) => void) {
+  return printPdfInNewTab(`/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/pdf`, note.number, "loader note", onError);
+}
+
+/** What the route store still has to receive, for whoever does the transfer. */
+export function printJoyTransferRequestPdf(note: { id: string; number: string }, onError: (message: string) => void) {
+  return printPdfInNewTab(
+    `/api/joy-dispatch/load-notes/${encodeURIComponent(note.id)}/transfer-request/pdf`,
+    `Transfer request ${note.number}`,
+    "transfer request",
+    onError
+  );
+}
+
+export async function emailJoyTransferRequest(noteId: string, to: string) {
+  requireLiveApi(LOADS);
+  return apiRequest<{ sent: boolean; to: string }>(`/api/joy-dispatch/load-notes/${encodeURIComponent(noteId)}/transfer-request/email`, {
+    method: "POST",
+    body: { to },
+  });
 }
 
 export async function fetchJoyMovementSummary(warehouseId: string, from: string, to: string) {

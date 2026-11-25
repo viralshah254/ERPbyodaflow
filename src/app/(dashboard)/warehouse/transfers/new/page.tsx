@@ -23,6 +23,8 @@ import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
 import { parseTransferPrefill, parseTransferReturnTo, type TransferReturnTo } from "@/lib/warehouse/transfer-prefill";
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { useAuthStore } from "@/stores/auth-store";
+import { useOrgContextStore } from "@/stores/orgContextStore";
+import { productionVoice } from "@/lib/manufacturing/production-language";
 import { cn } from "@/lib/utils";
 
 type TransferLineDraft = { productId: string; qty: string; unit: string };
@@ -31,7 +33,7 @@ type DoneTransfer = {
   number: string;
   fromLabel: string;
   toLabel: string;
-  lines: Array<{ productId: string; name: string; sku?: string; qty: number; unit: string; toAfter: number }>;
+  lines: Array<{ productId: string; name: string; sku?: string; qty: number; unit: string; baseQty: number; toAfter: number }>;
 };
 
 const RECENT_LIMIT = 5;
@@ -532,12 +534,25 @@ function BrowseStockDialog({ open, onOpenChange, fromWarehouseId, toWarehouseId,
 
 type UpdateLine = (productId: string, stockUnit: string, patch: Partial<TransferLineDraft>) => void;
 
-const TransferRow = React.memo(function TransferRow({ row, line: draft, units, hasDestination, busy, onUpdate, onLoadUnits, onRemove }: {
+const EPS = 1e-9;
+
+/** Opens a new work order (or bakery batch) for the part of a needed product no store can cover. */
+function productionHref(row: TransferStockRow, qty: number): string {
+  const params = new URLSearchParams({ make: row.productId, qty: String(qty) });
+  if (row.sku) params.set("sku", row.sku);
+  return `/manufacturing/work-orders?${params.toString()}`;
+}
+
+const TransferRow = React.memo(function TransferRow({ row, line: draft, units, hasDestination, busy, need, fromShort, makeVerb, onUpdate, onLoadUnits, onRemove }: {
   row: TransferStockRow;
   line: TransferLineDraft | undefined;
   units: ProductPackaging[] | undefined;
   hasDestination: boolean;
   busy: boolean;
+  /** What the loading note or order needs moved, in the stock unit. */
+  need?: number;
+  fromShort: string;
+  makeVerb: string;
   onUpdate: UpdateLine;
   onLoadUnits: (productId: string) => void;
   /** Left out on the stock sheet, where every row stays listed. */
@@ -549,19 +564,50 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   const picked = Number(line.qty) > 0 && Boolean(factor);
   const toNow = row.destination?.quantity ?? 0;
   const empty = row.available <= 0;
+  const short = need !== undefined ? Math.max(0, need - row.available) : 0;
+  const lacking = short > EPS;
+  /** A needed product this store cannot cover is outlined in red, so the user picks another store or makes it. */
+  const edge = lacking ? "border-y border-destructive/60" : "";
   return (
-    <tr className={cn("border-t align-top", over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "")}>
-      <th scope="row" className={cn("border-l-2 px-4 py-3 text-left font-medium", over ? "border-l-destructive" : picked ? "border-l-primary" : "border-l-transparent")}>
+    <tr
+      data-short={lacking ? "true" : undefined}
+      className={cn("border-t align-top", lacking ? "bg-destructive/[0.045]" : over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "")}
+    >
+      <th scope="row" className={cn("border-l-2 px-4 py-3 text-left font-medium", edge, lacking || over ? "border-l-destructive" : picked ? "border-l-primary" : "border-l-transparent")}>
         {row.name}
         <span className="block text-xs font-normal text-muted-foreground">{productCodes(row)}</span>
+        {need !== undefined ? (
+          <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold tabular-nums",
+              lacking ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+            )}>
+              Needed {formatQty(need)} {base}
+            </span>
+            {lacking ? (
+              <a
+                href={productionHref(row, Number(short.toFixed(4)))}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-primary underline-offset-2 hover:underline"
+              >
+                {makeVerb} {formatQty(short)} in production
+                <Icons.ExternalLink className="h-3 w-3" aria-hidden />
+              </a>
+            ) : null}
+          </span>
+        ) : null}
       </th>
-      <td id={hint} className="px-3 py-3 text-right tabular-nums">
-        <p className={cn("font-semibold", over ? "text-destructive" : empty ? "text-muted-foreground" : "")}>{formatQty(row.available)} {base}</p>
+      <td id={hint} className={cn("px-3 py-3 text-right tabular-nums", edge)}>
+        <p className={cn("font-semibold", over || lacking ? "text-destructive" : empty ? "text-muted-foreground" : "")}>
+          {empty && lacking ? `None at ${fromShort}` : `${formatQty(row.available)} ${base}`}
+        </p>
+        {lacking && <p className="text-xs text-destructive">{formatQty(short)} {base} short here</p>}
         {row.reserved > 0 && <p className="text-xs text-muted-foreground">{formatQty(row.quantity)} on hand · {formatQty(row.reserved)} reserved</p>}
         {over && <p className="text-xs text-destructive">Reduce by {formatQty(baseQty - row.available)} {base}.</p>}
         {!over && picked && <p className="text-xs text-muted-foreground">{formatQty(row.available - baseQty)} left{unit !== base ? ` · ${formatQty(baseQty)} ${base} moving` : ""}</p>}
       </td>
-      <td className="px-3 py-3 text-right tabular-nums">
+      <td className={cn("px-3 py-3 text-right tabular-nums", edge)}>
         {!hasDestination ? <span className="text-muted-foreground">—</span> : (
           <>
             <p className={cn("font-semibold", toNow > 0 ? "" : "text-muted-foreground")}>{formatQty(toNow)} {base}</p>
@@ -569,7 +615,7 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
           </>
         )}
       </td>
-      <td className="w-[21rem] px-3 py-2.5">
+      <td className={cn("w-[21rem] px-3 py-2.5", edge, lacking && "border-r")}>
         <div className="flex items-center gap-2">
           <Input
             data-transfer-qty={row.productId}
@@ -664,6 +710,7 @@ export default function NewTransferPage() {
   const [recentTo, setRecentTo] = React.useState<string[]>([]);
   const [browseOpen, setBrowseOpen] = React.useState(false);
   const profile = useOperatingProfile(orgId);
+  const makeVerb = productionVoice(useOrgContextStore((s) => s.templateId)) === "bakery" ? "Bake" : "Make";
   const [scope, setScope] = React.useState<ProductScope>("FINISHED");
   /** Orgs on the fixed sales order sheet transfer the same way: every product of the chosen type listed, type the quantity. */
   const sheetMode = profile.fixedOrderSheet;
@@ -691,6 +738,12 @@ export default function NewTransferPage() {
   const [costNotes, setCostNotes] = React.useState("");
   const [sourceGrnId, setSourceGrnId] = React.useState("");
   const prefilledFrom = React.useRef(false);
+  /** Quantities the loading note or order asked for, in the stock unit. Listed first whatever the store holds. */
+  const [required, setRequired] = React.useState<Record<string, number>>({});
+  const requiredRef = React.useRef(required);
+  requiredRef.current = required;
+  /** Quantities the user typed. Everything else needed is fitted to what the chosen store holds. */
+  const touchedRef = React.useRef(new Set<string>());
   const pickedRef = React.useRef<string[]>([]);
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
@@ -731,6 +784,9 @@ export default function NewTransferPage() {
     const ids = prefill.lines.map((line) => line.productId);
     pickedRef.current = ids;
     setPickedIds(ids);
+    const need = Object.fromEntries(prefill.lines.map((line) => [line.productId, line.quantity]));
+    requiredRef.current = need;
+    setRequired(need);
     setLines(Object.fromEntries(prefill.lines.map((line) => [line.productId, { productId: line.productId, qty: String(line.quantity), unit: "" }])));
     if (prefill.reference) setReference(prefill.reference);
   }, [recentToKey]);
@@ -754,7 +810,8 @@ export default function NewTransferPage() {
     if (!sheetMode || !fromWarehouseId) return;
     let cancelled = false;
     const to = toWarehouseId || undefined;
-    const keep = pickedRef.current.filter((id) => Number(linesRef.current[id]?.qty) > 0);
+    const need = Object.keys(requiredRef.current);
+    const keep = [...need, ...pickedRef.current.filter((id) => !need.includes(id) && Number(linesRef.current[id]?.qty) > 0)];
     setStockLoading(true);
     setStockError("");
     void fetchStockSheet(fromWarehouseId, to, scope)
@@ -762,7 +819,7 @@ export default function NewTransferPage() {
         const listed = new Set(sheet.map((row) => row.productId));
         const extraIds = keep.filter((id) => !listed.has(id));
         const extras = extraIds.length
-          ? (await fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: to, productIds: extraIds, limit: 100 })).items
+          ? (await fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: to, productIds: extraIds, includeEmpty: true, limit: 100 })).items
           : [];
         if (cancelled) return;
         const ids = [...keep, ...sheet.map((row) => row.productId).filter((id) => !keep.includes(id))];
@@ -801,7 +858,7 @@ export default function NewTransferPage() {
     setStockError("");
     void Promise.all([
       fetchTransferStock({ warehouseId: fromWarehouseId, limit: 1 }),
-      ids.length ? fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: to, productIds: ids, limit: 100 }) : Promise.resolve(null),
+      ids.length ? fetchTransferStock({ warehouseId: fromWarehouseId, toWarehouseId: to, productIds: ids, includeEmpty: true, limit: 100 }) : Promise.resolve(null),
     ])
       .then(([summary, picked]) => {
         if (cancelled) return;
@@ -826,6 +883,25 @@ export default function NewTransferPage() {
       cancelled = true;
     };
   }, [sheetMode, fromWarehouseId, toWarehouseId, stockRefresh]);
+
+  /** A needed product moves as much as this store holds, up to what is needed. */
+  React.useEffect(() => {
+    const ids = Object.keys(required);
+    if (!ids.length) return;
+    setLines((current) => {
+      let next: Record<string, TransferLineDraft> | null = null;
+      for (const id of ids) {
+        const row = stockRows[id];
+        if (!row || touchedRef.current.has(id)) continue;
+        const fit = Math.max(0, Math.min(required[id], row.available));
+        const qty = fit > EPS ? String(Number(fit.toFixed(4))) : "";
+        if (current[id]?.qty === qty && current[id]?.unit === row.uom) continue;
+        next ??= { ...current };
+        next[id] = { productId: id, qty, unit: row.uom };
+      }
+      return next ?? current;
+    });
+  }, [required, stockRows]);
 
   function chooseScope(next: ProductScope) {
     if (next === scope) return;
@@ -875,6 +951,12 @@ export default function NewTransferPage() {
   const addFromBrowse = React.useCallback((rows: TransferStockRow[]) => addProducts(rows, true), [addProducts]);
 
   const removeProduct = React.useCallback((productId: string) => {
+    setRequired((current) => {
+      if (!(productId in current)) return current;
+      const next = { ...current };
+      delete next[productId];
+      return next;
+    });
     setPickedIds((current) => {
       const next = current.filter((id) => id !== productId);
       pickedRef.current = next;
@@ -888,6 +970,7 @@ export default function NewTransferPage() {
   }, []);
 
   const updateLine = React.useCallback<UpdateLine>((productId, stockUnit, patch) => {
+    touchedRef.current.add(productId);
     setLines((current) => ({
       ...current,
       [productId]: { ...(current[productId] ?? { productId, qty: "", unit: stockUnit }), ...patch },
@@ -909,6 +992,10 @@ export default function NewTransferPage() {
   const lineDetails = (line: TransferLineDraft) => describeLine(line, stockRows[line.productId], packaging[line.productId]);
 
   const missingIds = stockLoading || stockError || !fromWarehouseId ? [] : pickedIds.filter((id) => !stockRows[id]);
+  const requiredIds = Object.keys(required);
+  const shortIds = stockLoading || !fromWarehouseId
+    ? []
+    : requiredIds.filter((id) => stockRows[id] && required[id] - stockRows[id].available > EPS);
   const hasValidLines = selectedLines.length > 0 && selectedLines.every((line) => {
     const { stock, factor, baseQty, over } = lineDetails(line);
     return Boolean(stock && factor && Number.isFinite(baseQty) && baseQty > 0 && !over);
@@ -958,7 +1045,7 @@ export default function NewTransferPage() {
         return;
       }
       payloadLines.push({ productId: line.productId, sku: stock.sku ?? stock.productId, productName: stock.name, quantity: qty, unit });
-      moved.push({ productId: line.productId, name: stock.name, sku: stock.sku, qty, unit, toAfter: (stock.destination?.quantity ?? 0) + baseQty });
+      moved.push({ productId: line.productId, name: stock.name, sku: stock.sku, qty, unit, baseQty, toAfter: (stock.destination?.quantity ?? 0) + baseQty });
     }
     setSaving(post ? "post" : "draft");
     try {
@@ -996,8 +1083,37 @@ export default function NewTransferPage() {
     window.setTimeout(() => router.back(), 300);
   }
 
+  /** What the loading note still needs after this transfer, for a second store to cover. */
+  const remaining = React.useMemo(() => {
+    if (!done) return {};
+    const moved = new Map(done.lines.map((line) => [line.productId, line.baseQty]));
+    return Object.fromEntries(Object.entries(required).flatMap(([id, need]) => {
+      const left = Number((need - (moved.get(id) ?? 0)).toFixed(4));
+      return left > EPS ? [[id, left]] : [];
+    }));
+  }, [done, required]);
+  const remainingCount = Object.keys(remaining).length;
+
+  function transferRest() {
+    const ids = Object.keys(remaining);
+    setDone(null);
+    touchedRef.current.clear();
+    requiredRef.current = remaining;
+    setRequired(remaining);
+    pickedRef.current = ids;
+    setPickedIds(ids);
+    setLines(Object.fromEntries(ids.map((id) => [id, { productId: id, qty: String(remaining[id]), unit: "" }])));
+    setStockRows({});
+    setFromWarehouseId("");
+    setSourceTotal(null);
+    setStockRefresh((value) => value + 1);
+  }
+
   function startAgain(keepTo: boolean) {
     setDone(null);
+    touchedRef.current.clear();
+    requiredRef.current = {};
+    setRequired({});
     setLines({});
     setPickedIds([]);
     pickedRef.current = [];
@@ -1049,19 +1165,28 @@ export default function NewTransferPage() {
             ))}
           </ul>
           <div className="flex flex-wrap items-center gap-2 border-t bg-muted/30 p-4 sm:px-6">
+            {remainingCount > 0 ? (
+              <Button onClick={transferRest}>
+                <Icons.ArrowRightLeft className="mr-2 h-4 w-4" aria-hidden />
+                Transfer the other {remainingCount} from another store
+              </Button>
+            ) : null}
             {returnTo ? (
-              <Button onClick={goBack}>
+              <Button variant={remainingCount > 0 ? "outline" : "default"} onClick={goBack}>
                 <Icons.ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
                 {returnTo === "load" ? "Back to the loading note" : "Back to the order"}
               </Button>
             ) : null}
-            <Button variant={returnTo ? "outline" : "default"} onClick={() => startAgain(false)}>
+            <Button variant={returnTo || remainingCount > 0 ? "outline" : "default"} onClick={() => startAgain(false)}>
               <Icons.Plus className="mr-2 h-4 w-4" aria-hidden />
               Transfer to another store
             </Button>
             <Button variant="outline" onClick={() => startAgain(true)}>Another to {shortStore(done.toLabel)}</Button>
             <Button variant="ghost" asChild className="ml-auto">
-              <Link href={`/warehouse/transfers/${done.id}`}>View {done.number}</Link>
+              <a href={`/warehouse/transfers/${done.id}`} target="_blank" rel="noopener noreferrer">
+                View {done.number}
+                <Icons.ExternalLink className="ml-1.5 h-3.5 w-3.5" aria-hidden />
+              </a>
             </Button>
           </div>
         </section>
@@ -1172,6 +1297,26 @@ export default function NewTransferPage() {
             </div>
             {warehouseError && <p role="alert" className="border-t px-4 py-2 text-sm text-destructive">{warehouseError}</p>}
           </section>
+
+          {shortIds.length > 0 && (
+            <section role="alert" aria-label="Needed stock missing" className="flex flex-wrap items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/[0.06] px-4 py-3 text-sm">
+              <Icons.AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+              <div className="min-w-0 flex-1 space-y-0.5">
+                <p className="font-medium text-foreground">
+                  {fromShort} cannot cover {shortIds.length} of the {requiredIds.length} needed product{requiredIds.length === 1 ? "" : "s"}
+                </p>
+                <p className="text-muted-foreground">
+                  They are at the top, outlined in red. Transfer what {fromShort} has now, then pick another store under Take stock from for the rest, or send them to production.
+                </p>
+              </div>
+              <Button asChild size="sm" variant="outline" className="shrink-0 bg-background">
+                <a href="/manufacturing/production-plan" target="_blank" rel="noopener noreferrer">
+                  Production plan
+                  <Icons.ExternalLink className="ml-1.5 h-3.5 w-3.5" aria-hidden />
+                </a>
+              </Button>
+            </section>
+          )}
 
           {missingIds.length > 0 && (
             <p role="alert" className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
@@ -1284,6 +1429,9 @@ export default function NewTransferPage() {
                         units={packaging[row.productId]}
                         hasDestination={Boolean(toWarehouseId)}
                         busy={busy}
+                        need={required[row.productId]}
+                        fromShort={fromShort}
+                        makeVerb={makeVerb}
                         onUpdate={updateLine}
                         onLoadUnits={loadUnits}
                         onRemove={sheetMode ? undefined : removeProduct}

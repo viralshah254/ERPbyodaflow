@@ -49,14 +49,19 @@ function routeLabel(route: Pick<ManufacturingRoute, "code" | "name" | "operation
   return `${route.code} - ${route.name} (${count} ops)`;
 }
 
+export type NewWorkOrderStart = { productId: string; search?: string; quantity?: number };
+
 export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
   open,
   onOpenChange,
   onCreated,
+  start,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
+  /** Opened from a transfer that is short: the product and how many to make. */
+  start?: NewWorkOrderStart | null;
 }) {
   const router = useRouter();
   const bakery = productionVoice(useOrgContextStore((s) => s.templateId)) === "bakery";
@@ -90,6 +95,7 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
   const bomById = React.useRef(new Map<string, ManufacturingBom>());
   const routeById = React.useRef(new Map<string, ManufacturingRoute>());
   const hydrateSeq = React.useRef(0);
+  const startedFor = React.useRef<NewWorkOrderStart | null>(null);
 
   const requestInputRecommendation = React.useCallback((nextBomId: string, nextQuantity: number) => {
     const key = `${nextBomId}:${nextQuantity}`;
@@ -300,6 +306,30 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
       labelClassName: CAPS_ON_PRODUCT_CLASS,
     }));
   }, []);
+
+  React.useEffect(() => {
+    if (!open || !start?.productId || startedFor.current === start) return;
+    startedFor.current = start;
+    if (start.quantity && start.quantity > 0) setQuantity(String(start.quantity));
+    void fetchProductionPlanDefaults({ search: start.search || undefined, limit: 25, scope: "makeable" })
+      .then((page) => {
+        for (const row of page.items ?? []) makeableById.current.set(row.productId, row);
+        const row = (page.items ?? []).find((item) => item.productId === start.productId);
+        if (!row) {
+          toast.error(`${start.search || "This product"} has no ${bakery ? "recipe" : "formula"} yet, so it cannot be made here.`);
+          return;
+        }
+        setProductId(row.productId);
+        setSelectedProductOption({
+          id: row.productId,
+          label: row.productSku ? `${row.productSku} — ${row.productName}` : row.productName,
+          labelClassName: CAPS_ON_PRODUCT_CLASS,
+        });
+        if (row.bomId) hydrateBom(row.bomId);
+        else if (row.routingId) void rememberRoute(row.routingId);
+      })
+      .catch(() => toast.error("Could not load the product to make."));
+  }, [open, start, bakery, hydrateBom, rememberRoute]);
 
   const loadFormulas = React.useCallback(async (query: string): Promise<AsyncSearchableSelectOption[]> => {
     const page = await fetchManufacturingBomsPage({ search: query || undefined, limit: 10, activeOnly: true });
