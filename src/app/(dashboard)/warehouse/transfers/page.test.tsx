@@ -57,10 +57,14 @@ afterEach(() => {
 type StockRow = Awaited<ReturnType<typeof fetchTransferStock>>["items"][number];
 
 /** Serves stock the way the API does: searched, limited to asked-for products, and paged. */
-function serveStock(rows: (toWarehouseId?: string) => StockRow[]) {
+function serveStock(rows: (toWarehouseId?: string) => StockRow[], catalog: StockRow[] = []) {
   vi.mocked(fetchTransferStock).mockImplementation(async (query) => {
     let items = rows(query.toWarehouseId);
     if (query.productIds) items = items.filter((row) => query.productIds!.includes(row.productId));
+    if (query.productIds && query.includeEmpty) {
+      items = [...items, ...catalog.filter((row) => query.productIds!.includes(row.productId) && !items.some((item) => item.productId === row.productId))
+        .map((row) => ({ ...row, quantity: 0, reserved: 0, available: 0 }))];
+    }
     if (query.itemRole) items = items.filter((row) => (row as StockRow & { itemRole?: string }).itemRole === query.itemRole);
     if (query.search) items = items.filter((row) => row.name.toLowerCase().includes(query.search!.toLowerCase()));
     const offset = query.offset ?? 0;
@@ -228,4 +232,43 @@ it("lists finished goods by default, filters by material type and search, and ke
     ],
   })));
   expect(await screen.findByRole("button", { name: "Back to the loading note" })).toBeInTheDocument();
+});
+
+it("lists what the loading note needs first, outlined in red when the store cannot cover it, and moves what it has", async () => {
+  profile.fixedOrderSheet = true;
+  const cake = { productId: "cake", sku: "25", name: "Half decorated cake", uom: "EA", quantity: 12, reserved: 0, available: 12, itemRole: "FINISHED" };
+  const bun = { productId: "bun", sku: "31", name: "Sweet bun", uom: "EA", quantity: 0, reserved: 0, available: 0, itemRole: "FINISHED" };
+  const bites = { productId: "bites", sku: "29", name: "Super bites mandazi", uom: "EA", quantity: 50, reserved: 0, available: 50, itemRole: "FINISHED" };
+  serveStock(() => [bites, cake], [bun]);
+  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source&to=destination&line=cake%3A20&line=bun%3A6&ref=Loader+note+LDN-0008&return=load");
+  render(<NewTransferPage />);
+
+  const cakeQty = await screen.findByRole("spinbutton", { name: "Quantity for Half decorated cake 25" });
+  await waitFor(() => expect(cakeQty).toHaveValue(12));
+  const bunQty = screen.getByRole("spinbutton", { name: "Quantity for Sweet bun 31" });
+  expect(bunQty).toHaveValue(null);
+  expect(bunQty).toBeDisabled();
+  expect(screen.getAllByRole("spinbutton", { name: /Quantity for/ }).map((input) => input.getAttribute("aria-label")))
+    .toEqual(["Quantity for Half decorated cake 25", "Quantity for Sweet bun 31", "Quantity for Super bites mandazi 29"]);
+  expect(fetchTransferStock).toHaveBeenCalledWith(expect.objectContaining({ productIds: ["bun"], includeEmpty: true }));
+
+  expect(screen.getByRole("alert", { name: "Needed stock missing" })).toHaveTextContent("Finished Goods cannot cover 2 of the 2 needed products");
+  expect(document.querySelectorAll("tr[data-short]")).toHaveLength(2);
+  expect(screen.getByText("None at Finished Goods")).toBeInTheDocument();
+  expect(screen.getByText("8 EA short here")).toBeInTheDocument();
+  const make = screen.getByRole("link", { name: /Make 6 in production/ });
+  expect(make).toHaveAttribute("target", "_blank");
+  expect(make.getAttribute("href")).toBe("/manufacturing/work-orders?make=bun&qty=6&sku=31");
+  expect(screen.getByRole("link", { name: /Production plan/ })).toHaveAttribute("target", "_blank");
+
+  vi.mocked(createTransfer).mockResolvedValueOnce({ id: "t-3", number: "TRF-0011", status: "RECEIVED" });
+  fireEvent.click(screen.getByRole("button", { name: "Transfer now" }));
+  await waitFor(() => expect(createTransfer).toHaveBeenLastCalledWith(expect.objectContaining({
+    reference: "Loader note LDN-0008",
+    lines: [{ productId: "cake", sku: "25", productName: "Half decorated cake", quantity: 12, unit: "EA" }],
+  })));
+  expect(await screen.findByRole("link", { name: /View TRF-0011/ })).toHaveAttribute("target", "_blank");
+  fireEvent.click(screen.getByRole("button", { name: "Transfer the other 2 from another store" }));
+  expect(await screen.findByLabelText("From warehouse")).toHaveValue("");
+  expect(screen.getByLabelText("Reference (optional)")).toHaveValue("Loader note LDN-0008");
 });

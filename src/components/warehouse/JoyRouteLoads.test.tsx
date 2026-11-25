@@ -22,6 +22,8 @@ const api = vi.hoisted(() => ({
   trucks: [] as string[],
   allocate: vi.fn(),
   create: vi.fn(),
+  printRequest: vi.fn(),
+  emailRequest: vi.fn(),
 }));
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(location.search),
@@ -41,6 +43,8 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
   setJoyRouteSourceStore: vi.fn().mockResolvedValue({ moved: 1 }),
   allocateJoyLoad: (...args: unknown[]) => api.allocate(...args),
   createJoyLoadNote: (...args: unknown[]) => api.create(...args),
+  printJoyTransferRequestPdf: (...args: unknown[]) => api.printRequest(...args),
+  emailJoyTransferRequest: (...args: unknown[]) => api.emailRequest(...args),
 }));
 vi.mock("@/lib/api/sfa-sales-reps", () => ({
   fetchSfaSalesReps: vi.fn().mockResolvedValue({ reps: [], areas: [] }),
@@ -388,4 +392,12 @@ it("opens a prefilled transfer for what the route lacks and only loads what the 
   fireEvent.click(screen.getByRole("button", { name: "Load what is in stock" }));
   expect(screen.getByLabelText("Loaded quantity for JOY HALF DECORATED CAKE (550 GMS)")).toHaveValue("3");
   expect(screen.getByRole("button", { name: "Confirm short load" })).toBeEnabled();
+
+  fireEvent.click(screen.getByRole("button", { name: "Print request" }));
+  expect(api.printRequest).toHaveBeenCalledWith(expect.objectContaining({ id: "n2", number: "LDN-0007" }), expect.any(Function));
+  api.emailRequest.mockResolvedValueOnce({ sent: true, to: "store@joy.co.ke" });
+  fireEvent.click(screen.getByRole("button", { name: "Email request" }));
+  fireEvent.change(await screen.findByLabelText("Email"), { target: { value: "store@joy.co.ke" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send request" }));
+  await waitFor(() => expect(api.emailRequest).toHaveBeenCalledWith("n2", "store@joy.co.ke"));
 });

@@ -27,6 +27,8 @@ export type TransferStockQuery = {
   search?: string;
   /** Only these products. Used to refresh the products already in a transfer. */
   productIds?: string[];
+  /** With productIds: return them even when the store holds none, so the transfer can show the gap. */
+  includeEmpty?: boolean;
   /** Only products of this material type. */
   itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
   limit?: number;
@@ -41,6 +43,7 @@ export async function fetchTransferStock(query: TransferStockQuery): Promise<{ i
       toWarehouseId: query.toWarehouseId,
       search: query.search?.trim(),
       productIds: query.productIds?.join(","),
+      includeEmpty: query.includeEmpty && query.productIds?.length ? "1" : undefined,
       itemRole: query.itemRole,
       limit: String(query.limit ?? 25),
       offset: String(query.offset ?? 0),

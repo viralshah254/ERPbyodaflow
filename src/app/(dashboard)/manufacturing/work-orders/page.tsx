@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { DataTableToolbar } from "@/components/ui/data-table-toolbar";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { NewWorkOrderSheet } from "@/components/manufacturing/new-work-order-sheet";
+import { NewWorkOrderSheet, type NewWorkOrderStart } from "@/components/manufacturing/new-work-order-sheet";
 import { SkeletonDataTable } from "@/components/ui/skeleton";
 import { TableLinearProgress } from "@/components/ui/table-linear-progress";
 import { TablePagination } from "@/components/ui/table-pagination";
@@ -59,6 +59,18 @@ export default function WorkOrdersPage() {
   const hasLoadedOnce = React.useRef(false);
 
   const [sheetOpen, setSheetOpen] = React.useState(false);
+  const [start, setStart] = React.useState<NewWorkOrderStart | null>(null);
+
+  /** A short transfer links here with ?make=<product>&qty=<n> to start that order. */
+  React.useEffect(() => {
+    if (!canWrite) return;
+    const params = new URLSearchParams(window.location.search);
+    const productId = params.get("make")?.trim();
+    if (!productId) return;
+    const quantity = Number(params.get("qty"));
+    setStart({ productId, search: params.get("sku")?.trim() || undefined, quantity: Number.isFinite(quantity) && quantity > 0 ? quantity : undefined });
+    setSheetOpen(true);
+  }, [canWrite]);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
@@ -314,7 +326,7 @@ export default function WorkOrdersPage() {
         />
       </div>
 
-      <NewWorkOrderSheet open={sheetOpen} onOpenChange={setSheetOpen} onCreated={handleCreated} />
+      <NewWorkOrderSheet open={sheetOpen} onOpenChange={setSheetOpen} onCreated={handleCreated} start={start} />
 
     </PageShell>
   );
