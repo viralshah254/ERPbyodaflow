@@ -12,7 +12,7 @@ vi.mock("@/lib/rbac/use-write-guard", () => ({ useCanWriteInventory: () => true 
 const profile = vi.hoisted(() => ({ fixedOrderSheet: false }));
 vi.mock("@/lib/fmcg/operating-profile", () => ({ useOperatingProfile: () => profile }));
 vi.mock("@/lib/api/warehouse-transfers", () => ({ createTransfer: vi.fn().mockResolvedValue({ id: "draft-1" }), fetchTransferStock: vi.fn() }));
-vi.mock("@/lib/api/lookups", () => ({ fetchWarehouseOptions: vi.fn().mockResolvedValue([{ id: "source", label: "Finished Goods" }, { id: "destination", label: "Dispatch" }, { id: "choco", label: "CHOCO", transferSourceBlock: "Needs classification" }]) }));
+vi.mock("@/lib/api/lookups", () => ({ fetchWarehouseOptions: vi.fn().mockResolvedValue([{ id: "source", label: "Finished Goods" }, { id: "destination", label: "Dispatch" }, { id: "choco", label: "CHOCO", transferSourceBlock: "Purpose not set", transferSourceIssue: { label: "Purpose not set", reason: "CHOCO has no purpose set, so the ERP cannot tell if its stock may be sent out.", fix: "Set its purpose to Storage, Receiving or Dispatch", href: "/master/warehouses?edit=choco" } }]) }));
 vi.mock("@/lib/api/product-master", () => ({ fetchProductPackagingApi: vi.fn().mockResolvedValue([]) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 vi.mock("@/components/ui/async-searchable-select", () => ({
@@ -78,9 +78,14 @@ const bread = { productId: "q", sku: "SKU-073", name: "Bread", uom: "PCS", quant
 it("adds a product from search, checks it against available stock, and saves a draft", async () => {
   serveStock(() => [soap, bread]);
   render(<NewTransferPage />);
-  await screen.findByRole("option", { name: "CHOCO · Needs classification" });
+  await screen.findByRole("option", { name: "CHOCO · Purpose not set" });
   fireEvent.change(screen.getByLabelText("From warehouse"), { target: { value: "choco" } });
   expect(fetchTransferStock).not.toHaveBeenCalledWith(expect.objectContaining({ warehouseId: "choco" }));
+  const notice = screen.getByRole("alert", { name: "Store cannot send stock" });
+  expect(notice).toHaveTextContent("CHOCO has no purpose set");
+  const fix = screen.getByRole("link", { name: /Set its purpose to Storage, Receiving or Dispatch/ });
+  expect(fix).toHaveAttribute("href", "/master/warehouses?edit=choco");
+  expect(fix).toHaveAttribute("target", "_blank");
   fireEvent.change(screen.getByLabelText("From warehouse"), { target: { value: "source" } });
   fireEvent.change(screen.getByLabelText("To warehouse"), { target: { value: "destination" } });
   expect(await screen.findByText("2 products in stock")).toBeInTheDocument();
