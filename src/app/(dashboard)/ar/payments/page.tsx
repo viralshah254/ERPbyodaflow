@@ -26,7 +26,7 @@ import { ArSettlementSheet, type ReceivePrefill } from "@/components/finance/ArS
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
-import { formatActivityExact } from "@/lib/format/nairobi-datetime";
+import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { formatMoney } from "@/lib/money";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
@@ -173,10 +173,16 @@ export default function ARPaymentsPage() {
       },
       {
         id: "date",
-        header: "Date",
-        accessor: (r: PaymentRow) => (
-          <span className="tabular-nums text-sm">{formatActivityExact(r.date) || "—"}</span>
-        ),
+        header: "Received",
+        accessor: (r: PaymentRow) => {
+          const label = formatDocumentCreatedLabel(r.createdAt, r.date) || "—";
+          const exact = formatActivityExact(r.createdAt ?? r.date);
+          return (
+            <span className="whitespace-nowrap text-sm text-muted-foreground" title={exact || undefined}>
+              {label}
+            </span>
+          );
+        },
       },
       {
         id: "customerName",
@@ -325,7 +331,7 @@ export default function ARPaymentsPage() {
               `ar-payments-${new Date().toISOString().slice(0, 10)}.csv`,
               payments.map((row) => ({
                 number: row.number,
-                date: formatActivityExact(row.date) || row.date,
+                date: formatDocumentCreatedLabel(row.createdAt, row.date) || row.date,
                 customerName: row.customerName,
                 amount: row.amount,
                 status: row.status,
