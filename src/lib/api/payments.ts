@@ -32,6 +32,7 @@ type BackendPayment = {
   id: string;
   number: string;
   date: string;
+  createdAt?: string;
   partyId: string;
   partyName?: string;
   amount: number;
@@ -279,6 +280,7 @@ function mapArPaymentRow(item: BackendPayment): PaymentRow {
     id: item.id,
     number: item.number,
     date: typeof item.date === "string" ? item.date.slice(0, 10) : item.date,
+    createdAt: item.createdAt ? String(item.createdAt) : undefined,
     customerId: item.partyId,
     customerName: item.partyName ?? item.partyId,
     amount: item.amount,

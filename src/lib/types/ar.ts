@@ -57,6 +57,8 @@ export type PaymentRow = {
   id: string;
   number: string;
   date: string;
+  /** When the receipt was recorded (for relative “2 hrs ago” labels). */
+  createdAt?: string;
   customerId: string;
   customerName: string;
   amount: number;

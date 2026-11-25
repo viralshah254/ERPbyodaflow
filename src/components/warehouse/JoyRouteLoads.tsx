@@ -21,7 +21,6 @@ import {
   markJoyLoadDeparted,
   recordJoyLoaded,
   setJoyLoadSalesReps,
-  setJoyRouteSourceStore,
   type JoyLoadDocumentPlan,
   type JoyLoadNote,
   type JoyLoadNotes,
@@ -583,8 +582,6 @@ function WaitingRouteCard({
   busyTrucks,
   canLoad,
   dispatchName,
-  dispatchId,
-  stores,
   activeNote,
   focused,
   onChanged,
@@ -594,8 +591,6 @@ function WaitingRouteCard({
   busyTrucks: string[];
   canLoad: boolean;
   dispatchName: string;
-  dispatchId?: string;
-  stores: Array<{ id: string; name: string }>;
   activeNote?: JoyLoadNote;
   focused?: boolean;
   onChanged: () => Promise<void>;
@@ -605,35 +600,6 @@ function WaitingRouteCard({
   const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
   const shortCount = route.products.filter((product) => (product.shortQty ?? 0) > 0.0001).length;
-  const pickStoreId = route.sourceWarehouseId || dispatchId || "";
-  const pickStoreOptions = React.useMemo(() => {
-    const byId = new Map<string, AsyncSearchableSelectOption>();
-    if (dispatchId) byId.set(dispatchId, { id: dispatchId, label: placeLabel(dispatchName) });
-    for (const store of stores) {
-      byId.set(store.id, {
-        id: store.id,
-        label: placeLabel(store.name),
-        ...(store.id === route.warehouseId ? { description: "This route. Stock transferred here." } : {}),
-      });
-    }
-    if (pickStoreId && !byId.has(pickStoreId)) {
-      byId.set(pickStoreId, { id: pickStoreId, label: placeLabel(route.sourceWarehouseName || dispatchName) });
-    }
-    return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label));
-  }, [stores, dispatchId, dispatchName, route.warehouseId, route.sourceWarehouseName, pickStoreId]);
-  const selectedPickStore =
-    pickStoreOptions.find((row) => row.id === pickStoreId) ?? {
-      id: pickStoreId,
-      label: placeLabel(route.sourceWarehouseName || dispatchName),
-    };
-  const filterPickStores = React.useCallback(
-    async (query: string) => {
-      const needle = query.trim().toLowerCase();
-      if (!needle) return pickStoreOptions;
-      return pickStoreOptions.filter((row) => row.label.toLowerCase().includes(needle));
-    },
-    [pickStoreOptions],
-  );
   const truckOptions = React.useMemo(
     () =>
       trucks.map((plate) => ({
@@ -660,7 +626,7 @@ function WaitingRouteCard({
       <CardHeader className="space-y-1">
         <CardTitle>{placeLabel(route.warehouseName)}</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {route.orderCount} order{route.orderCount === 1 ? "" : "s"} · {route.products.length} product{route.products.length === 1 ? "" : "s"} · {totalUnits} units · picked from {pickStoreName}
+          {route.orderCount} order{route.orderCount === 1 ? "" : "s"} · {route.products.length} product{route.products.length === 1 ? "" : "s"} · {totalUnits} units
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -722,38 +688,6 @@ function WaitingRouteCard({
             <div className="w-full max-w-md space-y-1">
               <Label htmlFor={`load-reps-${route.warehouseId}`}>Sales reps</Label>
               <SfaSalesRepsField id={`load-reps-${route.warehouseId}`} value={salesReps} onChange={setSalesReps} disabled={busy} />
-            </div>
-            <div className="w-full max-w-md space-y-1">
-              <Label htmlFor={`load-store-${route.warehouseId}`}>Pick from</Label>
-              <AsyncSearchableSelect
-                id={`load-store-${route.warehouseId}`}
-                value={pickStoreId}
-                selectedOption={selectedPickStore}
-                onValueChange={(next) => {
-                  if (!next || next === pickStoreId) return;
-                  setBusy(true);
-                  void setJoyRouteSourceStore({
-                    warehouseId: route.warehouseId,
-                    sourceWarehouseId: route.sourceWarehouseId,
-                    toWarehouseId: dispatchId && next === dispatchId ? "" : next,
-                  })
-                    .then(async () => {
-                      const name = pickStoreOptions.find((row) => row.id === next)?.label ?? dispatchName;
-                      toast.success(`${route.orderCount} order${route.orderCount === 1 ? "" : "s"} now picked from ${name}.`);
-                      await onChanged();
-                    })
-                    .catch((error) => toast.error(errorMessage(error, "Could not change the pick store")))
-                    .finally(() => setBusy(false));
-                }}
-                loadOptions={filterPickStores}
-                searchDebounceMs={0}
-                disabled={busy}
-                placeholder="Pick store"
-                searchPlaceholder="Find a store"
-                emptyMessage="No store matches."
-                wrapLabels
-                minDropdownWidth={300}
-              />
             </div>
             <div className="w-full max-w-md space-y-1">
               <Label htmlFor={`load-truck-${route.warehouseId}`}>Truck</Label>
@@ -1686,8 +1620,6 @@ function JoyRouteLoadsInner() {
                 busyTrucks={data.busyTrucks}
                 canLoad={canLoad}
                 dispatchName={data.dispatchWarehouseName}
-                dispatchId={data.dispatchWarehouseId}
-                stores={data.stores ?? []}
                 onChanged={reload}
                 focused={route.warehouseId === focusWarehouse}
                 activeNote={data.notes.find((note) => note.routeWarehouseId === route.warehouseId &&
@@ -1731,7 +1663,7 @@ function JoyRouteLoadsInner() {
       {!financeView && (
         <p className="text-sm text-muted-foreground">
           {openedRoute
-            ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order. Pick stock from ${placeLabel(openedRoute.sourceWarehouseName || data.dispatchWarehouseName)}.`
+            ? `${placeLabel(openedRoute.warehouseName)} is first, from the sales order.`
             : `Choose a route and a truck. Open the loader note to confirm what was picked against what was ordered.`}
         </p>
       )}
