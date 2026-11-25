@@ -21,6 +21,8 @@ import { useCanWriteInventory, useHasPermission } from "@/lib/rbac/use-write-gua
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
+import { transferBackLink } from "@/lib/warehouse/transfer-prefill";
+import { ArrowLeft } from "lucide-react";
 
 function statusVariant(s: string): "default" | "secondary" | "outline" {
   if (s === "RECEIVED") return "secondary";
@@ -37,6 +39,8 @@ export default function TransferDetailPage() {
   const [working, setWorking] = React.useState(false);
   const [receiptDraft, setReceiptDraft] = React.useState<Record<string, { quantity: string; reason: string; missingLots?: Record<string, string> }>>({});
   const [transfer, setTransfer] = React.useState<TransferRow | null | undefined>(undefined);
+  const [openedWith, setOpenedWith] = React.useState("");
+  React.useEffect(() => setOpenedWith(window.location.search), []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -130,6 +134,7 @@ export default function TransferDetailPage() {
     "inventory.transfer.shortage_posted": "Shortage approved and written off",
     "inventory.transfer.posted": "Stock transferred",
   };
+  const backLink = transferBackLink(openedWith, t.reference);
   const postedInOneStep = Boolean(t.activity?.some((entry) => entry.action === "inventory.transfer.posted"));
   const activity = (t.activity ?? []).filter((entry) => !postedInOneStep || entry.action !== "inventory.transfer.receive");
 
@@ -150,6 +155,14 @@ export default function TransferDetailPage() {
             {canWrite && canApprove && <Button size="sm" disabled={working} onClick={() => void perform(() => updateTransferStatus(id, "APPROVED"), "Transfer approved.")}>Approve</Button>}
             {canWrite && canTransit && <Button size="sm" disabled={working} onClick={() => void perform(() => updateTransferStatus(id, "IN_TRANSIT"), "Transfer dispatched.")}>Dispatch</Button>}
             {canWrite && canReceive && <Button size="sm" disabled={working || receiptChanges.length > 0 || needsReview} onClick={() => void perform(() => updateTransferStatus(id, "RECEIVED"), "Transfer received.")}>Receive</Button>}
+            {backLink ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={backLink.href}>
+                  <ArrowLeft className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                  {backLink.label}
+                </Link>
+              </Button>
+            ) : null}
             <Button variant="outline" size="sm" asChild>
               <Link href="/warehouse/transfers">Back to list</Link>
             </Button>

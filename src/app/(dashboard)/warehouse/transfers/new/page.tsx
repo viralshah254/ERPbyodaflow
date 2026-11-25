@@ -20,7 +20,7 @@ import { fetchProductPackagingApi } from "@/lib/api/product-master";
 import { activeDocumentAlternates } from "@/lib/docs/default-line-uom";
 import type { ProductPackaging } from "@/lib/products/pricing-types";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
-import { parseTransferPrefill, parseTransferReturnTo, type TransferReturnTo } from "@/lib/warehouse/transfer-prefill";
+import { parseTransferPrefill, parseTransferReturnTo, transferBackLink, type TransferReturnTo } from "@/lib/warehouse/transfer-prefill";
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -743,6 +743,7 @@ export default function NewTransferPage() {
   const [saving, setSaving] = React.useState<"post" | "draft" | null>(null);
   const [done, setDone] = React.useState<DoneTransfer | null>(null);
   const [returnTo, setReturnTo] = React.useState<TransferReturnTo | null>(null);
+  const [openedWith, setOpenedWith] = React.useState("");
   const [recentTo, setRecentTo] = React.useState<string[]>([]);
   const [browseOpen, setBrowseOpen] = React.useState(false);
   const profile = useOperatingProfile(orgId);
@@ -809,6 +810,7 @@ export default function NewTransferPage() {
 
   React.useEffect(() => {
     setReturnTo(parseTransferReturnTo(window.location.search));
+    setOpenedWith(window.location.search);
     setRecentTo(readStored(recentToKey));
     const prefill = parseTransferPrefill(window.location.search);
     if (!prefill) return;
@@ -1131,7 +1133,7 @@ export default function NewTransferPage() {
       remember();
       if (!post || res.status !== "RECEIVED") {
         toast.success(post ? "Saved as a draft. Approve, dispatch and receive it to move the stock." : "Draft saved. Approve it to move the stock.");
-        router.replace(`/warehouse/transfers/${res.id}`);
+        router.replace(`/warehouse/transfers/${res.id}${backLink ? `?back=${encodeURIComponent(backLink.href)}` : ""}`);
         return;
       }
       const number = res.number ?? "Transfer";
@@ -1144,7 +1146,7 @@ export default function NewTransferPage() {
     }
   };
 
-  /** The order or loading note opened this page in its own tab. Closing it returns there. */
+  /** The order opened this page in its own tab. Closing it returns there. */
   function goBack() {
     window.close();
     window.setTimeout(() => router.back(), 300);
@@ -1193,6 +1195,8 @@ export default function NewTransferPage() {
     setStockRefresh((value) => value + 1);
   }
 
+  const backLink = transferBackLink(openedWith, reference) ?? (returnTo === "load" ? transferBackLink("", "Loader note") : null);
+
   const breadcrumbs = [
     { label: "Warehouse", href: "/warehouse/overview" },
     { label: "Transfers", href: "/warehouse/transfers" },
@@ -1238,13 +1242,18 @@ export default function NewTransferPage() {
                 Transfer the other {remainingCount} from another store
               </Button>
             ) : null}
-            {returnTo ? (
+            {backLink ? (
+              <Button variant={remainingCount > 0 ? "outline" : "default"} onClick={() => router.push(backLink.href)}>
+                <Icons.ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                {backLink.label}
+              </Button>
+            ) : returnTo ? (
               <Button variant={remainingCount > 0 ? "outline" : "default"} onClick={goBack}>
                 <Icons.ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-                {returnTo === "load" ? "Back to the loading note" : "Back to the order"}
+                Back to the order
               </Button>
             ) : null}
-            <Button variant={returnTo || remainingCount > 0 ? "outline" : "default"} onClick={() => startAgain(false)}>
+            <Button variant={backLink || returnTo || remainingCount > 0 ? "outline" : "default"} onClick={() => startAgain(false)}>
               <Icons.Plus className="mr-2 h-4 w-4" aria-hidden />
               Transfer to another store
             </Button>

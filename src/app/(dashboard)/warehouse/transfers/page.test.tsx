@@ -4,7 +4,8 @@ import { afterEach, expect, it, vi } from "vitest";
 import NewTransferPage from "./new/page";
 import { createTransfer, fetchTransferStock } from "@/lib/api/warehouse-transfers";
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }));
+const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/components/layout/page-header", () => ({ PageHeader: ({ actions }: { actions: React.ReactNode }) => <header>{actions}</header> }));
 vi.mock("@/components/layout/page-shell", () => ({ LIST_PAGE_SHELL_CLASS: "", LIST_PAGE_BODY_CLASS: "", LIST_TABLE_SURFACE_CLASS: "", PageShell: ({ children }: { children: React.ReactNode }) => <main>{children}</main> }));
 vi.mock("@/components/copilot/ExplainThis", () => ({ ExplainThis: () => null }));
@@ -236,7 +237,7 @@ it("lists finished goods by default, filters by material type and search, and ke
       { productId: "bites", sku: "29", productName: "Super bites mandazi", quantity: 5, unit: "EA" },
     ],
   })));
-  expect(await screen.findByRole("button", { name: "Back to the loading note" })).toBeInTheDocument();
+  expect(await screen.findByRole("button", { name: "Back to route pick lists" })).toBeInTheDocument();
 });
 
 it("lists what the loading note needs first, outlined in red when the store cannot cover it, and moves what it has", async () => {
@@ -245,7 +246,7 @@ it("lists what the loading note needs first, outlined in red when the store cann
   const bun = { productId: "bun", sku: "31", name: "Sweet bun", uom: "EA", quantity: 0, reserved: 0, available: 0, itemRole: "FINISHED" };
   const bites = { productId: "bites", sku: "29", name: "Super bites mandazi", uom: "EA", quantity: 50, reserved: 0, available: 50, itemRole: "FINISHED" };
   serveStock(() => [bites, cake], [bun]);
-  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source&to=destination&line=cake%3A20&line=bun%3A6&ref=Loader+note+LDN-0008&return=load");
+  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source&to=destination&line=cake%3A20&line=bun%3A6&ref=Loader+note+LDN-0008&return=load&back=%2Fwarehouse%2Froute-pick-lists%2Fn8");
   render(<NewTransferPage />);
 
   const cakeQty = await screen.findByRole("spinbutton", { name: "Quantity for Half decorated cake 25" });
@@ -273,6 +274,8 @@ it("lists what the loading note needs first, outlined in red when the store cann
     lines: [{ productId: "cake", sku: "25", productName: "Half decorated cake", quantity: 12, unit: "EA" }],
   })));
   expect(await screen.findByRole("link", { name: /View TRF-0011/ })).toHaveAttribute("target", "_blank");
+  fireEvent.click(screen.getByRole("button", { name: "Back to the loading note" }));
+  expect(router.push).toHaveBeenCalledWith("/warehouse/route-pick-lists/n8");
   fireEvent.click(screen.getByRole("button", { name: "Transfer the other 2 from another store" }));
   expect(await screen.findByLabelText("From warehouse")).toHaveValue("");
   expect(screen.getByLabelText("Reference (optional)")).toHaveValue("Loader note LDN-0008");
