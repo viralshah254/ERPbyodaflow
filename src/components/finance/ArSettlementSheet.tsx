@@ -422,7 +422,7 @@ export function ArSettlementSheet({
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Open invoices</Label>
-              <div className="max-h-64 divide-y overflow-auto rounded border">
+              <div className="max-h-64 divide-y overflow-auto rounded border" data-arrow-nav="">
                 {invoices.length === 0 ? (
                   <p className="p-3 text-sm text-muted-foreground">No open invoices</p>
                 ) : (
@@ -440,6 +440,7 @@ export function ArSettlementSheet({
                           </div>
                         </div>
                         <Input
+                          data-arrow-field="cash"
                           type="number"
                           className="h-8 w-28 shrink-0"
                           placeholder="Cash"
@@ -460,7 +461,7 @@ export function ArSettlementSheet({
             </div>
             <div className="space-y-2">
               <Label>Open credit notes</Label>
-              <div className="max-h-64 divide-y overflow-auto rounded border">
+              <div className="max-h-64 divide-y overflow-auto rounded border" data-arrow-nav="">
                 {creditNotes.length === 0 ? (
                   <p className="p-3 text-sm text-muted-foreground">No open credit notes</p>
                 ) : (
@@ -473,6 +474,7 @@ export function ArSettlementSheet({
                         </div>
                       </div>
                       <Input
+                        data-arrow-field="credit"
                         type="number"
                         className="h-8 w-28 shrink-0"
                         placeholder="Apply"

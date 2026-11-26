@@ -411,6 +411,7 @@ export default function WorkOrderDetailPage() {
                     {order.status === "IN_PROGRESS" && (
                       <div
                         className="grid gap-3 rounded-lg border p-3 sm:grid-cols-3"
+                        data-arrow-nav=""
                         data-tutorial-hint="work-order-measurement"
                       >
                         <div className="space-y-1.5">

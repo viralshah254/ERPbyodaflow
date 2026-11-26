@@ -3245,7 +3245,7 @@ export default function DocViewPage() {
                 <p className="text-xs text-muted-foreground">
                   Quantities start at the available balance. Enter 0 to leave a line off.
                 </p>
-                <div className="max-h-64 space-y-2 overflow-y-auto rounded border p-2">
+                <div className="max-h-64 space-y-2 overflow-y-auto rounded border p-2" data-arrow-nav="">
                   {(document?.lines ?? []).map((line) => {
                     const open = openCreditQty(line);
                     const lineId = line.id ?? "";
@@ -3256,6 +3256,7 @@ export default function DocViewPage() {
                           <CreditLineCapacity capacity={line.creditCapacity} unit={line.unit} />
                         </div>
                         <Input
+                          data-arrow-field="qty"
                           type="number"
                           min={0}
                           max={open}
@@ -3417,7 +3418,7 @@ export default function DocViewPage() {
                 rows={3}
               />
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3" data-arrow-nav="">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Shipped lines (product & quantity)
               </p>
@@ -3450,6 +3451,7 @@ export default function DocViewPage() {
                   <div>
                     <Label className="text-xs">Quantity{row.unit ? ` (${row.unit})` : ""}</Label>
                     <Input
+                      data-arrow-field="qty"
                       type="number"
                       step="0.01"
                       min={0}
@@ -3654,7 +3656,7 @@ export default function DocViewPage() {
                 rows={2}
               />
             </div>
-            <div className="space-y-3">
+            <div className="space-y-3" data-arrow-nav="">
               <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Lines (qty & optional weight)
               </p>
@@ -3675,6 +3677,7 @@ export default function DocViewPage() {
                       <div>
                         <Label className="text-xs">Qty received</Label>
                         <Input
+                          data-arrow-field="qty"
                           type="number"
                           step="0.01"
                           min={0}
@@ -3691,6 +3694,7 @@ export default function DocViewPage() {
                         <div>
                           <Label className="text-xs">Weight received (kg)</Label>
                           <Input
+                            data-arrow-field="weight"
                             type="number"
                             step="0.001"
                             min={0}

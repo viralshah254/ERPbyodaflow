@@ -491,7 +491,7 @@ export default function BomDetailPage() {
           </TabsList>
 
           <TabsContent value="components" forceMount hidden={section !== "components"}>
-            <Card className={cn("overflow-hidden transition-shadow", editing && "border-primary/40 shadow-md ring-1 ring-primary/10")}>
+            <Card data-arrow-nav="" className={cn("overflow-hidden transition-shadow", editing && "border-primary/40 shadow-md ring-1 ring-primary/10")}>
               <CardHeader className={cn(editing && "border-b bg-primary/[0.04]")}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>

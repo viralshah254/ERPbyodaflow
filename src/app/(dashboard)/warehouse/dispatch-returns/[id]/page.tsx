@@ -256,7 +256,7 @@ export default function DispatchReturnDetailPage() {
             <CardHeader>
               <CardTitle className="text-base">Lines</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-5">
+            <CardContent className="space-y-5" data-arrow-nav="">
               {onRoad.lines.map((line) => {
                 const state = returns[line.lineId] ?? EMPTY_LINE;
                 const unit = line.unit || "PCS";
@@ -271,11 +271,11 @@ export default function DispatchReturnDetailPage() {
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className="space-y-2">
                         <Label htmlFor={`good-${line.lineId}`}>Returned good ({unit})</Label>
-                        <Input id={`good-${line.lineId}`} type="number" min={0} step="any" value={state.goodQty} onChange={(e) => update({ goodQty: e.target.value })} placeholder="0" />
+                        <Input id={`good-${line.lineId}`} data-arrow-field="good" type="number" min={0} step="any" value={state.goodQty} onChange={(e) => update({ goodQty: e.target.value })} placeholder="0" />
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor={`damaged-${line.lineId}`}>Returned damaged ({unit})</Label>
-                        <Input id={`damaged-${line.lineId}`} type="number" min={0} step="any" value={state.damagedQty} onChange={(e) => update({ damagedQty: e.target.value })} placeholder="0" />
+                        <Input id={`damaged-${line.lineId}`} data-arrow-field="damaged" type="number" min={0} step="any" value={state.damagedQty} onChange={(e) => update({ damagedQty: e.target.value })} placeholder="0" />
                       </div>
                       <div className="space-y-2">
                         <Label>Reason</Label>

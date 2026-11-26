@@ -174,11 +174,13 @@ function ChequeRowCard({
     <div className="space-y-2 rounded border p-3">
       <div className="grid gap-2 md:grid-cols-4">
         <Input
+          data-arrow-field="payee"
           placeholder={`Paid to ${index + 1}`}
           value={row.payeeName}
           onChange={(event) => onChange({ payeeName: event.target.value, error: undefined })}
         />
         <Input
+          data-arrow-field="amount"
           type="number"
           min="0"
           step="0.01"
@@ -187,11 +189,12 @@ function ChequeRowCard({
           onChange={(event) => onChange({ amount: event.target.value, dirty: false, error: undefined })}
         />
         <Input
+          data-arrow-field="cheque"
           placeholder="Cheque no."
           value={row.chequeNumber}
           onChange={(event) => onChange({ chequeNumber: event.target.value, error: undefined })}
         />
-        <Input type="date" value={row.chequeDate} onChange={(event) => onChange({ chequeDate: event.target.value })} />
+        <Input data-arrow-field="date" type="date" value={row.chequeDate} onChange={(event) => onChange({ chequeDate: event.target.value })} />
       </div>
       <div className="grid gap-2 md:grid-cols-2">
         <AsyncSearchableSelect
@@ -279,7 +282,7 @@ function ChequeRowCard({
       {row.error ? <p className="text-xs text-destructive">{row.error}</p> : null}
       {row.expanded && !row.useAccount ? (
         <div className="grid gap-2 md:grid-cols-2">
-          <div className="max-h-40 divide-y overflow-auto rounded border">
+          <div className="max-h-40 divide-y overflow-auto rounded border" data-arrow-nav="">
             {row.bills.length === 0 ? (
               <p className="p-2 text-xs text-muted-foreground">No open bills</p>
             ) : (
@@ -292,6 +295,7 @@ function ChequeRowCard({
                       : ""}
                   </span>
                   <Input
+                    data-arrow-field="bill"
                     type="number"
                     className="h-7 w-24"
                     value={row.billAmounts[bill.id] ?? ""}
@@ -454,6 +458,7 @@ export function ApChequeBoxSheet({
               searchPlaceholder="Search bank accounts"
             />
           </div>
+          <div className="space-y-3" data-arrow-nav="">
           {rows.map((row, index) => (
             <ChequeRowCard
               key={row.id}
@@ -463,6 +468,7 @@ export function ApChequeBoxSheet({
               onChange={(patch) => updateRow(row.id, patch)}
             />
           ))}
+          </div>
           <Button type="button" variant="outline" onClick={() => setRows((current) => [...current, blankRow()])}>
             Add cheque
           </Button>

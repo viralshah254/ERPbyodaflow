@@ -257,7 +257,7 @@ export function BakeryBatchRecorder({
           Enter what came out of the oven. The ingredients come off stock and the {productName} go into {outputStore || "the output store"}, all in one step.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="space-y-5" data-arrow-nav="">
         {order.producedQuantity > 0 ? (
           <p className="rounded-md bg-muted/50 px-3 py-2 text-sm">
             {fmt(order.producedQuantity)} of {fmt(order.plannedQuantity)} {uom} already recorded. {fmt(order.openQuantity)} {uom} left.
@@ -369,6 +369,7 @@ export function BakeryBatchRecorder({
                           {adjusting ? (
                             <div className="flex items-center justify-end gap-1.5">
                               <Input
+                                data-arrow-field="uses"
                                 aria-label={`Amount of ${readableProductName(line.productName || line.sku)} used`}
                                 className="h-8 w-24 text-right"
                                 type="number"

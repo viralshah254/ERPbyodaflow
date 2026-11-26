@@ -355,7 +355,7 @@ function ReceiptLine({
         <TableRow>
           <TableCell colSpan={7} className="bg-muted/30">
             <div className="grid gap-2 md:grid-cols-2">
-              <div className="max-h-48 divide-y overflow-auto rounded border bg-background">
+              <div className="max-h-48 divide-y overflow-auto rounded border bg-background" data-arrow-nav="">
                 {row.invoices.length === 0 ? (
                   <p className="p-2 text-xs text-muted-foreground">
                     {row.openLoading ? "Loading invoices…" : "No open invoices"}
@@ -370,6 +370,7 @@ function ReceiptLine({
                           : ""}
                       </span>
                       <Input
+                        data-arrow-field="apply-invoice"
                         type="number"
                         aria-label={`Apply to ${invoice.number}`}
                         className="h-7 w-24"
@@ -389,7 +390,7 @@ function ReceiptLine({
                   ))
                 )}
               </div>
-              <div className="max-h-48 divide-y overflow-auto rounded border bg-background">
+              <div className="max-h-48 divide-y overflow-auto rounded border bg-background" data-arrow-nav="">
                 {row.creditNotes.length === 0 ? (
                   <p className="p-2 text-xs text-muted-foreground">No open credit notes</p>
                 ) : (
@@ -399,6 +400,7 @@ function ReceiptLine({
                         {credit.number} · {formatMoney(credit.outstanding, currency)}
                       </span>
                       <Input
+                        data-arrow-field="apply-credit"
                         type="number"
                         aria-label={`Apply ${credit.number}`}
                         className="h-7 w-24"

@@ -113,7 +113,7 @@ export function CreditNoteEditor({
           {editable && <p className="text-xs text-muted-foreground">Enter 0 to leave an item off.</p>}
         </div>
         {document.lines.length === 0 && <p className="p-3 text-sm text-muted-foreground">No credit lines. Use Edit to add items.</p>}
-        <div className="credit-note-lines divide-y">
+        <div className="credit-note-lines divide-y" data-arrow-nav="">
           <div className="credit-note-row credit-note-head bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
             <span>Product</span><span>Already credited</span><span>Available</span><span>Credit qty</span><span className="text-right">Line total</span>
           </div>
@@ -129,7 +129,7 @@ export function CreditNoteEditor({
                 </div>
                 <div data-credit-label="Available" className="font-medium tabular-nums">{capacity?.available ?? "—"}{line.unit && <span className="ml-1 text-xs font-normal text-muted-foreground">{line.unit}</span>}</div>
                 <div data-credit-label="Credit qty">
-                  <Input aria-label={`Quantity to credit for ${line.description}`} aria-invalid={Boolean(linePreview?.error)} type="number" min={0} step="any"
+                  <Input data-arrow-field="qty" aria-label={`Quantity to credit for ${line.description}`} aria-invalid={Boolean(linePreview?.error)} type="number" min={0} step="any"
                     max={capacity?.available ?? line.sourceQuantity} value={qty} disabled={!editable || busy || !line.id}
                     className="h-8 max-w-28 tabular-nums" onChange={(event) => { if (line.id) onQuantity(line.id, event.target.value); }} />
                 </div>

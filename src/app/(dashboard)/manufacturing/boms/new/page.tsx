@@ -236,7 +236,7 @@ export default function NewBomPage() {
               <p>Could not load units, numbering or warehouses. Retry before creating this BOM.</p>
               <Button variant="outline" size="sm" className="mt-2" onClick={() => setLoadAttempt(n => n + 1)}>Retry setup data</Button>
             </div>}
-            <form onSubmit={handleSubmit} className="space-y-4" aria-busy={saving || hydrating}>
+            <form onSubmit={handleSubmit} className="space-y-4" aria-busy={saving || hydrating} data-arrow-nav="">
               <div className="grid gap-4 sm:grid-cols-2" data-bom-identity>
                 <div className="space-y-2">
                   <Label htmlFor="bom-code">Code preview</Label>

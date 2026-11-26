@@ -194,6 +194,7 @@ export function RecipePriceSimulator({ bom }: { bom: ManufacturingBom }) {
                 <TableCell className="text-right tabular-nums">{qty(row.recipeQuantity * scale)} {row.uom}</TableCell>
                 <TableCell>
                   <Input
+                    data-arrow-field="try-qty"
                     className={cn("h-8 tabular-nums", Number.isNaN(positiveNumber(row.tryQuantity)) && "border-destructive")}
                     inputMode="decimal"
                     placeholder={qty(row.recipeQuantity * scale)}
@@ -205,6 +206,7 @@ export function RecipePriceSimulator({ bom }: { bom: ManufacturingBom }) {
                 <TableCell className="text-right tabular-nums">{now?.unitCost == null ? "No price" : money(now.unitCost)}</TableCell>
                 <TableCell>
                   <Input
+                    data-arrow-field="try-cost"
                     className={cn("h-8 tabular-nums", Number.isNaN(positiveNumber(row.tryCost)) && "border-destructive")}
                     inputMode="decimal"
                     placeholder={now?.unitCost != null ? money(now.unitCost) : "Price"}

@@ -1485,7 +1485,8 @@ export function DocumentLineEditor({
       `[data-line-id="${CSS.escape(next.id)}"][data-line-field="${field}"]`
     );
     if (!el) return;
-    el.focus();
+    el.focus({ preventScroll: true });
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
     window.setTimeout(() => el.select(), 30);
   };
 
@@ -2023,6 +2024,8 @@ export function DocumentLineEditor({
                       <label className="flex flex-col gap-1">
                         <span className="text-xs text-muted-foreground">Discount %</span>
                         <FormattedDecimalInput
+                          data-line-id={l.id}
+                          data-line-field="discount"
                           className="h-8 w-24"
                           value={lineDiscountValue(l)}
                           onValueChange={(raw) => handleLineDiscountDraft(l.id, raw)}

@@ -40,6 +40,7 @@ export function StorePicker(props: Props) {
   const selected = props.mode === "multiple" ? props.value : props.value ? [props.value] : [];
   const [editing, setEditing] = React.useState(false);
   const [query, setQuery] = React.useState("");
+  const [active, setActive] = React.useState(0);
   const searchRef = React.useRef<HTMLInputElement>(null);
   const changeRef = React.useRef<HTMLButtonElement>(null);
   const listId = React.useId();
@@ -57,6 +58,15 @@ export function StorePicker(props: Props) {
   const rest = matches.filter((store) => !pinned.has(store.id));
   const visible = q ? [...head, ...rest] : [...head, ...rest.slice(0, WINDOW)];
   const hidden = matches.length - visible.length;
+
+  React.useEffect(() => {
+    setActive((index) => Math.min(index, Math.max(visible.length - 1, 0)));
+  }, [query, visible.length]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: "nearest" });
+  }, [active, listId, open, visible.length]);
 
   function close() {
     setEditing(false);
@@ -125,10 +135,29 @@ export function StorePicker(props: Props) {
             <Input
               ref={searchRef}
               aria-label={searchPlaceholder}
+              aria-activedescendant={visible[active] ? `${listId}-${active}` : undefined}
+              aria-controls={listId}
               placeholder={searchPlaceholder}
               className="h-9 pl-8"
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setActive(0);
+              }}
+              onKeyDown={(event) => {
+                if (!visible.length) return;
+                if (event.key === "ArrowDown") {
+                  event.preventDefault();
+                  setActive((index) => Math.min(index + 1, visible.length - 1));
+                } else if (event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setActive((index) => Math.max(index - 1, 0));
+                } else if (event.key === "Enter") {
+                  event.preventDefault();
+                  const store = visible[active];
+                  if (store) toggle(store.id);
+                }
+              }}
             />
           </div>
           <div id={listId} className="max-h-56 space-y-0.5 overflow-y-auto overscroll-contain">
@@ -136,15 +165,18 @@ export function StorePicker(props: Props) {
               <p className="px-2 py-2 text-xs text-muted-foreground">Loading stores…</p>
             ) : visible.length === 0 ? (
               <p className="px-2 py-2 text-xs text-muted-foreground">{stores.length === 0 ? "No stores found." : "No store matches that search."}</p>
-            ) : visible.map((store) => {
+            ) : visible.map((store, index) => {
               const isSelected = selected.includes(store.id);
               return (
                 <label
                   key={store.id}
+                  id={`${listId}-${index}`}
                   className={cn(
                     "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-muted/60",
                     isSelected && "bg-primary/10",
+                    index === active && "ring-1 ring-inset ring-primary",
                   )}
+                  onMouseEnter={() => setActive(index)}
                 >
                   <input
                     type={props.mode === "single" ? "radio" : "checkbox"}
