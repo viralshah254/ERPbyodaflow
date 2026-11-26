@@ -390,6 +390,8 @@ export type DocumentDetailRecord = {
   odaflowCustomerId?: string;
   /** Customer name as captured on the SFA order (may differ from mapped ERP party). */
   odaflowCustomerName?: string;
+  /** Customer's own purchase order number. Optional on a Joy invoice. */
+  customerLpoNumber?: string;
   /** SFA branch deliver-to. The invoice customer is the supermarket party. */
   deliveryAddress?: string;
   shipToSiteId?: string;
