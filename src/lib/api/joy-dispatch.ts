@@ -230,7 +230,6 @@ export type JoyLoadNote = {
 };
 export type JoyLoadNotes = {
   trucks: string[];
-  busyTrucks: string[];
   dispatchWarehouseName: string;
   dispatchWarehouseId?: string;
   /** Active stores a route load can be picked from. */
