@@ -118,7 +118,7 @@ interface DocumentLineEditorProps {
    * No search, browse or row removal; quantities left at zero are not saved.
    */
   fixedOrderSheet?: boolean;
-  /** Finished goods only, including when the pack-size name rule is off. Joy credit notes and invoices. */
+  /** Finished goods only, including when the pack-size name rule is off. Joy credit notes, invoices, and delivery notes. */
   finishedGoodsOnly?: boolean;
   lineByLine?: boolean;
   /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
