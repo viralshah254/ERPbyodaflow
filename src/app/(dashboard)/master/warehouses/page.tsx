@@ -24,10 +24,13 @@ import type { WarehouseRow } from "@/lib/types/masters";
 import { fetchBranchOptions } from "@/lib/api/lookups";
 import {
   createWarehouseApi,
+  fetchWarehouseApi,
+  fetchWarehouseCatalogueApi,
   fetchWarehouseCodesApi,
-  fetchWarehousesApi,
   mapWarehouseRow,
   updateWarehouseApi,
+  type WarehouseCatalogueCounts,
+  type WarehouseListView,
 } from "@/lib/api/warehouses";
 import { WarehouseDispositionActions } from "@/components/warehouse/WarehouseDispositionActions";
 import { t } from "@/lib/terminology";
@@ -48,6 +51,16 @@ function suggestNextWarehouseCode(existing: string[]): string {
   return `WH-${String(max + 1).padStart(3, "0")}`;
 }
 
+function useDebounced(value: string, ms: number): string {
+  const [debounced, setDebounced] = React.useState(value);
+  React.useEffect(() => {
+    if (value === debounced) return;
+    const timer = window.setTimeout(() => setDebounced(value), ms);
+    return () => window.clearTimeout(timer);
+  }, [value, ms, debounced]);
+  return debounced;
+}
+
 const WAREHOUSE_PURPOSES = [
   { value: "STORAGE", label: "Storage", hint: "Holds stock that can be sold or sent to other stores." },
   { value: "RECEIVING", label: "Receiving", hint: "Takes in deliveries and finished batches. Can send stock on." },
@@ -62,10 +75,13 @@ export default function MasterWarehousesPage() {
   const warehouseLabel = t("warehouse", terminology);
 
   const [search, setSearch] = React.useState("");
-  const [storeFilter, setStoreFilter] = React.useState<"all" | "active" | "purpose" | "approval">("all");
+  const debouncedSearch = useDebounced(search.trim(), 250);
+  const [storeFilter, setStoreFilter] = React.useState<WarehouseListView>("all");
   const [rows, setRows] = React.useState<WarehouseRow[]>([]);
+  const [counts, setCounts] = React.useState<WarehouseCatalogueCounts | null>(null);
   const [branches, setBranches] = React.useState<Array<{ id: string; label: string }>>([]);
   const [loading, setLoading] = React.useState(true);
+  const requestId = React.useRef(0);
   const [saving, setSaving] = React.useState(false);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -78,21 +94,25 @@ export default function MasterWarehousesPage() {
   });
 
   const reload = React.useCallback(async () => {
+    const generation = ++requestId.current;
     setLoading(true);
     try {
-      const [warehouseItems, branchItems] = await Promise.all([
-        fetchWarehousesApi(),
+      const [catalogue, branchItems] = await Promise.all([
+        fetchWarehouseCatalogueApi({ search: debouncedSearch, view: storeFilter }),
         fetchBranchOptions(),
       ]);
+      if (generation !== requestId.current) return;
       const branchLabels = new Map(branchItems.map((branch) => [branch.id, branch.label]));
       setBranches(branchItems);
-      setRows(warehouseItems.map((warehouse) => mapWarehouseRow(warehouse, branchLabels)));
+      setCounts(catalogue.counts);
+      setRows(catalogue.items.map((warehouse) => mapWarehouseRow(warehouse, branchLabels)));
     } catch (error) {
+      if (generation !== requestId.current) return;
       toast.error(error instanceof Error ? error.message : "Failed to load warehouses.");
     } finally {
-      setLoading(false);
+      if (generation === requestId.current) setLoading(false);
     }
-  }, []);
+  }, [debouncedSearch, storeFilter]);
 
   React.useEffect(() => {
     void reload();
@@ -106,23 +126,12 @@ export default function MasterWarehousesPage() {
     }
   }, [drawerOpen, editingId]);
 
-  const activeStores = rows.filter((row) => row.status !== "INACTIVE");
   const storeFilters = [
-    { id: "all", label: "All", count: rows.length },
-    { id: "active", label: "Active", count: activeStores.length },
-    { id: "purpose", label: "Need purpose", count: activeStores.filter((row) => !row.purpose).length },
-    { id: "approval", label: "Awaiting approval", count: rows.filter((row) => row.dispositionPending).length },
+    { id: "all", label: "All", count: counts?.all ?? 0 },
+    { id: "active", label: "Active", count: counts?.active ?? 0 },
+    { id: "purpose", label: "Need purpose", count: counts?.purpose ?? 0 },
+    { id: "approval", label: "Awaiting approval", count: counts?.approval ?? 0 },
   ] as const;
-
-  const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((row) => {
-      if (storeFilter === "active" && row.status === "INACTIVE") return false;
-      if (storeFilter === "purpose" && (row.status === "INACTIVE" || row.purpose)) return false;
-      if (storeFilter === "approval" && !row.dispositionPending) return false;
-      return !q || [row.code, row.name, row.branch].some((value) => value?.toLowerCase().includes(q));
-    });
-  }, [rows, search, storeFilter]);
   const hasFilters = storeFilter !== "all" || Boolean(search.trim());
 
   const openCreate = () => {
@@ -144,18 +153,19 @@ export default function MasterWarehousesPage() {
     setDrawerOpen(true);
   };
 
-  /** Links from a blocked transfer open the store straight in edit, e.g. /master/warehouses?edit=<id>. */
+  /** Links from a blocked transfer open the store from the server, even when it is outside the current list. */
   const editFromLink = React.useRef(false);
   React.useEffect(() => {
-    if (editFromLink.current || loading || !canWrite) return;
+    if (editFromLink.current || !canWrite) return;
     const id = new URLSearchParams(window.location.search).get("edit");
     if (!id) return;
     editFromLink.current = true;
-    const row = rows.find((item) => item.id === id);
-    if (row) openEdit(row);
-    else toast.error("That store was not found. It may have been removed.");
+    const branchLabels = new Map(branches.map((branch) => [branch.id, branch.label]));
+    void fetchWarehouseApi(id)
+      .then((warehouse) => openEdit(mapWarehouseRow(warehouse, branchLabels)))
+      .catch(() => toast.error("That store was not found. It may have been removed."));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, rows, canWrite]);
+  }, [canWrite, branches]);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -264,7 +274,7 @@ export default function MasterWarehousesPage() {
                 onClick={() => setStoreFilter(id)}
               >
                 {label}
-                <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{loading ? "—" : count}</span>
+                <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">{counts ? count : "—"}</span>
               </Button>
             ))}
           </div>
@@ -286,7 +296,7 @@ export default function MasterWarehousesPage() {
             </Link>
           }
         />
-        {!loading && filtered.length === 0 ? (
+        {!loading && rows.length === 0 ? (
           <EmptyState
             icon="MapPin"
             title={hasFilters ? "No matching stores" : `No ${warehouseLabel.toLowerCase()}s`}
@@ -302,7 +312,7 @@ export default function MasterWarehousesPage() {
         ) : (
           <div className={LIST_TABLE_SURFACE_CLASS}>
             <DataTable<WarehouseRow>
-              data={filtered}
+              data={rows}
               columns={columns}
               onRowClick={canWrite ? openEdit : undefined}
               emptyMessage={`No ${warehouseLabel.toLowerCase()}s.`}
