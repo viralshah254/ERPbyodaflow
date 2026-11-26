@@ -15,6 +15,8 @@ export type DocumentDetailHeaderField = {
   href?: string;
   /** Draws attention to an optional field that is still empty. */
   tone?: "warning";
+  /** Use two columns so a control such as the sales rep picker fits. */
+  span?: number;
 };
 
 export function DocumentDetailHeader({
@@ -59,12 +61,12 @@ export function DocumentDetailHeader({
         );
         if (field.href) {
           return (
-            <Link key={field.label} href={field.href} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl">
+            <Link key={field.label} href={field.href} className={cn("block min-w-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-xl", field.span === 2 && "col-span-2")}>
               {inner}
             </Link>
           );
         }
-        return <div key={field.label}>{inner}</div>;
+        return <div key={field.label} className={cn("min-w-0", field.span === 2 && "col-span-2")}>{inner}</div>;
       })}
     </div>
   );

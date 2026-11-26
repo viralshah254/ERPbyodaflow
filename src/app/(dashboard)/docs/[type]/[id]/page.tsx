@@ -919,9 +919,9 @@ export default function DocViewPage() {
   );
 
   const runPost = React.useCallback(async () => {
-    await documentActionApi(type as DocTypeKey, id, "post");
+    const result = await documentActionApi(type as DocTypeKey, id, "post");
     setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
-    toast.success(signAndPost ? "Signed and posted." : "Document posted.");
+    toast.success(result.kraNotice || (signAndPost ? "Signed and posted." : "Document posted."));
     void refreshDocument(true);
   }, [id, refreshDocument, signAndPost, type]);
 
@@ -2721,6 +2721,7 @@ export default function DocViewPage() {
                 ] : []),
                 {
                   label: "Sales rep",
+                  span: 2,
                   tone: type === "sales-order" && !document.joyRoute?.salesRep?.trim() ? "warning" as const : undefined,
                   value: (
                     <EditableSalesRep

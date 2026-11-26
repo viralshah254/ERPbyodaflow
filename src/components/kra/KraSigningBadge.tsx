@@ -3,7 +3,8 @@ import * as React from "react";
 
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
-  kraSigningStatusLabel,
+  isCustomerPinKraSkip,
+  kraSigningDisplayLabel,
   kraSigningStatusVariant,
   type KraSigningRecord,
 } from "@/lib/kra/kra-signing";
@@ -28,13 +29,14 @@ export function KraSigningBadge({
   }
 
   const status = kraSigning?.status;
-  const label = status === "skipped" && kraSigning?.errorMessage?.startsWith("Accounting-only posting") ? "Not submitted to KRA" : kraSigningStatusLabel(status);
-  const variant = kraSigningStatusVariant(status);
+  const pinSkip = isCustomerPinKraSkip(kraSigning);
+  const label = kraSigningDisplayLabel(kraSigning);
+  const variant = status === "skipped" || pinSkip ? "default" : kraSigningStatusVariant(status);
 
   return (
     <div className={cn("flex flex-col gap-1", className)}>
       <StatusBadge status={label} variant={variant} />
-      {!compact && status === "failed" && kraSigning?.errorMessage ? (
+      {!compact && status === "failed" && !pinSkip && kraSigning?.errorMessage ? (
         <span
           className="text-xs text-destructive line-clamp-2"
           title={kraSigning.errorMessage}

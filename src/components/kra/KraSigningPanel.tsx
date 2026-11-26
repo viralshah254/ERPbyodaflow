@@ -57,13 +57,20 @@ export function KraSigningPanel({
         toast.success("KRA signing succeeded.");
       } else if (next.status === "pending") {
         toast.message("Document queued for KRA signing.");
+      } else if (next.status === "skipped") {
+        toast.message("Not submitted to KRA", { description: "This customer has no KRA PIN. The invoice stays posted." });
       } else if (next.status === "failed") {
         toast.error(next.errorMessage || "KRA signing declined.");
       } else {
         toast.success("Retry submitted.");
       }
     } catch (e) {
-      toast.error((e as Error).message || "Retry failed.");
+      const message = (e as Error).message || "Retry failed.";
+      if (/kra pin is missing|no kra pin/i.test(message)) {
+        toast.message("Not submitted to KRA", { description: "This customer has no KRA PIN. The invoice stays posted." });
+      } else {
+        toast.error(message);
+      }
     } finally {
       setRetrying(false);
     }

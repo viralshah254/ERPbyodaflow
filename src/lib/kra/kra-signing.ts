@@ -28,6 +28,16 @@ export function isIncotexSignableDocType(typeKey: string): typeKey is IncotexSig
   return (INCOTEX_SIGNABLE_DOC_TYPES as readonly string[]).includes(typeKey);
 }
 
+/** A Joy invoice for a customer with no KRA PIN. This is a status, not a decline. */
+export function isCustomerPinKraSkip(kraSigning?: { status?: string | null; errorMessage?: string | null } | null): boolean {
+  return /no kra pin|kra pin is missing/i.test(kraSigning?.errorMessage ?? "");
+}
+
+export function kraSigningDisplayLabel(kraSigning?: KraSigningRecord | null): string {
+  if (kraSigning?.status === "skipped" || isCustomerPinKraSkip(kraSigning)) return "Not submitted to KRA";
+  return kraSigningStatusLabel(kraSigning?.status);
+}
+
 export function kraSigningStatusLabel(status?: KraSigningStatus | null): string {
   switch (status) {
     case "pending":
