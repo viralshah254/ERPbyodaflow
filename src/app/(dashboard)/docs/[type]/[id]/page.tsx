@@ -56,8 +56,7 @@ import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
-import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, FMCG_SELLING_TEMPLATE_IDS, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
-import { customerDeliveryAddressText } from "@/lib/docs/customer-delivery-address";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
 import {
   invoicePaymentChoices,
   invoicePaymentMethodToApply,
@@ -360,11 +359,6 @@ export default function DocViewPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg =
     industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
-  const fmcgSellingOrg = (FMCG_SELLING_TEMPLATE_IDS as readonly string[]).includes(
-    canonicalIndustryTemplateId(templateId),
-  );
-  const fmcgSellingDelivery =
-    fmcgSellingOrg && (type === "sales-order" || type === "invoice" || type === "credit-note");
   const stampRequired = requiresStampedDeliveryNote(templateId);
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
@@ -508,11 +502,6 @@ export default function DocViewPage() {
   const [notesSaving, setNotesSaving] = React.useState(false);
   const [deliveryDraft, setDeliveryDraft] = React.useState("");
   const [deliverySaving, setDeliverySaving] = React.useState(false);
-  const [customerAddress, setCustomerAddress] = React.useState<{ partyId: string; text: string } | null>(null);
-  const customerAddressSync = React.useRef(new Set<string>());
-  const deliveryDraftRef = React.useRef("");
-  deliveryDraftRef.current = deliveryDraft;
-  const addressDetailsRef = React.useRef<HTMLDetailsElement>(null);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
@@ -1198,73 +1187,6 @@ export default function DocViewPage() {
   React.useEffect(() => {
     if (!initialLoading && document) setDeliveryDraft(document.deliveryAddress ?? "");
   }, [initialLoading, document?.id, document?.deliveryAddress]);
-
-  React.useEffect(() => {
-    if (!fmcgSellingDelivery || !document?.partyId) {
-      setCustomerAddress(null);
-      return;
-    }
-    const partyId = document.partyId;
-    let active = true;
-    setCustomerAddress((current) => (current?.partyId === partyId ? current : null));
-    void fetchPartyByIdApi(partyId)
-      .then((party) => {
-        if (!active) return;
-        setCustomerAddress({ partyId, text: customerDeliveryAddressText(party?.address) });
-      })
-      .catch(() => {
-        if (!active) return;
-        setCustomerAddress({ partyId, text: "" });
-      });
-    return () => {
-      active = false;
-    };
-  }, [fmcgSellingDelivery, document?.partyId, document?.id]);
-
-  React.useEffect(() => {
-    if (!fmcgSellingDelivery || document?.status !== "DRAFT" || !document.partyId || !document.id) return;
-    if (!customerAddress || customerAddress.partyId !== document.partyId) return;
-    const fromCustomer = customerAddress.text.trim();
-    if (!fromCustomer || document.deliveryAddress?.trim()) return;
-    if (customerAddressSync.current.has(document.id)) return;
-    const typed = deliveryDraftRef.current.trim();
-    const saved = (document.deliveryAddress ?? "").trim();
-    if (typed && typed !== saved) return;
-    customerAddressSync.current.add(document.id);
-    setDeliveryDraft(fromCustomer);
-    const docId = document.id;
-    const docType = type as DocTypeKey;
-    void patchDocumentApi(docType, docId, { deliveryAddress: fromCustomer })
-      .then(() => {
-        if (docId === id) return refreshDocument(true);
-      })
-      .catch(() => {
-        customerAddressSync.current.delete(docId);
-      });
-  }, [
-    fmcgSellingDelivery,
-    document?.status,
-    document?.partyId,
-    document?.id,
-    document?.deliveryAddress,
-    customerAddress,
-    type,
-    id,
-    refreshDocument,
-  ]);
-
-  const customerNeedsAddress = Boolean(
-    fmcgSellingDelivery &&
-      document?.status === "DRAFT" &&
-      document.partyId &&
-      customerAddress?.partyId === document.partyId &&
-      customerAddress.text === "",
-  );
-
-  React.useEffect(() => {
-    if (!customerNeedsAddress || !addressDetailsRef.current) return;
-    addressDetailsRef.current.open = true;
-  }, [customerNeedsAddress, document?.id]);
 
   const creditQtyDirty = React.useMemo(() => {
     if (!isCreditNoteDoc(type) || document?.status !== "DRAFT") return false;
