@@ -476,7 +476,6 @@ function LoadProgress({ note }: { note: JoyLoadNote }) {
 function WaitingRouteCard({
   route,
   trucks,
-  busyTrucks,
   canLoad,
   activeNote,
   focused,
@@ -484,7 +483,6 @@ function WaitingRouteCard({
 }: {
   route: JoyWaitingRoute;
   trucks: string[];
-  busyTrucks: string[];
   canLoad: boolean;
   activeNote?: JoyLoadNote;
   focused?: boolean;
@@ -495,15 +493,8 @@ function WaitingRouteCard({
   const [salesReps, setSalesReps] = React.useState<PickedSalesRep[]>(route.salesReps ?? []);
   const [busy, setBusy] = React.useState(false);
   const truckOptions = React.useMemo(
-    () =>
-      trucks.map((plate) => ({
-        id: plate,
-        label: plate,
-        ...(busyTrucks.includes(plate)
-          ? { description: "On another load", badges: [{ label: "Busy", variant: "secondary" as const }] }
-          : {}),
-      })),
-    [trucks, busyTrucks],
+    () => trucks.map((plate) => ({ id: plate, label: plate })),
+    [trucks],
   );
   const filterTrucks = React.useCallback(
     async (query: string) => {
@@ -563,17 +554,7 @@ function WaitingRouteCard({
                 id={`load-truck-${route.warehouseId}`}
                 value={truck}
                 selectedOption={truck ? { id: truck, label: truck } : null}
-                onValueChange={(next) => {
-                  if (!next) {
-                    setTruck("");
-                    return;
-                  }
-                  if (busyTrucks.includes(next)) {
-                    toast.error(`${next} is already on another load.`);
-                    return;
-                  }
-                  setTruck(next);
-                }}
+                onValueChange={(next) => setTruck(next ?? "")}
                 loadOptions={filterTrucks}
                 searchDebounceMs={0}
                 disabled={busy}
@@ -1425,7 +1406,6 @@ function JoyRouteLoadsInner() {
                 key={`${route.warehouseId}|${route.sourceWarehouseId ?? ""}`}
                 route={route}
                 trucks={data.trucks}
-                busyTrucks={data.busyTrucks}
                 canLoad={canLoad}
                 onChanged={reload}
                 focused={route.warehouseId === focusWarehouse}

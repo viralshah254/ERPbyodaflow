@@ -34,7 +34,6 @@ vi.mock("@/lib/api/joy-dispatch", () => ({
     notes: api.notes,
     waiting: api.waiting,
     trucks: api.trucks,
-    busyTrucks: [],
     dispatchWarehouseName: "DISPATCH - DISPATCH WAREHOUSE",
     dispatchWarehouseId: "dispatch-1",
     stores: [{ id: "dispatch-1", name: "DISPATCH - DISPATCH WAREHOUSE" }],
