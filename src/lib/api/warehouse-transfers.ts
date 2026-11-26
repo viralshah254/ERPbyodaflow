@@ -101,6 +101,11 @@ export function downloadTransferPdf(id: string, number: string, onError: (messag
   return downloadFile(`/api/warehouse/transfers/${encodeURIComponent(id)}/pdf`, `${number}.pdf`, onError);
 }
 
+/** The same transfer note as a spreadsheet. */
+export function downloadTransferExcel(id: string, number: string, onError: (message: string) => void): Promise<boolean> {
+  return downloadFile(`/api/warehouse/transfers/${encodeURIComponent(id)}/xlsx`, `${number}.xlsx`, onError);
+}
+
 export async function fetchTransferById(id: string): Promise<TransferRow | null> {
   requireLiveApi("Warehouse transfer detail");
   try {

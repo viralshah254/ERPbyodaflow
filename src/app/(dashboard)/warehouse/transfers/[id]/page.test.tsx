@@ -1,7 +1,13 @@
 import React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { approveTransferShortage, downloadTransferPdf, fetchTransferById, saveTransferReceiptCounts } from "@/lib/api/warehouse-transfers";
+
+if (!HTMLElement.prototype.hasPointerCapture) {
+  HTMLElement.prototype.hasPointerCapture = () => false;
+  HTMLElement.prototype.setPointerCapture = () => {};
+  HTMLElement.prototype.releasePointerCapture = () => {};
+}
+import { approveTransferShortage, downloadTransferExcel, downloadTransferPdf, fetchTransferById, saveTransferReceiptCounts } from "@/lib/api/warehouse-transfers";
 import type { TransferRow } from "@/lib/types/warehouse";
 import TransferDetailPage from "./page";
 
@@ -17,6 +23,7 @@ vi.mock("@/lib/api/warehouse-transfers", () => ({
   approveTransferShortage: vi.fn(),
   updateTransferStatus: vi.fn(),
   downloadTransferPdf: vi.fn().mockResolvedValue(true),
+  downloadTransferExcel: vi.fn().mockResolvedValue(true),
 }));
 
 it("requires the missing count by lot and explicitly confirms the Finance write-off", async () => {
@@ -61,7 +68,21 @@ it("leads back to the loading note the transfer was made for", async () => {
   window.history.replaceState(null, "", "/warehouse/transfers/t1");
   render(<TransferDetailPage />);
   expect(await screen.findByRole("link", { name: "Back to route pick lists" })).toHaveAttribute("href", "/warehouse/route-pick-lists");
-  fireEvent.click(screen.getByRole("button", { name: "Download transfer PDF" }));
-  expect(downloadTransferPdf).toHaveBeenCalledWith("t1", "TRF-2", expect.any(Function));
+  openMore();
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Export PDF" }));
+  await waitFor(() => expect(downloadTransferPdf).toHaveBeenCalledWith("t1", "TRF-2", expect.any(Function)));
+  await screen.findByRole("button", { name: "More" });
+  openMore();
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Export Excel" }));
+  await waitFor(() => expect(downloadTransferExcel).toHaveBeenCalledWith("t1", "TRF-2", expect.any(Function)));
+  await screen.findByRole("button", { name: "More" });
+  openMore();
+  expect(screen.getByRole("menuitem", { name: "Print" })).toBeInTheDocument();
+  expect(screen.getByRole("menuitem", { name: "Back to list" })).toHaveAttribute("href", "/warehouse/transfers");
+  expect(screen.queryByRole("button", { name: "Download transfer PDF" })).not.toBeInTheDocument();
   window.history.replaceState(null, "", "/");
 });
+
+function openMore() {
+  fireEvent.keyDown(screen.getByRole("button", { name: "More" }), { key: "ArrowDown" });
+}

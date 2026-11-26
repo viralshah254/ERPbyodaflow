@@ -8,6 +8,12 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   Table,
   TableBody,
   TableCell,
@@ -16,14 +22,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { approveTransferShortage, downloadTransferPdf, fetchTransferById, saveTransferReceiptCounts, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
+import { approveTransferShortage, downloadTransferExcel, downloadTransferPdf, fetchTransferById, saveTransferReceiptCounts, updateTransferStatus, type TransferRow } from "@/lib/api/warehouse-transfers";
+import { fetchApiBinary } from "@/lib/api/client";
 import { useCanWriteInventory, useHasPermission } from "@/lib/rbac/use-write-guard";
 import { DocumentTimeline } from "@/components/docs/DocumentTimeline";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { transferBackLink } from "@/lib/warehouse/transfer-prefill";
 import { CAPS_ON_PRODUCT_CLASS } from "@/lib/org/product-text";
-import { ArrowLeft, ArrowRight, Download } from "lucide-react";
+import { ArrowLeft, ArrowRight, FileDown, MoreHorizontal, Printer, Sheet } from "lucide-react";
 import { formatActivityStamp, formatActivityWhen } from "@/lib/format/nairobi-datetime";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +62,32 @@ function statusVariant(s: string): "default" | "secondary" | "outline" {
   return "default";
 }
 
+/** Opens the transfer note PDF and hands it to the browser print dialog. */
+async function printTransferPdf(id: string): Promise<void> {
+  const blob = await fetchApiBinary(`/api/warehouse/transfers/${encodeURIComponent(id)}/pdf`);
+  if (!blob) {
+    toast.error("Could not open the transfer for printing.");
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const preview = window.open(url, "_blank");
+  if (!preview) {
+    URL.revokeObjectURL(url);
+    toast.info("Allow pop-ups to print, or use Export PDF.");
+    return;
+  }
+  const print = () => {
+    try {
+      preview.focus();
+      preview.print();
+    } catch {
+      /* The opened PDF can still be printed from the browser. */
+    }
+  };
+  preview.addEventListener("load", () => window.setTimeout(print, 300));
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export default function TransferDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -62,7 +95,7 @@ export default function TransferDetailPage() {
   const canApproveLoss = useHasPermission("finance.approve");
   const [confirmLoss, setConfirmLoss] = React.useState(false);
   const [working, setWorking] = React.useState(false);
-  const [downloading, setDownloading] = React.useState(false);
+  const [exporting, setExporting] = React.useState<null | "pdf" | "xlsx" | "print">(null);
   const [receiptDraft, setReceiptDraft] = React.useState<Record<string, { quantity: string; reason: string; missingLots?: Record<string, string> }>>({});
   const [transfer, setTransfer] = React.useState<TransferRow | null | undefined>(undefined);
   const [openedWith, setOpenedWith] = React.useState("");
@@ -178,18 +211,6 @@ export default function TransferDetailPage() {
         showCommandHint
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={downloading}
-              onClick={() => {
-                setDownloading(true);
-                void downloadTransferPdf(id, t.number, (message) => toast.error(message)).finally(() => setDownloading(false));
-              }}
-            >
-              <Download className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-              {downloading ? "Preparing…" : "Download transfer PDF"}
-            </Button>
             {canWrite && canApprove && <Button size="sm" disabled={working} onClick={() => void perform(() => updateTransferStatus(id, "APPROVED"), "Transfer approved.")}>Approve</Button>}
             {canWrite && canTransit && <Button size="sm" disabled={working} onClick={() => void perform(() => updateTransferStatus(id, "IN_TRANSIT"), "Transfer dispatched.")}>Dispatch</Button>}
             {canWrite && canReceive && <Button size="sm" disabled={working || receiptChanges.length > 0 || needsReview} onClick={() => void perform(() => updateTransferStatus(id, "RECEIVED"), "Transfer received.")}>Receive</Button>}
@@ -201,9 +222,52 @@ export default function TransferDetailPage() {
                 </Link>
               </Button>
             ) : null}
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/warehouse/transfers">Back to list</Link>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" disabled={exporting !== null}>
+                  <MoreHorizontal className="mr-2 h-4 w-4" aria-hidden />
+                  {exporting ? "Preparing…" : "More"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={exporting !== null}
+                  onClick={() => {
+                    setExporting("pdf");
+                    void downloadTransferPdf(id, t.number, (message) => toast.error(message)).finally(() => setExporting(null));
+                  }}
+                >
+                  <FileDown className="mr-2 h-4 w-4" aria-hidden />
+                  Export PDF
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={exporting !== null}
+                  onClick={() => {
+                    setExporting("xlsx");
+                    void downloadTransferExcel(id, t.number, (message) => toast.error(message)).finally(() => setExporting(null));
+                  }}
+                >
+                  <Sheet className="mr-2 h-4 w-4" aria-hidden />
+                  Export Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={exporting !== null}
+                  onClick={() => {
+                    setExporting("print");
+                    void printTransferPdf(id).finally(() => setExporting(null));
+                  }}
+                >
+                  <Printer className="mr-2 h-4 w-4" aria-hidden />
+                  Print
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/warehouse/transfers">
+                    <ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                    Back to list
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         }
       />
