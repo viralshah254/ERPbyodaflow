@@ -105,6 +105,7 @@ function ReceiveWeightRow({
       </div>
       {editable ? (
         <Input
+          data-arrow-field="actual-kg"
           type="number"
           min={0}
           step="0.01"

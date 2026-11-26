@@ -990,7 +990,7 @@ export default function SubcontractingPage() {
 
                 {/* ── GRN mode: per-batch cards ── */}
                 {orderGrnId && processingBatches.length > 0 && (
-                  <div className="space-y-3">
+                  <div className="space-y-3" data-arrow-nav="">
                     {alreadyProcessedLineCount > 0 && (
                       <p className="text-xs text-muted-foreground">
                         <Icons.Info className="inline h-3.5 w-3.5 mr-1 align-text-bottom" aria-hidden />
@@ -1060,6 +1060,7 @@ export default function SubcontractingPage() {
                                 <div className="space-y-1 flex-1 min-w-[140px]">
                                   <Label className="text-xs">Send quantity (kg) *</Label>
                                   <Input
+                                    data-arrow-field="send-kg"
                                     type="number"
                                     step="0.001"
                                     min={0}
@@ -1458,7 +1459,7 @@ export default function SubcontractingPage() {
                         <SheetTitle>New external work center</SheetTitle>
                         <SheetDescription>Register a factory or women&apos;s group that receives stock for processing.</SheetDescription>
                       </SheetHeader>
-                      <div className="grid gap-4 py-6">
+                      <div className="grid gap-4 py-6" data-arrow-nav="">
                         <div className="grid gap-2">
                           <Label>Code</Label>
                           <Input value={wcCode} onChange={(e) => setWcCode(e.target.value)} placeholder="e.g. FACT-NAI" />

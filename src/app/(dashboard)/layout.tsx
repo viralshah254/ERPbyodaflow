@@ -6,6 +6,7 @@ import { CapsOnProduct } from "@/components/layout/caps-on-product";
 import { RouteDocumentTitle } from "@/components/layout/route-document-title";
 import { PushNotificationInit } from "@/components/push-notification-init";
 import { PushForegroundToast } from "@/components/push-foreground-toast";
+import { ArrowFieldNavigation } from "@/components/ui/arrow-field-navigation";
 import { isApiConfigured } from "@/lib/api/client";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
@@ -91,6 +92,7 @@ export default function DashboardLayout({
   return (
     <>
       <AppShellScrollLock />
+      <ArrowFieldNavigation />
       <RouteDocumentTitle />
       <CapsOnProduct />
       <PushNotificationInit />

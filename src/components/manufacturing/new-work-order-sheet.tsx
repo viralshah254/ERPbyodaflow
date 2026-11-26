@@ -392,7 +392,7 @@ export const NewWorkOrderSheet = React.memo(function NewWorkOrderSheet({
           </SheetDescription>
         </SheetHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4" data-arrow-nav="">
           <div className="space-y-2">
             <Label>
               GRN batch

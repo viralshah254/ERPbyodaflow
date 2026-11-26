@@ -838,7 +838,7 @@ export default function ManufacturingYieldPage() {
             </SheetDescription>
           </SheetHeader>
 
-          <div className="mt-6 space-y-5">
+          <div className="mt-6 space-y-5" data-arrow-nav="">
             <div className="space-y-2">
               <Label>Work order (batch)</Label>
               <Select
@@ -928,6 +928,7 @@ export default function ManufacturingYieldPage() {
                         <div>
                           <Label className="text-xs">Actual (kg)</Label>
                           <Input
+                            data-arrow-field="actual-kg"
                             type="number"
                             min={0}
                             step="0.01"

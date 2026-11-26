@@ -370,7 +370,7 @@ export default function RoutingPage() {
               Loading route…
             </div>
           ) : (
-            <div className="flex-1 space-y-4 overflow-y-auto py-4">
+            <div className="flex-1 space-y-4 overflow-y-auto py-4" data-arrow-nav="">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Code</Label>
@@ -410,6 +410,7 @@ export default function RoutingPage() {
                         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={operation.critical === true} onChange={(event) => setOperations((rows) => rows.map((row, i) => i === index ? { ...row, critical: event.target.checked } : row))} />Critical completion gate</label>
                           <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={operation.qcRequired === true} onChange={(event) => setOperations((rows) => rows.map((row, i) => i === index ? { ...row, qcRequired: event.target.checked } : row))} />Operation QC required</label>
                           <Input
+                          data-arrow-field="sequence"
                           value={operation.sequence}
                           onChange={(e) =>
                             setOperations((current) =>
@@ -423,6 +424,7 @@ export default function RoutingPage() {
                       <div className="space-y-2">
                         <Label className="text-xs">Name</Label>
                         <Input
+                          data-arrow-field="operation"
                           value={operation.name}
                           onChange={(e) =>
                             setOperations((current) =>
@@ -438,6 +440,7 @@ export default function RoutingPage() {
                       <div className="space-y-2">
                         <Label className="text-xs">Work center</Label>
                         <Input
+                          data-arrow-field="work-center"
                           value={operation.workCenter}
                           onChange={(e) =>
                             setOperations((current) =>
@@ -451,6 +454,7 @@ export default function RoutingPage() {
                       <div className="space-y-2">
                         <Label className="text-xs">Setup min</Label>
                         <Input
+                          data-arrow-field="setup"
                           value={operation.setupMinutes}
                           onChange={(e) =>
                             setOperations((current) =>
@@ -464,6 +468,7 @@ export default function RoutingPage() {
                       <div className="space-y-2">
                         <Label className="text-xs">Run min/unit</Label>
                         <Input
+                          data-arrow-field="run"
                           value={operation.runMinutesPerUnit}
                           onChange={(e) =>
                             setOperations((current) =>

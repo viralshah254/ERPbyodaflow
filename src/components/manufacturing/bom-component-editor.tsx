@@ -722,6 +722,7 @@ export function BomComponentEditor({
                   <TableCell className="min-w-[8.5rem] w-[8.5rem] align-top">
                     {canWrite ? (
                       <Input
+                        data-arrow-field="qty"
                         className="h-8 w-full min-w-0 tabular-nums text-sm"
                         inputMode="decimal"
                         aria-label={`Quantity for ${line.productName ?? line.productSku ?? "component"}`}
@@ -758,6 +759,7 @@ export function BomComponentEditor({
                   <TableCell>
                     {canWrite ? (
                       <Input
+                        data-arrow-field="cost"
                         className="h-8 tabular-nums"
                         inputMode="decimal"
                         aria-label={`Cost per ${line.uom} for ${line.productName ?? line.productSku ?? "component"}`}
@@ -800,6 +802,7 @@ export function BomComponentEditor({
                   <TableCell className="min-w-[5.5rem] w-[5.5rem]">
                     {canWrite ? (
                       <Input
+                        data-arrow-field="scrap"
                         className="h-8 w-full min-w-0 tabular-nums"
                         inputMode="decimal"
                         aria-label={`Scrap percent for ${line.productName ?? "component"}`}

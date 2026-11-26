@@ -772,7 +772,7 @@ export function OdaflowQueueOrderSheet({
                     {order.matchedLineCount}/{order.totalLineCount} matched · {order.lines.length + extraLines.length} item(s)
                   </span>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-3" data-arrow-nav="">
                   {order.lines.map((line) => (
                     <div
                       key={line.index}
@@ -809,6 +809,7 @@ export function OdaflowQueueOrderSheet({
                           <p className="text-xs text-muted-foreground">Qty</p>
                           <div className="flex items-center gap-1.5">
                             <Input
+                              data-arrow-field="qty"
                               type="number"
                               min={0}
                               step="any"
@@ -828,6 +829,7 @@ export function OdaflowQueueOrderSheet({
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">Packing</p>
                           <Input
+                            data-arrow-field="packing"
                             className="h-8"
                             value={linePacking[line.index] ?? packingValue(line.packing, line.unit)}
                             onChange={(e) =>
@@ -904,6 +906,7 @@ export function OdaflowQueueOrderSheet({
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">Qty</p>
                           <Input
+                            data-arrow-field="qty"
                             type="number"
                             min={1}
                             className="h-8 w-16"
@@ -922,6 +925,7 @@ export function OdaflowQueueOrderSheet({
                         <div className="space-y-1">
                           <p className="text-xs text-muted-foreground">Packing</p>
                           <Input
+                            data-arrow-field="packing"
                             className="h-8"
                             value={packingValue(extra.packing)}
                             onChange={(e) =>

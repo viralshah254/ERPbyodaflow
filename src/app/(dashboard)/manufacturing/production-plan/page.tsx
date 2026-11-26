@@ -407,6 +407,7 @@ function PlannedProductionPage() {
         header: "Pack qty",
         accessor: (r: ProductionPlanRow) => (
           <Input
+            data-arrow-field="pack-qty"
             type="number"
             min={0}
             step="1"
@@ -614,6 +615,13 @@ function PlannedProductionPage() {
               className="pl-9 pr-9"
               aria-label="Search finished products by SKU or name"
               value={searchInput}
+              onKeyDown={(event) => {
+                if (event.key !== "ArrowDown") return;
+                const first = document.querySelector<HTMLInputElement>('input[data-arrow-field="pack-qty"]:not(:disabled)');
+                if (!first) return;
+                event.preventDefault();
+                first.focus();
+              }}
               onChange={(event) => {
                 setSearchInput(event.target.value);
                 setPageOffset(0);

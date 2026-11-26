@@ -130,6 +130,7 @@ function ChequeRowCard({
           recentStorageKey="lookup:recent-customers"
         />
         <Input
+          data-arrow-field="amount"
           type="number"
           min="0"
           step="0.01"
@@ -138,11 +139,12 @@ function ChequeRowCard({
           onChange={(event) => onChange({ amount: event.target.value, dirty: false, error: undefined })}
         />
         <Input
+          data-arrow-field="cheque"
           placeholder="Cheque no."
           value={row.chequeNumber}
           onChange={(event) => onChange({ chequeNumber: event.target.value, error: undefined })}
         />
-        <Input type="date" value={row.chequeDate} onChange={(event) => onChange({ chequeDate: event.target.value })} />
+        <Input data-arrow-field="date" type="date" value={row.chequeDate} onChange={(event) => onChange({ chequeDate: event.target.value })} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>
@@ -157,7 +159,7 @@ function ChequeRowCard({
       {row.error ? <p className="text-xs text-destructive">{row.error}</p> : null}
       {row.expanded ? (
         <div className="grid gap-2 md:grid-cols-2">
-          <div className="max-h-40 divide-y overflow-auto rounded border">
+          <div className="max-h-40 divide-y overflow-auto rounded border" data-arrow-nav="">
             {row.invoices.length === 0 ? (
               <p className="p-2 text-xs text-muted-foreground">No open invoices</p>
             ) : (
@@ -170,6 +172,7 @@ function ChequeRowCard({
                       : ""}
                   </span>
                   <Input
+                    data-arrow-field="cash"
                     type="number"
                     className="h-7 w-24"
                     value={row.invoiceAmounts[invoice.id] ?? ""}
@@ -187,7 +190,7 @@ function ChequeRowCard({
               ))
             )}
           </div>
-          <div className="max-h-40 divide-y overflow-auto rounded border">
+          <div className="max-h-40 divide-y overflow-auto rounded border" data-arrow-nav="">
             {row.creditNotes.length === 0 ? (
               <p className="p-2 text-xs text-muted-foreground">No open credit notes</p>
             ) : (
@@ -197,6 +200,7 @@ function ChequeRowCard({
                     {credit.number} · {formatMoney(credit.outstanding, "KES")}
                   </span>
                   <Input
+                    data-arrow-field="credit"
                     type="number"
                     className="h-7 w-24"
                     value={creditUsed(row.creditApplications, credit.id) || ""}
@@ -354,7 +358,7 @@ export function ArChequeBoxSheet({
               <Input type="date" value={depositDate} onChange={(event) => setDepositDate(event.target.value)} />
             </div>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-3" data-arrow-nav="">
             {rows.map((row, index) => (
               <ChequeRowCard key={row.id} row={row} index={index} onChange={(patch) => updateRow(row.id, patch)} />
             ))}

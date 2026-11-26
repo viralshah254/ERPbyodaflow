@@ -2979,7 +2979,7 @@ export function DocumentCreateWizard({
                 </p>
               </div>
             ) : null}
-            <form className={cn("space-y-4", !branchWarehouseReady && "pointer-events-none opacity-60")}>
+            <form data-arrow-nav="" className={cn("space-y-4", !branchWarehouseReady && "pointer-events-none opacity-60")}>
               {type === "grn" && (
                 <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
                   <div className="flex items-start gap-2">
