@@ -212,6 +212,7 @@ type BackendDocumentDetail = {
   emailedAt?: string;
   emailedTo?: string;
   notes?: string;
+  customerLpoNumber?: string;
   supplierInvoiceNumber?: string | null;
   supplierCuInvoiceNumber?: string | null;
   dueDate?: string;
@@ -337,6 +338,8 @@ export type DocumentDraftPayload = {
   linkedSupplierBillId?: string;
   poRef?: string;
   reference?: string;
+  /** Customer's L.P.O. number. Blank clears it. */
+  customerLpoNumber?: string;
   supplierInvoiceNumber?: string;
   supplierCuInvoiceNumber?: string;
   dueDate?: string;
@@ -583,6 +586,7 @@ function mapDocumentDetail(
     emailedAt: payload.emailedAt,
     emailedTo: payload.emailedTo,
     notes: payload.notes,
+    ...(payload.customerLpoNumber ? { customerLpoNumber: payload.customerLpoNumber } : {}),
     supplierInvoiceNumber: payload.supplierInvoiceNumber ?? undefined,
     supplierCuInvoiceNumber: payload.supplierCuInvoiceNumber ?? undefined,
     dueDate: payload.dueDate,

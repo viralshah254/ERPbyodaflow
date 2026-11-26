@@ -158,6 +158,7 @@ const schema = z.object({
   branch: z.string().optional(),
   dueDate: z.string().optional(),
   poRef: z.string().optional(),
+  customerLpoNumber: z.string().optional(),
   warehouse: z.string().optional(),
   linesCount: z.number().optional(),
   linesAreTaxInclusive: z.boolean().optional(),
@@ -190,6 +191,7 @@ function getDefaultValues(baseCurrency: string): FormValues {
     branch: "",
     dueDate: "",
     poRef: "",
+    customerLpoNumber: "",
     warehouse: "",
     linesCount: 0,
     linesAreTaxInclusive: false,
@@ -1135,6 +1137,7 @@ export function DocumentCreateWizard({
       branch: doc.branchId ?? "",
       dueDate: (doc as { dueDate?: string }).dueDate?.slice(0, 10) ?? "",
       poRef: "",
+      customerLpoNumber: doc.customerLpoNumber ?? "",
       warehouse: doc.warehouseId ?? "",
       linesCount: doc.lines?.length ?? 0,
       linesAreTaxInclusive: doc.linesAreTaxInclusive ?? false,
@@ -1828,6 +1831,9 @@ export function DocumentCreateWizard({
           return effectiveTaxConfigId ?? undefined;
         })(),
         poRef: form.getValues("poRef") || undefined,
+        ...(bakeryOrg && (type === "invoice" || type === "delivery-note")
+          ? { customerLpoNumber: form.getValues("customerLpoNumber")?.trim() ?? "" }
+          : {}),
         reference: form.getValues("reference") || undefined,
         ...(["bill", "purchase-credit-note", "purchase-debit-note", "grn"].includes(type)
           ? {
@@ -1899,6 +1905,7 @@ export function DocumentCreateWizard({
       effectiveTaxConfigId,
       bakeryCreditNotes,
       coveredInvoices,
+      bakeryOrg,
     ]
   );
 
@@ -3137,6 +3144,19 @@ export function DocumentCreateWizard({
                     />
                 ))}
               </div>
+              {bakeryOrg && (type === "invoice" || type === "delivery-note") ? (
+                <div className="max-w-xl space-y-2">
+                  <Label htmlFor="customer-lpo">Customer L.P.O. number</Label>
+                  <Input
+                    id="customer-lpo"
+                    {...form.register("customerLpoNumber")}
+                    placeholder="Optional"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Type this when the customer gave a purchase order number. Leave it blank when they did not.
+                  </p>
+                </div>
+              ) : null}
               {showShipTo && selectedPartyId && (
                 <div className="mt-3 max-w-xl space-y-1">
                   <Label htmlFor="ship-to-site">Ship to</Label>

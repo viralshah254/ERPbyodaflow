@@ -58,6 +58,7 @@ import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, requiresStampedDeliveryNote } from "@/config/industry";
 import { DeliveryNoteEditHistory } from "@/components/docs/DeliveryNoteEditHistory";
+import { CustomerLpoField } from "@/components/docs/CustomerLpoField";
 import {
   addDocumentCommentApi,
   amendDeliveryNoteDispatchApi,
@@ -1647,6 +1648,10 @@ export default function DocViewPage() {
   const hideSalesUom =
     canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID &&
     (type === "invoice" || type === "delivery-note");
+  const bakeryPrint =
+    (type === "invoice" || type === "delivery-note") &&
+    canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
+  const bakeryInvoice = bakeryPrint && type === "invoice";
   const canApplyPriceTagInDetails = type === "quote" || type === "sales-order" || type === "credit-note";
   const documentPriceTag = (
     <DocumentPriceTagControl
@@ -2419,6 +2424,43 @@ export default function DocViewPage() {
                     "Internal document"
                   ),
               },
+              ...(bakeryPrint
+                ? [
+                    ...(bakeryInvoice && document.linkedDeliveries?.length
+                      ? [{
+                          label: "Delivery no.",
+                          value: document.linkedDeliveries.map((row) => row.number).filter(Boolean).join(", ") || "—",
+                          mono: true,
+                        }]
+                      : []),
+                    ...(type === "delivery-note" &&
+                    (document.relatedDocuments ?? []).some((row) => row.typeKey === "invoice" && row.status !== "CANCELLED")
+                      ? [{
+                          label: "Invoice no.",
+                          value: (document.relatedDocuments ?? [])
+                            .filter((row) => row.typeKey === "invoice" && row.status !== "CANCELLED")
+                            .map((row) => row.number)
+                            .filter(Boolean)
+                            .join(", "),
+                          mono: true,
+                        }]
+                      : []),
+                    {
+                      label: "Customer L.P.O.",
+                      value: (
+                        <CustomerLpoField
+                          value={document.customerLpoNumber ?? ""}
+                          editable={canWrite && document.status === "DRAFT"}
+                          onSave={async (next) => {
+                            await patchDocumentApi(type as DocTypeKey, id, { customerLpoNumber: next });
+                            await refreshDocument(true);
+                            toast.success(next ? "Customer L.P.O. saved." : "Customer L.P.O. cleared.");
+                          }}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
               ...(odaflowSalesOrder && document?.odaflowSalesRepName
                 ? [
                     {
