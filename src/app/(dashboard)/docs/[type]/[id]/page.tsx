@@ -4011,9 +4011,9 @@ export default function DocViewPage() {
                     </Button>
                   ))}
                 </div>
-                {settleMethod !== "CASH" ? (
+                {settleMethod !== "CASH" && settleMethod !== "MPESA" ? (
                   <Input
-                    placeholder={settleMethod === "MPESA" ? "M-Pesa reference (optional)" : settleMethod === "CHEQUE" ? "Cheque number (optional)" : isBakeryTemplate(templateId) ? "Bank reference (optional)" : "Transfer reference (optional)"}
+                    placeholder={settleMethod === "CHEQUE" ? "Cheque number (optional)" : isBakeryTemplate(templateId) ? "Bank reference (optional)" : "Transfer reference (optional)"}
                     value={settleReference}
                     onChange={(event) => setSettleReference(event.target.value)}
                   />
@@ -4055,7 +4055,7 @@ export default function DocViewPage() {
                     if (settleStep === "payment" && !document?.retailPaymentMethod) {
                       await settleInvoiceApi(id, {
                         method: settleMethod,
-                        reference: settleMethod === "CASH" ? undefined : settleReference.trim() || undefined,
+                        reference: settleMethod === "CASH" || settleMethod === "MPESA" ? undefined : settleReference.trim() || undefined,
                       });
                       customerPaymentMethodRef.current = settleMethod;
                       setDocument((prev) => prev ? { ...prev, retailPaymentMethod: settleMethod, orderChannel: "MANUAL" } : prev);
