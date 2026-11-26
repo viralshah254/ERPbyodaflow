@@ -309,6 +309,15 @@ export type DocumentDetailRecord = {
     date: string;
     total?: number;
   } | null;
+  coveredInvoices?: Array<{
+    id: string;
+    typeKey: DocTypeKey;
+    number: string;
+    status: string;
+    date: string;
+    total?: number;
+    currency?: string;
+  }>;
   linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
     id: string;

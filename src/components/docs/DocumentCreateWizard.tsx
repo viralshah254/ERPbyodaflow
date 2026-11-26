@@ -41,6 +41,13 @@ import { SearchableSelect } from "@/components/ui/searchable-select";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import * as Icons from "lucide-react";
 import Link from "next/link";
+import { CreditNoteInvoicePicker } from "@/components/docs/CreditNoteInvoicePicker";
+import {
+  creditExceedsInvoiceCover,
+  creditInvoiceCover,
+  invoiceInsideCreditWindow,
+  type CreditInvoiceChoice,
+} from "@/lib/docs/credit-note-invoices";
 import {
   DocumentLineEditor,
   applyLineTax,
@@ -88,7 +95,7 @@ import {
   type PricingOption,
   type TaxConfigRow,
 } from "@/lib/api/pricing";
-import { isPlantCatalogueTemplate } from "@/config/industry";
+import { isBakeryTemplate, isPlantCatalogueTemplate } from "@/config/industry";
 import { usesInlineQuantitySheet, sameEditableLines, storedEditableUnitPrice } from "@/lib/docs/inline-quantity-sheet";
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
@@ -568,6 +575,7 @@ export function DocumentCreateWizard({
   const orgRole = useOrgContextStore((s) => s.orgRole);
   const templateId = useOrgContextStore((s) => s.templateId);
   const fmcgOrg = isFmcgOrg(templateId);
+  const bakeryCreditNotes = type === "credit-note" && isBakeryTemplate(templateId);
   const fmcgPurchaseDoc =
     fmcgOrg && (type === "purchase-order" || type === "grn" || type === "bill");
   const plantCatalogue = isPlantCatalogueTemplate(templateId);
@@ -616,8 +624,14 @@ export function DocumentCreateWizard({
   const [hqSupplierName, setHqSupplierName] = React.useState<string | null>(null);
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const usesSalesLayout = type === "sales-order" || type === "invoice";
-  const salesLayoutReady = !usesSalesLayout || !currentOrgId || operatingProfile.ready;
-  const sheetFinishedGoods = usesInlineQuantitySheet({ type, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
+  const bakeryOrg = isBakeryTemplate(templateId);
+  const bakeryFinishedCatalogue = bakeryOrg && (type === "credit-note" || type === "invoice");
+  const salesLayoutReady = (!usesSalesLayout && !(bakeryOrg && type === "credit-note")) || !currentOrgId || operatingProfile.ready;
+  const sheetFinishedGoods = usesInlineQuantitySheet({
+    type,
+    fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet,
+    bakery: bakeryOrg,
+  });
   const lineByLine = usesSalesLayout && operatingProfile.lineItemLayout === "line_by_line";
   const skipEmptyQuantities = sheetFinishedGoods || lineByLine;
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
@@ -661,6 +675,7 @@ export function DocumentCreateWizard({
   const [creditOverrideOpen, setCreditOverrideOpen] = React.useState(false);
   const [creditOverrideReason, setCreditOverrideReason] = React.useState("");
   const [creditOverrideGranted, setCreditOverrideGranted] = React.useState(false);
+  const [coveredInvoices, setCoveredInvoices] = React.useState<CreditInvoiceChoice[]>([]);
   const [paymentTermsNameById, setPaymentTermsNameById] = React.useState<Record<string, string>>({});
   const [customerCategoryNameById, setCustomerCategoryNameById] = React.useState<Record<string, string>>({});
   const [taxCodes, setTaxCodes] = React.useState<Array<{ id: string; code: string; name: string; rate: number }>>([]);
@@ -748,6 +763,18 @@ export function DocumentCreateWizard({
 
   const watchedBranch = form.watch("branch");
   const selectedPartyId = form.watch("party");
+  const creditNoteDate = form.watch("date");
+  const coveredPartyRef = React.useRef(selectedPartyId);
+  React.useEffect(() => {
+    if (!bakeryCreditNotes) return;
+    if (coveredPartyRef.current === selectedPartyId) return;
+    coveredPartyRef.current = selectedPartyId;
+    setCoveredInvoices([]);
+  }, [bakeryCreditNotes, selectedPartyId]);
+  React.useEffect(() => {
+    if (!bakeryCreditNotes || !creditNoteDate) return;
+    setCoveredInvoices((prev) => prev.filter((row) => invoiceInsideCreditWindow(row.date, creditNoteDate)));
+  }, [bakeryCreditNotes, creditNoteDate]);
   const showShipTo = ["sales-order", "invoice", "delivery-note"].includes(type);
   const [deliverySiteError, setDeliverySiteError] = React.useState("");
   const [deliverySiteSelection, setDeliverySiteSelection] = React.useState<{ partyId: string; id: string | null }>();
@@ -1842,6 +1869,7 @@ export function DocumentCreateWizard({
         total: form.getValues("totalAmount") ?? 0,
         currency: selectedCurrency,
         ...(selectedCurrency !== baseCurrency && { exchangeRate }),
+        ...(bakeryCreditNotes ? { coveredInvoiceIds: coveredInvoices.map((row) => row.id) } : {}),
         linesAreTaxInclusive: form.getValues("linesAreTaxInclusive") ?? false,
       };
     },
@@ -1869,6 +1897,8 @@ export function DocumentCreateWizard({
       fallbackPriceListId,
       fmcgOrg,
       effectiveTaxConfigId,
+      bakeryCreditNotes,
+      coveredInvoices,
     ]
   );
 
@@ -1951,6 +1981,21 @@ export function DocumentCreateWizard({
     return true;
   }, [form, routeDeliveryStore, joyRouteOrderEnabled, activeCollectionRoute, routeTills.length, routeTill, routeDeliveryDate]);
 
+  const rejectBakeryCreditCover = React.useCallback((when: "header" | "lines") => {
+    if (!bakeryCreditNotes) return false;
+    if (coveredInvoices.length === 0) {
+      toast.error("Choose at least one invoice from the last 30 days.");
+      return true;
+    }
+    if (when === "header") return false;
+    const goods = form.getValues("totalAmount") ?? 0;
+    const cover = creditInvoiceCover(coveredInvoices);
+    if (!creditExceedsInvoiceCover(goods, cover)) return false;
+    const moneyCurrency = coveredInvoices[0]?.currency || form.getValues("currency") || baseCurrency;
+    toast.error(`These goods total ${formatMoney(goods, moneyCurrency)}. The selected invoices cover ${formatMoney(cover, moneyCurrency)}.`);
+    return true;
+  }, [bakeryCreditNotes, baseCurrency, coveredInvoices, form]);
+
   const goToStep = React.useCallback(
     async (targetStep: number) => {
       if (targetStep === step || targetStep < 1 || targetStep > STEPS.length) return;
@@ -1962,8 +2007,12 @@ export function DocumentCreateWizard({
       }
 
       if (rejectMissingDeliveryWarehouse()) return;
+      if (step >= 2 && rejectBakeryCreditCover("lines")) return;
+      if (step === 1 && targetStep > step && targetStep <= maxStepReached && rejectBakeryCreditCover("header")) return;
 
       if (targetStep === 3) {
+        if (step === 1 && rejectBakeryCreditCover("header")) return;
+        if (rejectBakeryCreditCover("lines")) return;
         if (explicitSheetEdit && step === 1) { setStep(2); return; }
         if (!linesStepReady) {
           toast.error("Line items are still loading. Please wait a moment.");
@@ -2011,6 +2060,7 @@ export function DocumentCreateWizard({
               return;
             }
           }
+          if (rejectBakeryCreditCover("header")) return;
         }
         if (step === 2) {
           if (!linesStepReady) {
@@ -2039,6 +2089,7 @@ export function DocumentCreateWizard({
       linesStepReady,
       maxStepReached,
       persistWizardProgress,
+      rejectBakeryCreditCover,
       rejectMissingDeliveryWarehouse,
       step,
       type,
@@ -2047,6 +2098,8 @@ export function DocumentCreateWizard({
 
   const onReview = async () => {
     if (rejectMissingDeliveryWarehouse()) return;
+    if (step === 1 && rejectBakeryCreditCover("header")) return;
+    if (rejectBakeryCreditCover("lines")) return;
     if (explicitSheetEdit && step === 1) { setStep(2); return; }
     if (!linesStepReady) {
       toast.error("Line items are still loading. Please wait a moment.");
@@ -2119,6 +2172,7 @@ export function DocumentCreateWizard({
 
   const validateAndNext = async () => {
     if (rejectMissingDeliveryWarehouse()) return;
+    if (step >= 2 && rejectBakeryCreditCover("lines")) return;
     if (step === 1) {
       if (!headerStepReady) {
         toast.error("Header fields are still loading. Please wait a moment.");
@@ -2145,6 +2199,7 @@ export function DocumentCreateWizard({
           return;
         }
       }
+      if (rejectBakeryCreditCover("header")) return;
     }
     if (step === 2) {
       if (!linesStepReady) {
@@ -2332,6 +2387,10 @@ export function DocumentCreateWizard({
     if (!linesOperational) {
       toast.error(linesBlockedMessage("submit"));
       setStep(2);
+      return;
+    }
+    if (rejectBakeryCreditCover("lines")) {
+      setStep(coveredInvoices.length === 0 ? 1 : 2);
       return;
     }
     if (stockBlockReason) {
@@ -2741,9 +2800,15 @@ export function DocumentCreateWizard({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orgRole, type]);
 
+  const bakeryCoverTotal = creditInvoiceCover(coveredInvoices);
+  const bakeryGoodsTotal = form.watch("totalAmount") ?? 0;
+  const bakeryCoverBlocked =
+    bakeryCreditNotes &&
+    (coveredInvoices.length === 0 || creditExceedsInvoiceCover(bakeryGoodsTotal, bakeryCoverTotal));
+  const bakeryCoverCurrency = coveredInvoices[0]?.currency || selectedCurrency;
   const stepAdvanceBlocked =
     (step === 1 && !headerStepReady) ||
-    (step === 2 && (!linesStepReady || !linesOperational || Boolean(stockBlockReason)));
+    (step === 2 && (!linesStepReady || !linesOperational || Boolean(stockBlockReason) || bakeryCoverBlocked));
   const stepAdvanceBlockReason =
     step === 1 && !headerStepReady
       ? "Loading header fields…"
@@ -3200,6 +3265,16 @@ export function DocumentCreateWizard({
                   )}
                 </div>
               </div>
+              {bakeryCreditNotes && (
+                <CreditNoteInvoicePicker
+                  customerId={selectedPartyId || undefined}
+                  creditDate={creditNoteDate}
+                  currency={selectedCurrency}
+                  selected={coveredInvoices}
+                  onChange={setCoveredInvoices}
+                  excludeCreditNoteId={isEditMode ? existingDocument?.id : undefined}
+                />
+              )}
               {selectedPartyDetail && (
                 <CreditPanel
                   partyDetail={selectedPartyDetail}
@@ -3241,6 +3316,25 @@ export function DocumentCreateWizard({
               </div>
             </>
           ) : null}
+          {bakeryCreditNotes && (
+            <div
+              role={bakeryCoverBlocked ? "alert" : "status"}
+              className={cn(
+                "mx-6 mt-4 flex flex-wrap items-baseline justify-between gap-2 rounded-md border px-3 py-2 text-sm",
+                bakeryCoverBlocked ? "border-destructive/50 bg-destructive/10 text-destructive" : "bg-muted/30"
+              )}
+            >
+              <p>
+                {coveredInvoices.length === 0
+                  ? "Choose the invoices on the header before adding goods."
+                  : `${coveredInvoices.length === 1 ? "1 invoice" : `${coveredInvoices.length} invoices`} selected`}
+              </p>
+              <p className="font-medium tabular-nums">
+                Goods {formatMoney(bakeryGoodsTotal, bakeryCoverCurrency)}
+                {coveredInvoices.length > 0 ? ` of ${formatMoney(bakeryCoverTotal, bakeryCoverCurrency)} cover` : ""}
+              </p>
+            </div>
+          )}
           <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0">
             <CardTitle>2. Lines</CardTitle>
             <div className="flex items-center gap-2">
@@ -3352,6 +3446,7 @@ export function DocumentCreateWizard({
             <div className={cn(!linesStepReady && !skipEmptyQuantities && "pointer-events-none opacity-60")}>
             {salesLayoutReady ? <DocumentLineEditor
               sheetFinishedGoods={sheetFinishedGoods}
+              finishedGoodsOnly={bakeryFinishedCatalogue}
               fixedOrderSheet={lineEditorMode === "sales" && operatingProfile.fixedOrderSheet}
               lineByLine={lineByLine}
               packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
@@ -3528,6 +3623,28 @@ export function DocumentCreateWizard({
                   </>
                 ) : null}
               </div>
+              {bakeryCreditNotes && (
+                <div className="space-y-2 border-t pt-4 text-sm">
+                  <span className="text-muted-foreground">Invoices</span>
+                  {coveredInvoices.length === 0 ? (
+                    <p className="font-medium">None selected</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {coveredInvoices.map((row) => (
+                        <li key={row.id} className="flex items-baseline justify-between gap-3">
+                          <span className="font-medium">{row.number}</span>
+                          <span className="tabular-nums text-muted-foreground">
+                            {formatMoney(row.remaining, row.currency)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className={cn("font-medium tabular-nums", bakeryCoverBlocked && "text-destructive")}>
+                    Goods {formatMoney(bakeryGoodsTotal, bakeryCoverCurrency)} of {formatMoney(bakeryCoverTotal, bakeryCoverCurrency)} cover
+                  </p>
+                </div>
+              )}
               <div className="grid gap-4 sm:grid-cols-2 border-t pt-4">
                 <div className="space-y-1">
                   <span className="text-muted-foreground">Total (Document Currency)</span>
@@ -3685,7 +3802,7 @@ export function DocumentCreateWizard({
           ) : step === 3 ? (
             <Button
               onClick={() => void onSubmit()}
-              disabled={submitting || (deliveryNoteEdit && !editReason.trim()) || Boolean(stockBlockReason)}
+              disabled={submitting || (deliveryNoteEdit && !editReason.trim()) || Boolean(stockBlockReason) || bakeryCoverBlocked}
               title={stockBlockReason}
             >
               {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
@@ -3695,7 +3812,7 @@ export function DocumentCreateWizard({
             <Button
               variant={lineByLine && step === 2 ? "default" : "outline"}
               onClick={() => void onReview()}
-              disabled={step === 2 && (!linesStepReady || !linesOperational || Boolean(stockBlockReason))}
+              disabled={step === 2 && (!linesStepReady || !linesOperational || Boolean(stockBlockReason) || bakeryCoverBlocked)}
               title={
                 step === 2 && !linesStepReady
                   ? "Loading line items and product catalog…"

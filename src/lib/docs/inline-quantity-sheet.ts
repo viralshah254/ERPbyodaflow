@@ -3,10 +3,11 @@ import type { DocumentLine } from "@/components/docs/DocumentLineEditor";
 
 /**
  * Catalogue entry for sales orders and invoices: search or browse finished goods, then keep the selected lines.
- * Settings → Sales document flow.
+ * Joy’s credit notes use that same finished-goods sheet. Settings → Sales document flow.
  */
-export function usesInlineQuantitySheet(args: { type: string; editing?: boolean; prefillSalesOrders?: boolean; fullCatalogueSheet?: boolean }): boolean {
-  if (args.fullCatalogueSheet && ["sales-order", "invoice"].includes(args.type)) return true;
+export function usesInlineQuantitySheet(args: { type: string; editing?: boolean; prefillSalesOrders?: boolean; fullCatalogueSheet?: boolean; bakery?: boolean }): boolean {
+  const types = args.bakery ? ["sales-order", "invoice", "credit-note"] : ["sales-order", "invoice"];
+  if (args.fullCatalogueSheet && types.includes(args.type)) return true;
   return !args.editing && args.type === "sales-order" && Boolean(args.prefillSalesOrders);
 }
 

@@ -187,6 +187,15 @@ type BackendDocumentDetail = {
     date: string;
     total?: number;
   } | null;
+  coveredInvoices?: Array<{
+    id: string;
+    typeKey?: DocTypeKey;
+    number: string;
+    status?: string;
+    date?: string;
+    total?: number;
+    currency?: string;
+  }>;
   linkedDeliveries?: Array<{ id: string; number: string; status: string }>;
   relatedDocuments?: Array<{
     id: string;
@@ -334,6 +343,8 @@ export type DocumentDraftPayload = {
   sourceDocumentId?: string;
   sourceDocumentType?: DocTypeKey;
   sourceDocumentNumber?: string;
+  /** Bakery credit notes: invoices this credit covers. */
+  coveredInvoiceIds?: string[];
   returnResolution?: "LINKED_SOURCE" | "AMBIGUOUS_ACCEPTED";
   returnReason?: string;
   lines: Array<{
@@ -541,6 +552,19 @@ function mapDocumentDetail(
       ...(typeof line.weightKg === "number" ? { weightKg: line.weightKg } : {}),
     })),
     sourceDocument: payload.sourceDocument ?? null,
+    ...(payload.coveredInvoices?.length
+      ? {
+          coveredInvoices: payload.coveredInvoices.map((row) => ({
+            id: row.id,
+            typeKey: row.typeKey ?? "invoice",
+            number: row.number,
+            status: row.status ?? "",
+            date: typeof row.date === "string" ? row.date : "",
+            total: row.total,
+            currency: row.currency,
+          })),
+        }
+      : {}),
     linkedDeliveries: payload.linkedDeliveries ?? [],
     relatedDocuments: payload.relatedDocuments ?? [],
     attachments: (payload.attachments ?? []).map((item) => ({
@@ -853,6 +877,44 @@ export async function fetchDocumentListPageApi(
     offset: parsedOffset,
     hasMore,
     nextCursor,
+  };
+}
+
+export type EligibleCreditInvoice = {
+  id: string;
+  number: string;
+  date: string;
+  total: number;
+  remaining: number;
+  currency: string;
+  status: string;
+};
+
+export async function fetchEligibleCreditInvoicesApi(opts: {
+  customerId: string;
+  date: string;
+  search?: string;
+  cursor?: string | null;
+  limit?: number;
+  excludeCreditNoteId?: string;
+}): Promise<{ items: EligibleCreditInvoice[]; hasMore: boolean; nextCursor: string | null }> {
+  requireLiveApi("Credit note invoices");
+  const params = new URLSearchParams();
+  params.set("customerId", opts.customerId);
+  params.set("date", opts.date);
+  params.set("limit", String(opts.limit ?? 12));
+  if (opts.search?.trim()) params.set("search", opts.search.trim());
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  if (opts.excludeCreditNoteId) params.set("excludeCreditNoteId", opts.excludeCreditNoteId);
+  const payload = await apiRequest<{
+    items?: EligibleCreditInvoice[];
+    hasMore?: boolean;
+    nextCursor?: string | null;
+  }>("/api/documents/credit-note/eligible-invoices", { params });
+  return {
+    items: payload.items ?? [],
+    hasMore: Boolean(payload.hasMore),
+    nextCursor: payload.nextCursor ?? null,
   };
 }
 

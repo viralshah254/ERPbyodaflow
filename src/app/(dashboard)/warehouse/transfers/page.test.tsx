@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import NewTransferPage from "./new/page";
 import { createTransfer, fetchTransferStock } from "@/lib/api/warehouse-transfers";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 
 const router = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), back: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
@@ -53,6 +54,7 @@ afterEach(() => {
   window.localStorage.clear();
   vi.mocked(fetchTransferStock).mockReset();
   profile.fixedOrderSheet = false;
+  useOrgContextStore.setState({ templateId: null });
 });
 
 type StockRow = Awaited<ReturnType<typeof fetchTransferStock>>["items"][number];
@@ -279,6 +281,20 @@ it("lists what the loading note needs first, outlined in red when the store cann
   fireEvent.click(screen.getByRole("button", { name: "Transfer the other 2 from another store" }));
   expect(await screen.findByLabelText("From warehouse")).toHaveValue("");
   expect(screen.getByLabelText("Reference (optional)")).toHaveValue("Loader note LDN-0008");
+});
+
+it("lists Joy finished goods from item code 1 upward", async () => {
+  profile.fixedOrderSheet = true;
+  useOrgContextStore.setState({ templateId: "fmcg-bakery" });
+  const ten = { productId: "ten", sku: "10", code: "10", name: "Code ten", uom: "EA", quantity: 1, reserved: 0, available: 1, itemRole: "FINISHED" as const };
+  const two = { productId: "two", sku: "2", code: "2", name: "Code two", uom: "EA", quantity: 1, reserved: 0, available: 1, itemRole: "FINISHED" as const };
+  const one = { productId: "one", sku: "1", code: "1", name: "Code one", uom: "EA", quantity: 1, reserved: 0, available: 1, itemRole: "FINISHED" as const };
+  serveStock(() => [ten, two, one]);
+  window.history.replaceState(null, "", "/warehouse/transfers/new?from=source");
+  render(<NewTransferPage />);
+  await screen.findByRole("spinbutton", { name: "Quantity for Code one 1" });
+  expect(screen.getAllByRole("spinbutton", { name: /Quantity for/ }).map((input) => input.getAttribute("aria-label")))
+    .toEqual(["Quantity for Code one 1", "Quantity for Code two 2", "Quantity for Code ten 10"]);
 });
 
 it("explains a receiving store with no purpose and holds the transfer until it is set", async () => {
