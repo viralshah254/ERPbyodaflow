@@ -58,9 +58,10 @@ import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
 import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
 import {
+  invoicePaymentAlreadyRecorded,
+  invoicePaymentChoiceLabel,
   invoicePaymentChoices,
   invoicePaymentMethodToApply,
-  INVOICE_PAYMENT_LABELS,
   parseInvoicePaymentMethod,
   type InvoicePaymentMethod,
 } from "@/lib/docs/invoice-payment-method";
@@ -959,11 +960,9 @@ export default function DocViewPage() {
 
   const requestPost = React.useCallback(async () => {
     const bakeryPayments = isBakeryTemplate(templateId);
-    const paymentRecorded = bakeryPayments
-      ? document?.retailPaymentMethod === "MPESA"
-      : Boolean(document?.retailPaymentMethod);
+    const paymentRecorded = invoicePaymentAlreadyRecorded(bakeryPayments, document?.retailPaymentMethod);
     let needsTerms = partyNeedsTerms;
-    if (type === "invoice" && document && !paymentRecorded && !bakeryPayments && !customerPaymentKnownRef.current && document.partyId) {
+    if (type === "invoice" && document && !paymentRecorded && !customerPaymentKnownRef.current && document.partyId) {
       try {
         const party = await fetchPartyByIdApi(document.partyId);
         const saved = parseInvoicePaymentMethod(party?.invoicePaymentMethod);
@@ -979,6 +978,7 @@ export default function DocViewPage() {
     if (type === "invoice" && document && !paymentRecorded) {
       const method = invoicePaymentMethodToApply(bakeryPayments, customerPaymentMethodRef.current);
       if (!method) {
+        setSettleMethod(invoicePaymentChoices(bakeryPayments)[0] ?? "CASH");
         setSettleStep("payment");
         setSettleOpen(true);
         return;
@@ -3883,13 +3883,13 @@ export default function DocViewPage() {
                       variant={settleMethod === method ? "default" : "outline"}
                       onClick={() => setSettleMethod(method)}
                     >
-                      {INVOICE_PAYMENT_LABELS[method]}
+                      {invoicePaymentChoiceLabel(method, isBakeryTemplate(templateId))}
                     </Button>
                   ))}
                 </div>
                 {settleMethod !== "CASH" ? (
                   <Input
-                    placeholder={settleMethod === "MPESA" ? "M-Pesa reference (optional)" : settleMethod === "CHEQUE" ? "Cheque number (optional)" : "Transfer reference (optional)"}
+                    placeholder={settleMethod === "MPESA" ? "M-Pesa reference (optional)" : settleMethod === "CHEQUE" ? "Cheque number (optional)" : isBakeryTemplate(templateId) ? "Bank reference (optional)" : "Transfer reference (optional)"}
                     value={settleReference}
                     onChange={(event) => setSettleReference(event.target.value)}
                   />

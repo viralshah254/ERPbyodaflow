@@ -17,18 +17,33 @@ export function parseInvoicePaymentMethod(value: string | null | undefined): Inv
 }
 
 /**
- * Joy Superbakers treats cash, cheque, and bank transfer as the same thing,
- * so those choices are not offered. M-Pesa is the only method and does not need a question.
- * Other companies are asked once per customer, then the saved method is used.
+ * A bakery offers M-Pesa and Bank. Cheque and bank transfer are the same Bank choice.
+ * Cash is not offered. Other companies keep the four methods.
+ * A saved method is used on the next invoice so the question is not asked again.
  */
 export function invoicePaymentChoices(bakery: boolean): InvoicePaymentMethod[] {
-  return bakery ? ["MPESA"] : [...INVOICE_PAYMENT_METHODS];
+  return bakery ? ["MPESA", "BANK_TRANSFER"] : [...INVOICE_PAYMENT_METHODS];
+}
+
+export function invoicePaymentChoiceLabel(method: InvoicePaymentMethod, bakery: boolean): string {
+  if (bakery && (method === "BANK_TRANSFER" || method === "CHEQUE")) return "Bank";
+  return INVOICE_PAYMENT_LABELS[method];
 }
 
 export function invoicePaymentMethodToApply(
   bakery: boolean,
   saved: string | null | undefined
 ): InvoicePaymentMethod | null {
-  if (bakery) return "MPESA";
-  return parseInvoicePaymentMethod(saved);
+  const parsed = parseInvoicePaymentMethod(saved);
+  if (!bakery) return parsed;
+  if (parsed === "MPESA") return "MPESA";
+  if (parsed === "CHEQUE" || parsed === "BANK_TRANSFER") return "BANK_TRANSFER";
+  return null;
+}
+
+export function invoicePaymentAlreadyRecorded(
+  bakery: boolean,
+  recorded: string | null | undefined
+): boolean {
+  return invoicePaymentMethodToApply(bakery, recorded) !== null;
 }
