@@ -13,6 +13,8 @@ export type DocumentDetailHeaderField = {
   value: React.ReactNode;
   mono?: boolean;
   href?: string;
+  /** Draws attention to an optional field that is still empty. */
+  tone?: "warning";
 };
 
 export function DocumentDetailHeader({
@@ -42,6 +44,7 @@ export function DocumentDetailHeader({
           <div
             className={cn(
               "h-full min-w-0 rounded-lg border bg-gradient-to-b from-card to-muted/20 shadow-sm transition-shadow hover:shadow-md",
+              field.tone === "warning" && "border-amber-400 bg-amber-50 dark:border-amber-500 dark:bg-amber-950/40",
               compact ? "px-2.5 py-2" : "rounded-xl p-4"
             )}
           >

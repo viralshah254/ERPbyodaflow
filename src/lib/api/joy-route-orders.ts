@@ -27,9 +27,16 @@ export function saveJoyCollectionRoute(routeId: string, collectors: RouteCollect
   });
 }
 
-/** Change, add or (with a blank id) remove the SFA rep on a route sales order. */
-export function setJoyOrderSalesRep(orderId: string, salesRepId: string) {
-  return apiRequest<{ joyRoute: JoyRouteSnapshot }>(`/api/joy-dispatch/sales-orders/${encodeURIComponent(orderId)}/sales-rep`, {
+/** Change, add or (with a blank id) remove the SFA rep. The rep's till is saved with them. */
+export function setJoyOrderSalesRep(
+  documentId: string,
+  salesRepId: string,
+  type: "sales-order" | "invoice" | "credit-note" = "sales-order",
+) {
+  const path = type === "sales-order"
+    ? `/api/joy-dispatch/sales-orders/${encodeURIComponent(documentId)}/sales-rep`
+    : `/api/joy-dispatch/documents/${type}/${encodeURIComponent(documentId)}/sales-rep`;
+  return apiRequest<{ joyRoute: JoyRouteSnapshot }>(path, {
     method: "PUT",
     body: { salesRepId },
   });

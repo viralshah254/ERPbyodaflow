@@ -217,11 +217,14 @@ export function EditableSalesRep({
   id,
   value,
   canEdit,
+  emphasizeEmpty = false,
   onSave,
 }: {
   id: string;
   value: PickedSalesRep | null;
   canEdit: boolean;
+  /** Empty sales orders should be easy to spot. The field stays optional. */
+  emphasizeEmpty?: boolean;
   onSave: (rep: PickedSalesRep | null) => Promise<void>;
 }) {
   const [editing, setEditing] = React.useState(false);
@@ -230,7 +233,7 @@ export function EditableSalesRep({
   if (!editing) {
     return (
       <span className="inline-flex flex-wrap items-center gap-2">
-        <span className={value ? undefined : "text-muted-foreground"}>{label}</span>
+        <span className={value ? undefined : emphasizeEmpty ? "text-amber-800 dark:text-amber-200" : "text-muted-foreground"}>{label}</span>
         {canEdit && (
           <Button type="button" variant="link" size="sm" className="h-auto p-0" onClick={() => setEditing(true)}>
             {value ? "Change" : "Add sales rep"}
