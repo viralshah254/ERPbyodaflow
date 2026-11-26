@@ -38,15 +38,16 @@ function prefillFrom(query: string) {
   return /^[+\d][\d\s-]{2,}$/.test(text) ? { name: "", phone: text } : { name: text, phone: "" };
 }
 
-function useSalesRepSearch(exclude: string[] = []) {
+function useSalesRepSearch(exclude: string[] = [], options?: { withTill?: boolean }) {
   const reps = React.useRef(new Map<string, PickedSalesRep>());
   const excluded = exclude.join("|");
+  const withTill = options?.withTill === true;
   const loadOptions = React.useCallback(async (query: string) => {
-    const { reps: rows } = await fetchSfaSalesReps(query);
+    const { reps: rows } = await fetchSfaSalesReps(query, { withTill });
     const skip = new Set(excluded ? excluded.split("|") : []);
     for (const rep of rows) reps.current.set(rep.id, pickSalesRep(rep));
     return rows.filter((rep) => !skip.has(rep.id)).map((rep) => repOption(rep));
-  }, [excluded]);
+  }, [excluded, withTill]);
   return { loadOptions, find: (id: string) => reps.current.get(id) };
 }
 
@@ -54,11 +55,14 @@ export function AddSfaSalesRepSheet({
   open,
   onOpenChange,
   initialQuery = "",
+  requireTill = false,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialQuery?: string;
+  /** Sales orders need a till, so a rep added from that picker must have one. */
+  requireTill?: boolean;
   onCreated: (rep: PickedSalesRep) => void;
 }) {
   const [form, setForm] = React.useState({ name: "", phone: "", email: "", tillNumber: "", regionName: "", areaName: "" });
@@ -84,7 +88,8 @@ export function AddSfaSalesRepSheet({
       return next;
     });
   };
-  const ready = form.name.trim() && form.phone.trim() && form.regionName.trim() && form.areaName.trim();
+  const tillReady = !requireTill || /^\d{3,20}$/.test(form.tillNumber.trim());
+  const ready = form.name.trim() && form.phone.trim() && form.regionName.trim() && form.areaName.trim() && tillReady;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -132,8 +137,8 @@ export function AddSfaSalesRepSheet({
             <Input id="sfa-rep-email" type="email" value={form.email} onChange={set("email")} />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="sfa-rep-till">M-Pesa till (optional)</Label>
-            <Input id="sfa-rep-till" inputMode="numeric" value={form.tillNumber} onChange={set("tillNumber")} placeholder="123456" />
+            <Label htmlFor="sfa-rep-till">{requireTill ? "M-Pesa till" : "M-Pesa till (optional)"}</Label>
+            <Input id="sfa-rep-till" inputMode="numeric" value={form.tillNumber} onChange={set("tillNumber")} placeholder="123456" required={requireTill} />
             <p className="text-xs text-muted-foreground">Prefills on sales orders when this rep is selected.</p>
           </div>
           <div className="space-y-1">
@@ -182,7 +187,7 @@ export function SfaSalesRepSelect({
   onChange: (rep: PickedSalesRep | null) => void;
   disabled?: boolean;
 }) {
-  const { loadOptions, find } = useSalesRepSearch();
+  const { loadOptions, find } = useSalesRepSearch([], { withTill: true });
   const [adding, setAdding] = React.useState<string | null>(null);
   return (
     <div className="flex min-w-0 items-start gap-1.5">
@@ -198,7 +203,7 @@ export function SfaSalesRepSelect({
           disabled={disabled}
           placeholder="Select sales rep"
           searchPlaceholder="Search name or phone"
-          emptyMessage="No SFA sales rep matches."
+          emptyMessage="No sales rep with an M-Pesa till matches."
           onCreateNew={(query) => setAdding(query)}
           createNewLabel="Add sales rep to SFA"
           wrapLabels
@@ -207,7 +212,7 @@ export function SfaSalesRepSelect({
       </div>
       <AddButton onClick={() => setAdding("")} disabled={disabled} />
       <AddSfaSalesRepSheet open={adding !== null} onOpenChange={(open) => { if (!open) setAdding(null); }}
-        initialQuery={adding ?? ""} onCreated={onChange} />
+        initialQuery={adding ?? ""} requireTill onCreated={onChange} />
     </div>
   );
 }
