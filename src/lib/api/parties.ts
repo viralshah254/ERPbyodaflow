@@ -46,6 +46,7 @@ type BackendParty = {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  invoicePaymentMethod?: "CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER";
   salesRepId?: string;
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
@@ -150,6 +151,7 @@ export type PartyDetail = PartyRow & {
   perInvoiceDaysToPayCap?: number;
   creditWarningThresholdPct?: number;
   paymentTermsId?: string;
+  invoicePaymentMethod?: "CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER";
   salesRepId?: string;
   defaultPriceListId?: string;
   defaultTaxConfigId?: string;
@@ -532,6 +534,7 @@ export async function fetchPartyByIdApi(id: string): Promise<PartyDetail | null>
     creditWarningThresholdPct: data.creditWarningThresholdPct,
     customerCategoryId: data.customerCategoryId,
     paymentTermsId: data.paymentTermsId,
+    invoicePaymentMethod: data.invoicePaymentMethod,
     defaultPriceListId: data.defaultPriceListId,
     defaultTaxConfigId: data.defaultTaxConfigId,
     defaultCurrency: data.defaultCurrency,

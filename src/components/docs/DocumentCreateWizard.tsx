@@ -619,6 +619,7 @@ export function DocumentCreateWizard({
   const odaflowDialogLockRef = React.useRef(false);
   const odaflowPendingRevertRef = React.useRef<{ lineIds: string[]; revertCustomer: boolean } | null>(null);
   const allowLeaveRef = React.useRef(false);
+  const submitLockRef = React.useRef(false);
   const autoFilledPartyRef = React.useRef<string | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false);
   const pendingLeaveRef = React.useRef<string | null>(null);
@@ -2391,6 +2392,7 @@ export function DocumentCreateWizard({
   };
 
   const onSubmit = async () => {
+    if (submitLockRef.current) return;
     if (!linesOperational) {
       toast.error(linesBlockedMessage("submit"));
       setStep(2);
@@ -2416,39 +2418,42 @@ export function DocumentCreateWizard({
         return;
       }
     }
-    try {
-      if (isEditMode && existingDocument) {
-        if (deliveryNoteEdit && !editReason.trim()) {
-          toast.error("Give a reason for this edit. It is kept in the delivery note history.");
+    if (isEditMode && existingDocument) {
+      if (deliveryNoteEdit && !editReason.trim()) {
+        toast.error("Give a reason for this edit. It is kept in the delivery note history.");
+        return;
+      }
+      const mappingChanges = buildOdaflowChangePreview();
+      if (mappingChanges) {
+        const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
+        if (unconfirmed.customer || unconfirmed.products.length) {
+          toast.error("Choose a reason for each Odaflow customer or product change before saving.");
           return;
         }
-        const mappingChanges = buildOdaflowChangePreview();
-        if (mappingChanges) {
-          const unconfirmed = filterUnconfirmedOdaflowChanges(mappingChanges, odaflowConfirmedCorrections);
-          if (unconfirmed.customer || unconfirmed.products.length) {
-            toast.error("Choose a reason for each Odaflow customer or product change before saving.");
-            return;
-          }
-        }
-        setSubmitting(true);
+      }
+    }
+    submitLockRef.current = true;
+    setSubmitting(true);
+    try {
+      if (isEditMode && existingDocument) {
         await saveEditedDocument(hasOdaflowConfirmedCorrections ? odaflowConfirmedCorrections : undefined);
         setOdaflowConfirmedCorrections({});
         return;
-      } else {
-        setSubmitting(true);
-        const payload = buildDraftPayload();
-        if (creditOverrideGranted && creditOverrideReason) {
-          (payload as Record<string, unknown>).notes = `[Credit override: ${creditOverrideReason}]`;
-        }
-        const result = await createDocumentApi(type as DocTypeKey, payload);
-        allowLeaveRef.current = true;
-        await deleteDocumentDraftApi(type);
-        toast.success(`${label} draft created.`);
-        if (result.pickPackSyncWarning) toast.warning(result.pickPackSyncWarning);
-        await attachInvoiceCopy(result.id);
-        router.push(`/docs/${type}/${result.id}`);
       }
+      const payload = buildDraftPayload();
+      if (creditOverrideGranted && creditOverrideReason) {
+        (payload as Record<string, unknown>).notes = `[Credit override: ${creditOverrideReason}]`;
+      }
+      const result = await createDocumentApi(type as DocTypeKey, payload);
+      allowLeaveRef.current = true;
+      toast.success(`${label} draft created.`);
+      if (result.pickPackSyncWarning) toast.warning(result.pickPackSyncWarning);
+      void deleteDocumentDraftApi(type).catch(() => {});
+      void attachInvoiceCopy(result.id);
+      router.push(`/docs/${type}/${result.id}`);
     } catch (error) {
+      submitLockRef.current = false;
+      setSubmitting(false);
       const err = error as Error & { status?: number; silent?: boolean };
       if (err.silent) return;
       if (err.status === 403 || err.message?.toLowerCase().includes("forbidden")) {
@@ -2456,8 +2461,6 @@ export function DocumentCreateWizard({
       } else {
         toast.error(err.message || `Failed to ${isEditMode ? "update" : "create"} document.`);
       }
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -3796,6 +3799,7 @@ export function DocumentCreateWizard({
           {step > 1 && (
             <Button
               variant="outline"
+              disabled={submitting}
               onClick={() => {
                 persistWizardProgress(true);
                 setStep((s) => s - 1);
@@ -3804,11 +3808,17 @@ export function DocumentCreateWizard({
               Back
             </Button>
           )}
-          <Button variant="outline" asChild>
-            <Link href={isEditMode && existingDocument ? `/docs/${type}/${existingDocument.id}` : `/docs/${type}`}>
+          {submitting ? (
+            <Button variant="outline" disabled>
               Cancel
-            </Link>
-          </Button>
+            </Button>
+          ) : (
+            <Button variant="outline" asChild>
+              <Link href={isEditMode && existingDocument ? `/docs/${type}/${existingDocument.id}` : `/docs/${type}`}>
+                Cancel
+              </Link>
+            </Button>
+          )}
         </div>
         <div className="flex gap-2">
           {step < 3 && !(lineByLine && step === 2) ? (
@@ -3821,11 +3831,14 @@ export function DocumentCreateWizard({
             </Button>
           ) : step === 3 ? (
             <Button
+              className="shrink-0"
               onClick={() => void onSubmit()}
               disabled={submitting || (deliveryNoteEdit && !editReason.trim()) || Boolean(stockBlockReason) || bakeryCoverBlocked}
+              aria-busy={submitting}
               title={stockBlockReason}
             >
-              {submitting ? (isEditMode ? "Saving..." : "Creating...") : (isEditMode ? "Save changes" : "Create draft")}
+              {submitting ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {submitting ? (isEditMode ? "Saving…" : "Creating…") : (isEditMode ? "Save changes" : "Create draft")}
             </Button>
           ) : null}
           {step < 3 && (
