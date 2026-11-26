@@ -22,6 +22,16 @@ export type WarehouseUpsertInput = {
   status?: string;
 };
 
+export type WarehouseListView = "all" | "active" | "purpose" | "approval";
+
+export type WarehouseCatalogueCounts = Record<WarehouseListView, number>;
+
+export type WarehouseCatalogue = {
+  items: BackendWarehouse[];
+  total: number;
+  counts: WarehouseCatalogueCounts;
+};
+
 export async function fetchWarehousesApi(opts?: { limit?: number; offset?: number }): Promise<BackendWarehouse[]> {
   requireLiveApi("Warehouses");
   const params = new URLSearchParams();
@@ -30,6 +40,39 @@ export async function fetchWarehousesApi(opts?: { limit?: number; offset?: numbe
   const query = params.toString();
   const payload = await apiRequest<{ items: BackendWarehouse[] }>(`/api/master/warehouses${query ? `?${query}` : ""}`);
   return payload.items ?? [];
+}
+
+/**
+ * Stores setup asks the server for the search and the review filter, then reads every matching page.
+ * The browser does not decide which stores exist.
+ */
+export async function fetchWarehouseCatalogueApi(query: { search?: string; view: WarehouseListView }): Promise<WarehouseCatalogue> {
+  requireLiveApi("Warehouses");
+  const pageSize = 200;
+  const search = query.search?.trim() ?? "";
+  const items: BackendWarehouse[] = [];
+  let total = 0;
+  let counts: WarehouseCatalogueCounts = { all: 0, active: 0, purpose: 0, approval: 0 };
+  for (let offset = 0; offset < 5000; offset += pageSize) {
+    const params: Record<string, string> = { view: query.view, limit: String(pageSize), offset: String(offset) };
+    if (search) params.search = search;
+    if (offset === 0) params.counts = "1";
+    const page = await apiRequest<{ items?: BackendWarehouse[]; total?: number; counts?: WarehouseCatalogueCounts }>("/api/master/warehouses", { params });
+    if (!Array.isArray(page.items) || typeof page.total !== "number") {
+      throw new Error("Stores could not be loaded completely. Refresh and search again.");
+    }
+    if (page.counts) counts = page.counts;
+    total = page.total;
+    items.push(...page.items);
+    if (items.length >= total || page.items.length < pageSize) break;
+  }
+  if (items.length < total) throw new Error("Stores could not be loaded completely. Refresh and search again.");
+  return { items, total, counts };
+}
+
+export async function fetchWarehouseApi(id: string): Promise<BackendWarehouse> {
+  requireLiveApi("Warehouse");
+  return apiRequest<BackendWarehouse>(`/api/master/warehouses/${encodeURIComponent(id)}`);
 }
 
 /** The warehouse list defaults to 50 rows. Preparation must see the store that holds the ingredients. */
