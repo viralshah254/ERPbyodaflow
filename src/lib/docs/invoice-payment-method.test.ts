@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import {
+  invoicePaymentChoiceLabel,
   invoicePaymentChoices,
   invoicePaymentMethodToApply,
   parseInvoicePaymentMethod,
@@ -11,10 +12,15 @@ it("keeps cash, cheque, M-Pesa, and bank transfer for other companies", () => {
   expect(invoicePaymentMethodToApply(false, null)).toBeNull();
 });
 
-it("uses M-Pesa only for a bakery and does not keep cash, cheque, or bank transfer", () => {
-  expect(invoicePaymentChoices(true)).toEqual(["MPESA"]);
-  expect(invoicePaymentMethodToApply(true, "CHEQUE")).toBe("MPESA");
-  expect(invoicePaymentMethodToApply(true, null)).toBe("MPESA");
+it("offers M-Pesa and Bank for a bakery, and treats cheque as bank", () => {
+  expect(invoicePaymentChoices(true)).toEqual(["MPESA", "BANK_TRANSFER"]);
+  expect(invoicePaymentChoiceLabel("BANK_TRANSFER", true)).toBe("Bank");
+  expect(invoicePaymentChoiceLabel("CHEQUE", true)).toBe("Bank");
+  expect(invoicePaymentMethodToApply(true, "CHEQUE")).toBe("BANK_TRANSFER");
+  expect(invoicePaymentMethodToApply(true, "BANK_TRANSFER")).toBe("BANK_TRANSFER");
+  expect(invoicePaymentMethodToApply(true, "MPESA")).toBe("MPESA");
+  expect(invoicePaymentMethodToApply(true, "CASH")).toBeNull();
+  expect(invoicePaymentMethodToApply(true, null)).toBeNull();
 });
 
 it("ignores an unknown saved method", () => {
