@@ -17,6 +17,12 @@ it("gives Joy credit notes the same finished-goods sheet as sales orders and inv
   expect(usesInlineQuantitySheet({ type: "invoice", fullCatalogueSheet: true, bakery: true })).toBe(true);
   expect(usesInlineQuantitySheet({ type: "credit-note", fullCatalogueSheet: false, bakery: true })).toBe(false);
 });
+it("gives Joy delivery notes the same finished-goods sheet as sales orders, invoices and credit notes", () => {
+  expect(usesInlineQuantitySheet({ type: "delivery-note", fullCatalogueSheet: true, bakery: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type: "delivery-note", fullCatalogueSheet: true, bakery: true, editing: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type: "delivery-note", fullCatalogueSheet: true })).toBe(false);
+  expect(usesInlineQuantitySheet({ type: "delivery-note", fullCatalogueSheet: false, bakery: true })).toBe(false);
+});
 it("ignores untouched zero catalogue rows but detects quantity, price, tax-code and discount edits", () => {
   const old = [{ id: "id", productId: "queen", description: "Queen", qty: 2, unit: "PCS", unitPrice: 43.1, taxCodeId: "vat" }];
   const line = { id: "id", sourceLineId: "id", productId: "queen", name: "Queen", sku: "1", qty: 2, baseQty: 2, uom: "PCS", price: 43.1, priceReason: "Existing", amount: 86.2, taxCodeId: "vat" };

@@ -628,8 +628,8 @@ export function DocumentCreateWizard({
   const [lines, setLines] = React.useState<DocumentLine[]>([]);
   const usesSalesLayout = type === "sales-order" || type === "invoice";
   const bakeryOrg = isBakeryTemplate(templateId);
-  const bakeryFinishedCatalogue = bakeryOrg && (type === "credit-note" || type === "invoice");
-  const salesLayoutReady = (!usesSalesLayout && !(bakeryOrg && type === "credit-note")) || !currentOrgId || operatingProfile.ready;
+  const bakeryFinishedCatalogue = bakeryOrg && (type === "credit-note" || type === "invoice" || type === "delivery-note");
+  const salesLayoutReady = (!usesSalesLayout && !(bakeryOrg && (type === "credit-note" || type === "delivery-note"))) || !currentOrgId || operatingProfile.ready;
   const sheetFinishedGoods = usesInlineQuantitySheet({
     type,
     fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet,
@@ -2911,7 +2911,7 @@ export function DocumentCreateWizard({
           <span>Ordering from <strong>{hqSupplierName}</strong></span>
         </div>
       )}
-      {explicitSheetEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. Customer defaults are not changed.</p> : null}
+      {explicitSheetEdit && !deliveryNoteEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. Customer defaults are not changed.</p> : null}
       {deliveryNoteEdit ? <p role="status" className="rounded border p-3 text-sm">Changes stay in this form until you choose Save changes. You give a reason when you save, and the delivery note keeps each saved version in its edit history.</p> : null}
       <DocumentStepper
         step={step}
