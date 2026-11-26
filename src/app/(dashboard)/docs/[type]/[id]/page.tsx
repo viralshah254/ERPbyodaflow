@@ -56,7 +56,15 @@ import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
-import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, requiresStampedDeliveryNote } from "@/config/industry";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, FMCG_SELLING_TEMPLATE_IDS, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
+import { customerDeliveryAddressText } from "@/lib/docs/customer-delivery-address";
+import {
+  invoicePaymentChoices,
+  invoicePaymentMethodToApply,
+  INVOICE_PAYMENT_LABELS,
+  parseInvoicePaymentMethod,
+  type InvoicePaymentMethod,
+} from "@/lib/docs/invoice-payment-method";
 import { DeliveryNoteEditHistory } from "@/components/docs/DeliveryNoteEditHistory";
 import { CustomerLpoField } from "@/components/docs/CustomerLpoField";
 import {
@@ -352,6 +360,11 @@ export default function DocViewPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg =
     industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
+  const fmcgSellingOrg = (FMCG_SELLING_TEMPLATE_IDS as readonly string[]).includes(
+    canonicalIndustryTemplateId(templateId),
+  );
+  const fmcgSellingDelivery =
+    fmcgSellingOrg && (type === "sales-order" || type === "invoice" || type === "credit-note");
   const stampRequired = requiresStampedDeliveryNote(templateId);
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
@@ -405,7 +418,9 @@ export default function DocViewPage() {
   }, [billingEmailType, emailDialogOpen, id]);
   const [settleOpen, setSettleOpen] = React.useState(false);
   const [settleStep, setSettleStep] = React.useState<"payment" | "terms">("payment");
-  const [settleMethod, setSettleMethod] = React.useState<"CASH" | "CHEQUE" | "MPESA" | "BANK_TRANSFER">("CASH");
+  const [settleMethod, setSettleMethod] = React.useState<InvoicePaymentMethod>("CASH");
+  const customerPaymentMethodRef = React.useRef<InvoicePaymentMethod | null>(null);
+  const customerPaymentKnownRef = React.useRef(false);
   const [settleReference, setSettleReference] = React.useState("");
   const [paymentTerms, setPaymentTerms] = React.useState<PaymentTermRow[]>([]);
   const [partyNeedsTerms, setPartyNeedsTerms] = React.useState(false);
@@ -462,20 +477,28 @@ export default function DocViewPage() {
   }, [billId, billNumber, billPartyId, showBillBalance]);
 
   React.useEffect(() => {
+    customerPaymentKnownRef.current = false;
+    customerPaymentMethodRef.current = null;
     if (type !== "invoice" || !document?.partyId) {
       setPartyNeedsTerms(false);
+      customerPaymentKnownRef.current = true;
       return;
     }
     let cancelled = false;
     void Promise.all([fetchPartyByIdApi(document.partyId), fetchPaymentTermsApi()])
       .then(([party, terms]) => {
         if (cancelled) return;
+        const saved = parseInvoicePaymentMethod(party?.invoicePaymentMethod);
+        customerPaymentMethodRef.current = saved;
+        customerPaymentKnownRef.current = true;
         setPaymentTerms(terms.filter((term) => term.isActive !== false));
         setPartyNeedsTerms(!party?.paymentTermsId);
         if (party?.paymentTermsId) setSettleTermsId(party.paymentTermsId);
       })
       .catch(() => {
-        if (!cancelled) setPartyNeedsTerms(false);
+        if (cancelled) return;
+        customerPaymentKnownRef.current = true;
+        setPartyNeedsTerms(false);
       });
     return () => {
       cancelled = true;
@@ -485,6 +508,11 @@ export default function DocViewPage() {
   const [notesSaving, setNotesSaving] = React.useState(false);
   const [deliveryDraft, setDeliveryDraft] = React.useState("");
   const [deliverySaving, setDeliverySaving] = React.useState(false);
+  const [customerAddress, setCustomerAddress] = React.useState<{ partyId: string; text: string } | null>(null);
+  const customerAddressSync = React.useRef(new Set<string>());
+  const deliveryDraftRef = React.useRef("");
+  deliveryDraftRef.current = deliveryDraft;
+  const addressDetailsRef = React.useRef<HTMLDetailsElement>(null);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
@@ -889,9 +917,6 @@ export default function DocViewPage() {
     [type, id]
   );
 
-  const invoiceNeedsSettlement =
-    type === "invoice" && Boolean(document) && (!document?.retailPaymentMethod || partyNeedsTerms);
-
   const runPost = React.useCallback(async () => {
     await documentActionApi(type as DocTypeKey, id, "post");
     setDocument((prev) => prev ? { ...prev, status: "POSTED", availableActions: [], availableConversionTargets: [] } : prev);
@@ -944,8 +969,58 @@ export default function DocViewPage() {
   }, [fiscalPostingPreflight, loadFiscalPostingPreflight, signAndPost]);
 
   const requestPost = React.useCallback(async () => {
-    if (invoiceNeedsSettlement) {
-      setSettleStep(document?.retailPaymentMethod ? "terms" : "payment");
+    const bakeryPayments = isBakeryTemplate(templateId);
+    const paymentRecorded = bakeryPayments
+      ? document?.retailPaymentMethod === "MPESA"
+      : Boolean(document?.retailPaymentMethod);
+    let needsTerms = partyNeedsTerms;
+    if (type === "invoice" && document && !paymentRecorded && !bakeryPayments && !customerPaymentKnownRef.current && document.partyId) {
+      try {
+        const party = await fetchPartyByIdApi(document.partyId);
+        const saved = parseInvoicePaymentMethod(party?.invoicePaymentMethod);
+        customerPaymentMethodRef.current = saved;
+        customerPaymentKnownRef.current = true;
+        needsTerms = !party?.paymentTermsId;
+        setPartyNeedsTerms(needsTerms);
+        if (party?.paymentTermsId) setSettleTermsId(party.paymentTermsId);
+      } catch {
+        customerPaymentKnownRef.current = true;
+      }
+    }
+    if (type === "invoice" && document && !paymentRecorded) {
+      const method = invoicePaymentMethodToApply(bakeryPayments, customerPaymentMethodRef.current);
+      if (!method) {
+        setSettleStep("payment");
+        setSettleOpen(true);
+        return;
+      }
+      setActionLoading(true);
+      try {
+        await settleInvoiceApi(id, { method });
+        customerPaymentMethodRef.current = method;
+        setDocument((prev) => prev ? { ...prev, retailPaymentMethod: method, orderChannel: "MANUAL" } : prev);
+        if (needsTerms) {
+          setSettleStep("terms");
+          setSettleOpen(true);
+          return;
+        }
+        if (!(await ensureFiscalPostingReady())) return;
+        await runPost();
+      } catch (error) {
+        const blocked = preflightFromPostingError(error instanceof Error ? error.message : "");
+        if (blocked) {
+          setFiscalPostingPreflight(blocked);
+          setFiscalPostingPreflightOpen(true);
+        } else {
+          reportActionError(error);
+        }
+      } finally {
+        setActionLoading(false);
+      }
+      return;
+    }
+    if (needsTerms && type === "invoice") {
+      setSettleStep("terms");
       setSettleOpen(true);
       return;
     }
@@ -965,11 +1040,14 @@ export default function DocViewPage() {
       setActionLoading(false);
     }
   }, [
-    document?.retailPaymentMethod,
+    document,
     ensureFiscalPostingReady,
-    invoiceNeedsSettlement,
+    id,
+    partyNeedsTerms,
     reportActionError,
     runPost,
+    templateId,
+    type,
   ]);
 
   const retryPostAfterFiscalSetup = React.useCallback(async () => {
@@ -1120,6 +1198,73 @@ export default function DocViewPage() {
   React.useEffect(() => {
     if (!initialLoading && document) setDeliveryDraft(document.deliveryAddress ?? "");
   }, [initialLoading, document?.id, document?.deliveryAddress]);
+
+  React.useEffect(() => {
+    if (!fmcgSellingDelivery || !document?.partyId) {
+      setCustomerAddress(null);
+      return;
+    }
+    const partyId = document.partyId;
+    let active = true;
+    setCustomerAddress((current) => (current?.partyId === partyId ? current : null));
+    void fetchPartyByIdApi(partyId)
+      .then((party) => {
+        if (!active) return;
+        setCustomerAddress({ partyId, text: customerDeliveryAddressText(party?.address) });
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustomerAddress({ partyId, text: "" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [fmcgSellingDelivery, document?.partyId, document?.id]);
+
+  React.useEffect(() => {
+    if (!fmcgSellingDelivery || document?.status !== "DRAFT" || !document.partyId || !document.id) return;
+    if (!customerAddress || customerAddress.partyId !== document.partyId) return;
+    const fromCustomer = customerAddress.text.trim();
+    if (!fromCustomer || document.deliveryAddress?.trim()) return;
+    if (customerAddressSync.current.has(document.id)) return;
+    const typed = deliveryDraftRef.current.trim();
+    const saved = (document.deliveryAddress ?? "").trim();
+    if (typed && typed !== saved) return;
+    customerAddressSync.current.add(document.id);
+    setDeliveryDraft(fromCustomer);
+    const docId = document.id;
+    const docType = type as DocTypeKey;
+    void patchDocumentApi(docType, docId, { deliveryAddress: fromCustomer })
+      .then(() => {
+        if (docId === id) return refreshDocument(true);
+      })
+      .catch(() => {
+        customerAddressSync.current.delete(docId);
+      });
+  }, [
+    fmcgSellingDelivery,
+    document?.status,
+    document?.partyId,
+    document?.id,
+    document?.deliveryAddress,
+    customerAddress,
+    type,
+    id,
+    refreshDocument,
+  ]);
+
+  const customerNeedsAddress = Boolean(
+    fmcgSellingDelivery &&
+      document?.status === "DRAFT" &&
+      document.partyId &&
+      customerAddress?.partyId === document.partyId &&
+      customerAddress.text === "",
+  );
+
+  React.useEffect(() => {
+    if (!customerNeedsAddress || !addressDetailsRef.current) return;
+    addressDetailsRef.current.open = true;
+  }, [customerNeedsAddress, document?.id]);
 
   const creditQtyDirty = React.useMemo(() => {
     if (!isCreditNoteDoc(type) || document?.status !== "DRAFT") return false;
@@ -3808,7 +3953,7 @@ export default function DocViewPage() {
               <div className="space-y-2">
                 <Label>Payment method</Label>
                 <div className="grid grid-cols-2 gap-2">
-                  {(["CASH", "CHEQUE", "MPESA", "BANK_TRANSFER"] as const).map((method) => (
+                  {invoicePaymentChoices(isBakeryTemplate(templateId)).map((method) => (
                     <Button
                       key={method}
                       type="button"
@@ -3816,7 +3961,7 @@ export default function DocViewPage() {
                       variant={settleMethod === method ? "default" : "outline"}
                       onClick={() => setSettleMethod(method)}
                     >
-                      {method === "BANK_TRANSFER" ? "Bank transfer" : method === "MPESA" ? "M-Pesa" : method === "CASH" ? "Cash" : "Cheque"}
+                      {INVOICE_PAYMENT_LABELS[method]}
                     </Button>
                   ))}
                 </div>
@@ -3866,6 +4011,7 @@ export default function DocViewPage() {
                         method: settleMethod,
                         reference: settleMethod === "CASH" ? undefined : settleReference.trim() || undefined,
                       });
+                      customerPaymentMethodRef.current = settleMethod;
                       setDocument((prev) => prev ? { ...prev, retailPaymentMethod: settleMethod, orderChannel: "MANUAL" } : prev);
                       if (partyNeedsTerms) {
                         setSettleStep("terms");
