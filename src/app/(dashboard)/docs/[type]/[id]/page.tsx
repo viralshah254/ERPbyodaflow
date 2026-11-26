@@ -56,7 +56,8 @@ import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
-import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
+import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, FMCG_SELLING_TEMPLATE_IDS, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
+import { customerDeliveryAddressText } from "@/lib/docs/customer-delivery-address";
 import {
   invoicePaymentAlreadyRecorded,
   invoicePaymentChoiceLabel,
@@ -360,6 +361,11 @@ export default function DocViewPage() {
   const industryCategory = useOrgContextStore((s) => s.industryCategory);
   const fmcgOrg =
     industryCategory === "FMCG" || (industryCategory !== "SEAFOOD" && isFmcgOrg(templateId));
+  const fmcgSellingOrg = (FMCG_SELLING_TEMPLATE_IDS as readonly string[]).includes(
+    canonicalIndustryTemplateId(templateId),
+  );
+  const fmcgSellingDelivery =
+    fmcgSellingOrg && (type === "sales-order" || type === "invoice" || type === "credit-note");
   const stampRequired = requiresStampedDeliveryNote(templateId);
   const config = getDocTypeConfig(type);
   const label = config ? t(config.termKey, terminology) : type;
@@ -503,6 +509,11 @@ export default function DocViewPage() {
   const [notesSaving, setNotesSaving] = React.useState(false);
   const [deliveryDraft, setDeliveryDraft] = React.useState("");
   const [deliverySaving, setDeliverySaving] = React.useState(false);
+  const [customerAddress, setCustomerAddress] = React.useState<{ partyId: string; text: string } | null>(null);
+  const customerAddressSync = React.useRef(new Set<string>());
+  const deliveryDraftRef = React.useRef("");
+  deliveryDraftRef.current = deliveryDraft;
+  const addressDetailsRef = React.useRef<HTMLDetailsElement>(null);
   const [landedAllocation, setLandedAllocation] = React.useState<ExistingLandedCostAllocation | null>(null);
   const [convertOpen, setConvertOpen] = React.useState(false);
   const [convertType, setConvertType] = React.useState<DocTypeKey | null>(null);
@@ -1188,6 +1199,80 @@ export default function DocViewPage() {
     if (!initialLoading && document) setDeliveryDraft(document.deliveryAddress ?? "");
   }, [initialLoading, document?.id, document?.deliveryAddress]);
 
+  React.useEffect(() => {
+    if (!fmcgSellingDelivery || !document?.partyId) {
+      setCustomerAddress(null);
+      return;
+    }
+    const partyId = document.partyId;
+    let active = true;
+    setCustomerAddress((current) => (current?.partyId === partyId ? current : null));
+    void fetchPartyByIdApi(partyId)
+      .then((party) => {
+        if (!active) return;
+        setCustomerAddress({ partyId, text: customerDeliveryAddressText(party?.address) });
+      })
+      .catch(() => {
+        if (!active) return;
+        setCustomerAddress(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [fmcgSellingDelivery, document?.partyId, document?.id]);
+
+  React.useEffect(() => {
+    if (!fmcgSellingDelivery || document?.status !== "DRAFT" || !document.partyId || !document.id) return;
+    if (!customerAddress || customerAddress.partyId !== document.partyId) return;
+    const fromCustomer = customerAddress.text.trim();
+    if (!fromCustomer || document.deliveryAddress?.trim()) return;
+    if (customerAddressSync.current.has(document.id)) return;
+    const typed = deliveryDraftRef.current.trim();
+    const saved = (document.deliveryAddress ?? "").trim();
+    if (typed && typed !== saved) return;
+    customerAddressSync.current.add(document.id);
+    setDeliveryDraft(fromCustomer);
+    const docId = document.id;
+    const docType = type as DocTypeKey;
+    void patchDocumentApi(docType, docId, { deliveryAddress: fromCustomer })
+      .then(() => {
+        if (docId === id) return refreshDocument(true);
+      })
+      .catch(() => {
+        customerAddressSync.current.delete(docId);
+      });
+  }, [
+    fmcgSellingDelivery,
+    document?.status,
+    document?.partyId,
+    document?.id,
+    document?.deliveryAddress,
+    customerAddress,
+    type,
+    id,
+    refreshDocument,
+  ]);
+
+  const customerNeedsAddress = Boolean(
+    fmcgSellingDelivery &&
+      document?.status === "DRAFT" &&
+      document.partyId &&
+      customerAddress?.partyId === document.partyId &&
+      customerAddress.text === "",
+  );
+
+  React.useEffect(() => {
+    const fillingFromCustomer = Boolean(
+      fmcgSellingDelivery &&
+        document?.status === "DRAFT" &&
+        customerAddress?.text &&
+        customerAddress.partyId === document?.partyId &&
+        !document?.deliveryAddress?.trim(),
+    );
+    if ((!customerNeedsAddress && !fillingFromCustomer) || !addressDetailsRef.current) return;
+    addressDetailsRef.current.open = true;
+  }, [customerNeedsAddress, customerAddress, document?.deliveryAddress, document?.partyId, document?.status, document?.id, fmcgSellingDelivery]);
+
   const creditQtyDirty = React.useMemo(() => {
     if (!isCreditNoteDoc(type) || document?.status !== "DRAFT") return false;
     return (document.lines ?? []).some((line) => {
@@ -1827,7 +1912,7 @@ export default function DocViewPage() {
                       }
                     />
                   )}
-                {(type === "sales-order" || type === "delivery-note" || type === "invoice") && document ? (
+                {(type === "sales-order" || type === "delivery-note" || type === "invoice" || (type === "credit-note" && fmcgSellingOrg)) && document ? (
                   <div className="mt-4 pt-4 border-t space-y-2">
                     <Label htmlFor="document-delivery-address">{type === "invoice" || type === "delivery-note" ? "Ship to" : "Delivery address"}</Label>
                     <p className="text-xs text-muted-foreground">
@@ -1837,6 +1922,21 @@ export default function DocViewPage() {
                           ? "Customer location for this delivery."
                           : "Where these goods are delivered."}
                     </p>
+                    {fmcgSellingDelivery && customerAddress?.text && (deliveryDraft.trim() || document.deliveryAddress?.trim()) === customerAddress.text ? (
+                      <p className="text-xs text-muted-foreground">Filled from the customer address.</p>
+                    ) : null}
+                    {customerNeedsAddress ? (
+                      <div role="alert" className="max-w-3xl rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-800/70 dark:bg-amber-950/40 dark:text-amber-50">
+                        <p className="font-medium flex items-start gap-2 leading-snug">
+                          <Icons.AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+                          <span>
+                            {deliveryDraft.trim()
+                              ? "Save this address on the customer. The next sales order, invoice, and credit note fill it in, so nobody has to type it again."
+                              : "This customer has no address. Add where these goods are delivered, then save it on the customer. Later sales orders, invoices, and credit notes fill it in."}
+                          </span>
+                        </p>
+                      </div>
+                    ) : null}
                     <SfaDeliveryAddress
                       address={document.deliveryAddress}
                       isSfaOrder={document.externalSource === "odaflow" || Boolean(document.odaflowChannel)}
@@ -1856,15 +1956,28 @@ export default function DocViewPage() {
                             type="button"
                             size="sm"
                             variant="secondary"
-                            disabled={deliverySaving || deliveryDraft === (document.deliveryAddress ?? "")}
+                            disabled={
+                              deliverySaving ||
+                              !deliveryDraft.trim() ||
+                              (deliveryDraft === (document.deliveryAddress ?? "") && !customerNeedsAddress)
+                            }
                             onClick={async () => {
+                              const savedText = deliveryDraft.trim();
+                              const storedOnCustomer = customerNeedsAddress;
                               setDeliverySaving(true);
                               try {
                                 await patchDocumentApi(type as DocTypeKey, id, {
-                                  deliveryAddress: deliveryDraft.trim(),
+                                  deliveryAddress: savedText,
                                 });
+                                if (storedOnCustomer && document.partyId) {
+                                  setCustomerAddress({ partyId: document.partyId, text: savedText });
+                                }
                                 await refreshDocument(true);
-                                toast.success("Delivery address saved.");
+                                toast.success(
+                                  storedOnCustomer
+                                    ? "Address saved on the customer and on this document."
+                                    : "Delivery address saved.",
+                                );
                               } catch (e) {
                                 toast.error((e as Error).message);
                               } finally {
@@ -1872,7 +1985,7 @@ export default function DocViewPage() {
                               }
                             }}
                           >
-                            {deliverySaving ? "Saving…" : "Save address"}
+                            {deliverySaving ? "Saving…" : customerNeedsAddress ? "Save on customer" : "Save address"}
                           </Button>
                         </>
                       ) : (
@@ -2601,30 +2714,39 @@ export default function DocViewPage() {
                     },
                   ]
                 : []),
-              ...(document.joyRoute ? [
-                { label: "Delivery route", value: document.joyRoute.routeName },
-                { label: "Delivery date", value: document.joyRoute.deliveryDate },
+              ...(document.joyRoute || (isBakeryTemplate(templateId) && ["sales-order", "invoice", "credit-note"].includes(type)) ? [
+                ...(document.joyRoute?.routeName ? [
+                  { label: "Delivery route", value: document.joyRoute.routeName },
+                  { label: "Delivery date", value: document.joyRoute.deliveryDate || "—" },
+                ] : []),
                 {
                   label: "Sales rep",
+                  tone: type === "sales-order" && !document.joyRoute?.salesRep?.trim() ? "warning" as const : undefined,
                   value: (
                     <EditableSalesRep
-                      id="order-sales-rep"
-                      value={document.joyRoute.salesRepId && document.joyRoute.salesRep
+                      id="document-sales-rep"
+                      emphasizeEmpty={type === "sales-order" && !document.joyRoute?.salesRep?.trim()}
+                      value={document.joyRoute?.salesRepId && document.joyRoute.salesRep
                         ? { id: document.joyRoute.salesRepId, name: document.joyRoute.salesRep, phone: document.joyRoute.salesRepPhone }
                         : null}
-                      canEdit={type === "sales-order" && canWrite && document.status !== "CANCELLED"}
+                      canEdit={["sales-order", "invoice", "credit-note"].includes(type) && canWrite && document.status !== "CANCELLED"}
                       onSave={async (rep) => {
-                        const { joyRoute } = await setJoyOrderSalesRep(document.id, rep?.id ?? "");
+                        const docType = type === "invoice" || type === "credit-note" ? type : "sales-order";
+                        const { joyRoute } = await setJoyOrderSalesRep(document.id, rep?.id ?? "", docType);
                         setDocument((prev) => (prev ? { ...prev, joyRoute } : prev));
-                        toast.success(rep ? `Sales rep set to ${rep.name}.` : "Sales rep removed.");
+                        toast.success(rep
+                          ? `Sales rep set to ${rep.name}${joyRoute.tillNumber ? `. Till ${joyRoute.tillNumber}.` : "."}`
+                          : "Sales rep removed.");
                       }}
                     />
                   ),
                 },
-                { label: "M-Pesa till", value: document.joyRoute.tillNumber || "—" },
-                ...(document.sourceWarehouseId && document.sourceWarehouseId === document.warehouseId
-                  ? []
-                  : [{ label: "Pick from store", value: sourceWarehouseLabel ?? "DISPATCH" }]),
+                { label: "M-Pesa till", value: document.joyRoute?.tillNumber || "—" },
+                ...(document.joyRoute?.routeWarehouseId
+                  ? (document.sourceWarehouseId && document.sourceWarehouseId === document.warehouseId
+                    ? []
+                    : [{ label: "Pick from store", value: sourceWarehouseLabel ?? "DISPATCH" }])
+                  : []),
               ] : []),
               ...(type === "sales-order" && routeDispatch && !document.joyRoute
                 ? [
@@ -3015,11 +3137,12 @@ export default function DocViewPage() {
         ) : null}
         {type === "purchase-order" ? <PurchaseOrderEmailPanel id={id} status={document.status} onChanged={() => refreshDocument(true)} /> : null}
         {compactDocument && (
-          <details className="rounded-md border bg-card px-3 py-2">
+          <details ref={addressDetailsRef} className="rounded-md border bg-card px-3 py-2">
             <summary className="cursor-pointer text-sm font-medium">
               {type === "delivery-note"
                 ? "Warehouse, delivery details and history"
-                : draftCredit ? "Notes and document history"
+                : draftCredit
+                  ? (fmcgSellingOrg ? "Address, notes and document history" : "Notes and document history")
                   : type === "bill" && landedAllocation ? "Additional costs, references and history"
                   : isPurchaseDoc ? "References, notes and history"
                   : canApplyPriceTagInDetails ? "Pricing, address, notes and history" : "Address, notes and history"}
