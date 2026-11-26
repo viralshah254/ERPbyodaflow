@@ -33,6 +33,11 @@ export function CreditNoteEditor({
   const supplier = document.type === "purchase-credit-note";
   const returnEffect = supplier ? "SUPPLIER_RETURN" : "PHYSICAL_RETURN";
   const source = document.sourceDocument;
+  const covers = document.coveredInvoices?.length
+    ? document.coveredInvoices
+    : source
+      ? [source]
+      : [];
   const preview = creditQuantityPreview(document.lines, quantities);
   const [warehouses, setWarehouses] = React.useState<Array<{ id: string; label: string }>>([]);
   const [warehouseError, setWarehouseError] = React.useState(false);
@@ -57,8 +62,17 @@ export function CreditNoteEditor({
           <p className="font-medium [overflow-wrap:anywhere]">{partyName}</p>
         </div>
         <div>
-          <p className="text-xs text-muted-foreground">{supplier ? "Original bill" : "Original invoice"}</p>
-          {source ? <Link className="font-medium text-primary underline-offset-2 hover:underline" href={`/docs/${source.typeKey}/${source.id}`}>{source.number}</Link> : <span>Unlinked credit</span>}
+          <p className="text-xs text-muted-foreground">{covers.length > 1 ? "Invoices" : supplier ? "Original bill" : "Invoice"}</p>
+          {covers.length ? (
+            <p className="font-medium">
+              {covers.map((item, index) => (
+                <React.Fragment key={item.id}>
+                  {index > 0 ? <span className="text-muted-foreground"> · </span> : null}
+                  <Link className="text-primary underline-offset-2 hover:underline" href={`/docs/${item.typeKey}/${item.id}`}>{item.number}</Link>
+                </React.Fragment>
+              ))}
+            </p>
+          ) : <span>Unlinked credit</span>}
         </div>
         {document.priceListName && <div><p className="text-xs text-muted-foreground">Price list</p><p className="font-medium break-words">{document.priceListName}</p></div>}
       </div>

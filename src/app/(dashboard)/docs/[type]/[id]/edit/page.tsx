@@ -18,6 +18,8 @@ import { odaflowSourceFromDetail } from "@/lib/odaflow/sales-order-source";
 import { useCanWriteDocType, useSessionReady } from "@/lib/rbac/use-write-guard";
 import { useAuthStore } from "@/stores/auth-store";
 import { usesInlineQuantitySheet } from "@/lib/docs/inline-quantity-sheet";
+import { isBakeryTemplate } from "@/config/industry";
+import { useOrgContextStore } from "@/stores/orgContextStore";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
@@ -32,7 +34,13 @@ export default function DocEditPage() {
   const canWrite = useCanWriteDocType(type);
   const orgId = useAuthStore((state) => state.org?.orgId);
   const operatingProfile = useOperatingProfile(orgId);
-  const explicitSheetEdit = usesInlineQuantitySheet({ type, editing: true, fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet });
+  const templateId = useOrgContextStore((state) => state.templateId);
+  const explicitSheetEdit = usesInlineQuantitySheet({
+    type,
+    editing: true,
+    fullCatalogueSheet: operatingProfile.fullCatalogueOrderSheet,
+    bakery: isBakeryTemplate(templateId),
+  });
   const sessionReady = useSessionReady();
 
   const [loading, setLoading] = React.useState(true);

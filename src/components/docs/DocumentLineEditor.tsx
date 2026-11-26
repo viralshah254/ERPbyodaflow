@@ -27,7 +27,8 @@ import {
   setProductsCache,
   subscribeProductsCache,
 } from "@/lib/data/products.repo";
-import { displayItemCode, numericItemCodeSort } from "@/lib/products/item-code";
+import { displayItemCode, isNumericItemCode, numericItemCodeSort } from "@/lib/products/item-code";
+import { ItemCodeMark } from "@/components/products/ItemCodeMark";
 import type { ProductRow } from "@/lib/types/masters";
 import { fetchProductApi, fetchProductsApi, fetchProductsPageApi } from "@/lib/api/products";
 import { isApiConfigured } from "@/lib/api/client";
@@ -117,6 +118,8 @@ interface DocumentLineEditorProps {
    * No search, browse or row removal; quantities left at zero are not saved.
    */
   fixedOrderSheet?: boolean;
+  /** Finished goods only, including when the pack-size name rule is off. Joy credit notes and invoices. */
+  finishedGoodsOnly?: boolean;
   lineByLine?: boolean;
   /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
   repriceExistingRevision?: number;
@@ -268,6 +271,7 @@ export function DocumentLineEditor({
   productFilter,
   sheetFinishedGoods = false,
   fixedOrderSheet = false,
+  finishedGoodsOnly = false,
   lineByLine = false,
   repriceExistingRevision = 0,
   taxCodes = [],
@@ -288,6 +292,7 @@ export function DocumentLineEditor({
 }: DocumentLineEditorProps) {
   const inlineCatalogue = lineByLine && !fmcgOrg;
   const fixedSheet = sheetFinishedGoods && fixedOrderSheet;
+  const catalogueFinishedOnly = finishedGoodsOnly || packSizeFromName;
   const linesRef = React.useRef(lines);
   linesRef.current = lines;
   const editorRef = React.useRef<HTMLDivElement | null>(null);
@@ -457,7 +462,7 @@ export function DocumentLineEditor({
     const load = fixedSheet
       ? loadFixedSheet()
       : sheetFinishedGoods
-        ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName }).then((page) => {
+        ? fetchFinishedGoodsPage({ finishedGoodsOnly: catalogueFinishedOnly }).then((page) => {
             nextSheetCursor = page.nextCursor;
             return page.items;
           })
@@ -496,7 +501,7 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, packSizeFromName, catalogRetry, lineByLine, fmcgOrg, fixedSheet]);
+  }, [productFilter, mode, sheetFinishedGoods, catalogueFinishedOnly, catalogRetry, lineByLine, fmcgOrg, fixedSheet]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
@@ -1264,7 +1269,7 @@ export function DocumentLineEditor({
       void Promise.all(
         queries.map((search) =>
           (sheetFinishedGoods
-            ? fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, search, limit: 30 }).then((page) => page.items)
+            ? fetchFinishedGoodsPage({ finishedGoodsOnly: catalogueFinishedOnly, search, limit: 30 }).then((page) => page.items)
             : fetchProductsApi({
                 purchasable: productFilter === "purchasable" ? true : undefined,
                 sellable: productFilter === "sellable" ? true : undefined,
@@ -1286,7 +1291,7 @@ export function DocumentLineEditor({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [packSizeFromName, productFilter, searchOpen, searchSplit.stripped, searchSplit.text, sheetFinishedGoods]);
+  }, [catalogueFinishedOnly, productFilter, searchOpen, searchSplit.stripped, searchSplit.text, sheetFinishedGoods]);
 
   const browsingCatalogue = lineByLine && fmcgOrg && !queryForList.trim();
   const searchResults = React.useMemo(() => {
@@ -1294,15 +1299,17 @@ export function DocumentLineEditor({
     for (const p of products) byId.set(p.id, p);
     if (remoteSearchKey === searchSplit.text) for (const p of remoteMatches) byId.set(p.id, p);
     const q = queryForList.trim();
-    const finishedOnly = sheetFinishedGoods && packSizeFromName;
+    const finishedOnly = sheetFinishedGoods && catalogueFinishedOnly;
     const ranked = preferExactProductIdentifiers([...byId.values()]
       .filter((p) => {
         if (finishedOnly && p.itemRole && p.itemRole !== "FINISHED") return false;
         return inChip(p) && (!q || (remoteSearchKey === searchSplit.text && remoteMatches.some((item) => item.id === p.id)) || productMatchesLineSearch(p, q));
       }), q)
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => sheetFinishedGoods
+        ? numericItemCodeSort(a) - numericItemCodeSort(b) || a.name.localeCompare(b.name)
+        : a.name.localeCompare(b.name));
     return browsingCatalogue ? ranked : ranked.slice(0, q ? 40 : 30);
-  }, [browsingCatalogue, inChip, packSizeFromName, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text, sheetFinishedGoods]);
+  }, [browsingCatalogue, catalogueFinishedOnly, inChip, products, queryForList, remoteMatches, remoteSearchKey, searchSplit.text, sheetFinishedGoods]);
 
   React.useEffect(() => {
     setHighlightIndex(0);
@@ -1461,14 +1468,14 @@ export function DocumentLineEditor({
     if (!sheetFinishedGoods || !sheetCatalogReady || sheetCursor == null || !query || !isApiConfigured()) return;
     const generation = sheetGenerationRef.current;
     const timer = window.setTimeout(() => {
-      void fetchFinishedGoodsPage({ finishedGoodsOnly: packSizeFromName, search: query, limit: 30 })
+      void fetchFinishedGoodsPage({ finishedGoodsOnly: catalogueFinishedOnly, search: query, limit: 30 })
         .then((page) => appendSheetProducts(page.items, generation))
         .catch(() => {});
     }, 250);
     return () => {
       window.clearTimeout(timer);
     };
-  }, [appendSheetProducts, packSizeFromName, searchQuery, sheetCatalogReady, sheetCursor, sheetFinishedGoods]);
+  }, [appendSheetProducts, catalogueFinishedOnly, searchQuery, sheetCatalogReady, sheetCursor, sheetFinishedGoods]);
 
   const moveFieldFocus = (lineId: string, field: "qty" | "price", dir: -1 | 1) => {
     const idx = displayedLines.findIndex((l) => l.id === lineId);
@@ -1675,13 +1682,18 @@ export function DocumentLineEditor({
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => addFromSearch(p, false)}
                     >
-                      <span className="min-w-0 flex-1">
-                        <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">
-                          {[p.sku, p.size?.trim(), productGroupLabel(productGroupKey(p))]
-                            .filter(Boolean)
-                            .join(" · ")}
-                          {qtyForAdd ? ` · Add at qty ${qtyForAdd}` : ""}
+                      <span className="flex min-w-0 flex-1 items-start gap-2">
+                        {isNumericItemCode(displayItemCode(p)) ? (
+                          <ItemCodeMark code={displayItemCode(p)} className="mt-0.5" />
+                        ) : null}
+                        <span className="min-w-0 flex-1">
+                          <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {[isNumericItemCode(displayItemCode(p)) ? null : p.sku, p.size?.trim(), productGroupLabel(productGroupKey(p))]
+                              .filter(Boolean)
+                              .join(" · ")}
+                            {qtyForAdd ? ` · Add at qty ${qtyForAdd}` : ""}
+                          </span>
                         </span>
                       </span>
                     </button>
@@ -1880,9 +1892,7 @@ export function DocumentLineEditor({
                 )}
               >
                   <td className="px-2 py-2 align-middle">
-                    <span className="block truncate text-sm tabular-nums" title={itemId || undefined}>
-                      {itemId || "—"}
-                    </span>
+                    {itemId ? <ItemCodeMark code={itemId} /> : <span className="text-sm text-muted-foreground">—</span>}
                   </td>
                   <td className="min-w-0 px-3 py-2">
                     <div className="flex min-w-0 items-start gap-1">

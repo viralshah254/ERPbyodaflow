@@ -24,6 +24,9 @@ import { parseTransferPrefill, parseTransferReturnTo, transferBackLink, type Tra
 import { useOperatingProfile } from "@/lib/fmcg/operating-profile";
 import { useAuthStore } from "@/stores/auth-store";
 import { useOrgContextStore } from "@/stores/orgContextStore";
+import { isBakeryTemplate } from "@/config/industry";
+import { displayItemCode, isNumericItemCode, numericItemCodeSort } from "@/lib/products/item-code";
+import { ItemCodeMark } from "@/components/products/ItemCodeMark";
 import { productionVoice } from "@/lib/manufacturing/production-language";
 import { cn } from "@/lib/utils";
 
@@ -57,8 +60,14 @@ function scopeInfo(scope: ProductScope) {
   return SCOPES.find((row) => row.value === scope) ?? SCOPES[0];
 }
 
-/** Every product of one material type the source store holds, in item-code order. */
-async function fetchStockSheet(warehouseId: string, toWarehouseId: string | undefined, scope: ProductScope): Promise<TransferStockRow[]> {
+/** Whole-number item codes first: 1, 2, 10. Codes that are not numbers stay after them, by name. */
+function compareTransferItemCode(a: TransferStockRow, b: TransferStockRow): number {
+  const byCode = numericItemCodeSort({ sku: a.sku, code: a.code }) - numericItemCodeSort({ sku: b.sku, code: b.code });
+  return byCode || a.name.localeCompare(b.name);
+}
+
+/** Every product of one material type the source store holds. Joy’s sheet is item-code order from 1. */
+async function fetchStockSheet(warehouseId: string, toWarehouseId: string | undefined, scope: ProductScope, byItemCode = false): Promise<TransferStockRow[]> {
   const rows: TransferStockRow[] = [];
   for (let page = 0; page < SHEET_MAX_PAGES; page += 1) {
     const result = await fetchTransferStock({
@@ -71,7 +80,7 @@ async function fetchStockSheet(warehouseId: string, toWarehouseId: string | unde
     rows.push(...result.items);
     if (!result.hasMore || !result.items.length) break;
   }
-  return rows;
+  return byItemCode ? rows.sort(compareTransferItemCode) : rows;
 }
 
 function matchesProduct(row: TransferStockRow, needle: string): boolean {
@@ -165,6 +174,30 @@ function shortStore(label: string | undefined): string {
 
 function productCodes(row: TransferStockRow): string {
   return [...new Set([row.sku, row.code, row.barcode].filter(Boolean))].join(" · ");
+}
+
+/** Numeric item code, kept apart from barcode and any other identifier. */
+function transferItemCode(row: TransferStockRow): { code: string; numeric: boolean; rest: string } {
+  const code = displayItemCode(row);
+  const numeric = isNumericItemCode(code);
+  const rest = [...new Set([row.sku, row.code, row.barcode].filter((value): value is string => Boolean(value)))]
+    .filter((value) => value !== code)
+    .join(" · ");
+  return { code, numeric, rest };
+}
+
+function ProductIdentity({ row, note }: { row: TransferStockRow; note?: string }) {
+  const identity = transferItemCode(row);
+  const extra = [identity.numeric ? identity.rest : productCodes(row), note].filter(Boolean).join(" · ");
+  return (
+    <span className="flex min-w-0 flex-1 items-start gap-2">
+      {identity.numeric ? <ItemCodeMark code={identity.code} className="mt-0.5" /> : null}
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-medium">{row.name}</span>
+        {extra ? <span className="block truncate text-xs font-normal text-muted-foreground">{extra}</span> : null}
+      </span>
+    </span>
+  );
 }
 
 function storeOptions(warehouses: LookupOption[], query: string, side: "from" | "to"): AsyncSearchableSelectOption[] {
@@ -353,10 +386,7 @@ function ProductSearch({ fromWarehouseId, toWarehouseId, fromShort, toShort, pic
                   onClick={() => choose(row)}
                   className={cn("flex w-full items-center gap-3 border-b px-3 py-2.5 text-left last:border-b-0", index === active ? "bg-muted" : "")}
                 >
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium">{row.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{productCodes(row)}</span>
-                  </span>
+                  <ProductIdentity row={row} />
                   {added ? <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Added</span> : null}
                   <StockFigures row={row} fromShort={fromShort} toShort={toShort} />
                 </button>
@@ -505,10 +535,7 @@ function BrowseStockDialog({ open, onOpenChange, fromWarehouseId, toWarehouseId,
                       <li key={row.productId}>
                         <label htmlFor={id} className={cn("flex cursor-pointer items-center gap-3 px-4 py-2.5 sm:px-5", added ? "cursor-default opacity-60" : "hover:bg-muted/40", isChecked && !added && "bg-primary/[0.05]")}>
                           <Checkbox id={id} checked={isChecked} disabled={added} onCheckedChange={() => toggle(row)} aria-label={`Select ${row.name}`} />
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate text-sm font-medium">{row.name}</span>
-                            <span className="block truncate text-xs text-muted-foreground">{productCodes(row)}{added ? " · already in this transfer" : ""}</span>
-                          </span>
+                          <ProductIdentity row={row} note={added ? "already in this transfer" : undefined} />
                           <StockFigures row={row} fromShort={fromShort} toShort={toShort} />
                         </label>
                       </li>
@@ -562,6 +589,7 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
   onRemove?: (productId: string) => void;
 }) {
   const line = draft ?? { productId: row.productId, qty: "", unit: row.uom };
+  const identity = transferItemCode(row);
   const { base, alternates, unit, factor, baseQty, over } = describeLine(line, row, units);
   const hint = `transfer-stock-${encodeURIComponent(row.productId)}`;
   const picked = Number(line.qty) > 0 && Boolean(factor);
@@ -577,8 +605,15 @@ const TransferRow = React.memo(function TransferRow({ row, line: draft, units, h
       className={cn("border-t align-top", lacking ? "bg-destructive/[0.045]" : over ? "bg-destructive/[0.06]" : picked ? "bg-primary/[0.04]" : "")}
     >
       <th scope="row" className={cn("border-l-2 px-4 py-3 text-left font-medium", edge, lacking || over ? "border-l-destructive" : picked ? "border-l-primary" : "border-l-transparent")}>
-        {row.name}
-        <span className="block text-xs font-normal text-muted-foreground">{productCodes(row)}</span>
+        <span className="flex items-start gap-2">
+          {identity.numeric ? <ItemCodeMark code={identity.code} className="mt-0.5" /> : null}
+          <span className="min-w-0">
+            <span className="block">{row.name}</span>
+            {identity.rest || !identity.numeric ? (
+              <span className="block text-xs font-normal text-muted-foreground">{identity.numeric ? identity.rest : productCodes(row)}</span>
+            ) : null}
+          </span>
+        </span>
         {need !== undefined ? (
           <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             <span className={cn(
@@ -747,7 +782,9 @@ export default function NewTransferPage() {
   const [recentTo, setRecentTo] = React.useState<string[]>([]);
   const [browseOpen, setBrowseOpen] = React.useState(false);
   const profile = useOperatingProfile(orgId);
-  const makeVerb = productionVoice(useOrgContextStore((s) => s.templateId)) === "bakery" ? "Bake" : "Make";
+  const templateId = useOrgContextStore((s) => s.templateId);
+  const bakeryTransfer = isBakeryTemplate(templateId);
+  const makeVerb = productionVoice(templateId) === "bakery" ? "Bake" : "Make";
   const [scope, setScope] = React.useState<ProductScope>("FINISHED");
   /** Orgs on the fixed sales order sheet transfer the same way: every product of the chosen type listed, type the quantity. */
   const sheetMode = profile.fixedOrderSheet;
@@ -882,7 +919,7 @@ export default function NewTransferPage() {
     const keep = [...need, ...pickedRef.current.filter((id) => !need.includes(id) && Number(linesRef.current[id]?.qty) > 0)];
     setStockLoading(true);
     setStockError("");
-    void fetchStockSheet(fromWarehouseId, to, scope)
+    void fetchStockSheet(fromWarehouseId, to, scope, bakeryTransfer)
       .then(async (sheet) => {
         const listed = new Set(sheet.map((row) => row.productId));
         const extraIds = keep.filter((id) => !listed.has(id));
@@ -908,7 +945,7 @@ export default function NewTransferPage() {
     return () => {
       cancelled = true;
     };
-  }, [sheetMode, scope, fromWarehouseId, toWarehouseId, stockRefresh]);
+  }, [sheetMode, scope, fromWarehouseId, toWarehouseId, stockRefresh, bakeryTransfer]);
 
   /** Re-read stock for the products already in the transfer whenever either store changes. */
   React.useEffect(() => {

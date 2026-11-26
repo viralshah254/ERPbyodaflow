@@ -9,6 +9,13 @@ it.each(["sales-order", "invoice"])("uses the same inline sheet when creating an
 it("retains other companies' configured create flow without widening editing or other document types", () => {
   expect(usesInlineQuantitySheet({ type: "sales-order", fullCatalogueSheet: false, prefillSalesOrders: true })).toBe(true);
   expect(usesInlineQuantitySheet({ type: "bill", fullCatalogueSheet: true, editing: true })).toBe(false);
+  expect(usesInlineQuantitySheet({ type: "credit-note", fullCatalogueSheet: true })).toBe(false);
+});
+it("gives Joy credit notes the same finished-goods sheet as sales orders and invoices", () => {
+  expect(usesInlineQuantitySheet({ type: "credit-note", fullCatalogueSheet: true, bakery: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type: "credit-note", fullCatalogueSheet: true, bakery: true, editing: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type: "invoice", fullCatalogueSheet: true, bakery: true })).toBe(true);
+  expect(usesInlineQuantitySheet({ type: "credit-note", fullCatalogueSheet: false, bakery: true })).toBe(false);
 });
 it("ignores untouched zero catalogue rows but detects quantity, price, tax-code and discount edits", () => {
   const old = [{ id: "id", productId: "queen", description: "Queen", qty: 2, unit: "PCS", unitPrice: 43.1, taxCodeId: "vat" }];

@@ -8,6 +8,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { fetchProductsPageApi } from "@/lib/api/products";
 import type { ProductRow } from "@/lib/types/masters";
 import { productMatchesSearch, preferExactProductIdentifiers } from "@/lib/products/product-search";
+import { displayItemCode, isNumericItemCode, numericItemCodeSort } from "@/lib/products/item-code";
+import { ItemCodeMark } from "@/components/products/ItemCodeMark";
 import { productTypeLabel } from "@/lib/products/product-type";
 import {
   defaultPickerTypeFilter,
@@ -165,7 +167,8 @@ export function DocumentProductPickerSheet({
           purchasable: sheetFinishedGoods ? undefined : query.purchasable,
           sellable: sheetFinishedGoods ? true : query.sellable,
           productType: sheetFinishedGoods ? undefined : query.productType,
-          itemRole: sheetFinishedGoods ? undefined : query.itemRole,
+          itemRole: sheetFinishedGoods ? "FINISHED" : query.itemRole,
+          sortBy: sheetFinishedGoods ? "itemCode" : undefined,
           limit: PAGE_SIZE,
           cursor: opts.cursor ?? "0",
           includeStock: false,
@@ -209,7 +212,7 @@ export function DocumentProductPickerSheet({
   const visible = React.useMemo(() => {
     const q = debouncedSearch.toLowerCase();
     const tokens = q.split(/\s+/).filter(Boolean);
-    return preferExactProductIdentifiers(merged.filter((p) => {
+    const ranked = preferExactProductIdentifiers(merged.filter((p) => {
       if (!matchesPickerTypeFilter(p, typeFilter, plantCatalogue)) return false;
       if (categoryKey && groupKey && groupKey(p) !== categoryKey) return false;
       if (!tokens.length) return true;
@@ -217,7 +220,9 @@ export function DocumentProductPickerSheet({
       // Do not discard them with a different substring matcher.
       return remoteItems.some((item) => item.id === p.id) || productMatchesSearch(p, q);
     }), q);
-  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey, plantCatalogue, remoteItems]);
+    if (!sheetFinishedGoods) return ranked;
+    return ranked.sort((a, b) => numericItemCodeSort(a) - numericItemCodeSort(b) || a.name.localeCompare(b.name));
+  }, [merged, debouncedSearch, typeFilter, categoryKey, groupKey, plantCatalogue, remoteItems, sheetFinishedGoods]);
 
   React.useEffect(() => {
     autoPages.current = 0;
@@ -508,9 +513,14 @@ export function DocumentProductPickerSheet({
                           aria-label={`Select ${p.name}`}
                         />
                       </div>
-                      <div className="min-w-0 flex-1 text-left">
-                        <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
+                      <div className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                        {isNumericItemCode(displayItemCode(p)) ? (
+                          <ItemCodeMark code={displayItemCode(p)} className="mt-0.5" />
+                        ) : null}
+                        <span className="min-w-0 flex-1">
+                          <span className={cn("block text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>{p.name}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">{meta}</span>
+                        </span>
                       </div>
                       {priceLabel?.(p) ? (
                         <span className="hidden shrink-0 text-sm tabular-nums sm:block">

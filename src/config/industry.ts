@@ -3,6 +3,11 @@ export type IndustryCategory = "FMCG" | "SEAFOOD" | "OTHER";
 /** Bakery plant. Same FMCG selling screens as fmcg-manufacturer; recipes stay on this template. */
 export const FMCG_BAKERY_TEMPLATE_ID = "fmcg-bakery";
 
+/** Joy Superbakers and any later bakery. `bakex` is the old id for the same template. */
+export function isBakeryTemplate(templateId?: string | null): boolean {
+  return canonicalIndustryTemplateId(templateId) === FMCG_BAKERY_TEMPLATE_ID;
+}
+
 /** Price lists, dispatch, products, tax tags — shared by FMCG manufacturers and bakeries. */
 export const FMCG_SELLING_TEMPLATE_IDS = [
   "fmcg-manufacturer",
