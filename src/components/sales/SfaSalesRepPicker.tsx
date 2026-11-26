@@ -185,7 +185,7 @@ export function SfaSalesRepSelect({
   const { loadOptions, find } = useSalesRepSearch();
   const [adding, setAdding] = React.useState<string | null>(null);
   return (
-    <div className="flex items-start gap-2">
+    <div className="flex min-w-0 items-start gap-1.5">
       <div className="min-w-0 flex-1">
         <AsyncSearchableSelect
           id={id}
@@ -243,7 +243,7 @@ export function EditableSalesRep({
     );
   }
   return (
-    <div className="min-w-[260px] space-y-1">
+    <div className="w-full min-w-0 space-y-1">
       <SfaSalesRepSelect id={id} value={value} disabled={busy} onChange={(rep) => {
         setBusy(true);
         onSave(rep)

@@ -1134,9 +1134,9 @@ export async function documentActionApi(
   id: string,
   action: "approve" | "post" | "cancel" | "reverse",
   comment?: string
-): Promise<void> {
+): Promise<{ kraNotice?: string }> {
   requireLiveApi("Document action");
-  await apiRequest(`/api/documents/${type}/${id}/action`, {
+  return apiRequest<{ kraNotice?: string }>(`/api/documents/${type}/${id}/action`, {
     method: "POST",
     body: { action, ...(comment != null ? { comment } : {}) },
   });
