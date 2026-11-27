@@ -926,3 +926,54 @@ export async function createBatchApPaymentApi(body: Parameters<typeof createArPa
   const { customerId, ...payment } = body;
   return apiRequest("/api/ap/payments", { method: "POST", body: { ...payment, partyId: customerId } });
 }
+
+export type GeneralPaymentMethod = "BANK_TRANSFER" | "CHEQUE" | "CASH" | "MPESA";
+
+export type GeneralPaymentRow = {
+  id: string;
+  number: string;
+  date: string;
+  payeeName: string;
+  memo: string;
+  amount: number;
+  currency: string;
+  status: string;
+  paymentMethod?: GeneralPaymentMethod;
+  reference?: string;
+  chequeNumber?: string;
+  mpesaTransactionNo?: string;
+  bankAccountId?: string;
+  bankAccountName?: string;
+  ledgerAccountId?: string;
+  ledgerAccountCode?: string;
+  ledgerAccountName?: string;
+  releasedBy?: string;
+};
+
+/** Payments that are not for supplier bills: contractors, services, fuel, petty bills, taxes. */
+export async function fetchGeneralPaymentsApi(params?: { search?: string }): Promise<GeneralPaymentRow[]> {
+  requireLiveApi("General payments");
+  const query = new URLSearchParams();
+  if (params?.search?.trim()) query.set("search", params.search.trim());
+  const qs = query.toString();
+  const payload = await apiRequest<{ items: GeneralPaymentRow[] }>(`/api/ap/general-payments${qs ? `?${qs}` : ""}`);
+  return payload.items ?? [];
+}
+
+export async function createGeneralPaymentApi(body: {
+  clientRequestId: string;
+  date: string;
+  payeeName: string;
+  amount: number;
+  bankAccountId: string;
+  ledgerAccountId: string;
+  paymentMethod: GeneralPaymentMethod;
+  memo?: string;
+  reference?: string;
+  chequeNumber?: string;
+  chequeDate?: string;
+  mpesaTransactionNo?: string;
+}): Promise<{ id: string; number: string }> {
+  requireLiveApi("General payment");
+  return apiRequest("/api/ap/general-payments", { method: "POST", body });
+}

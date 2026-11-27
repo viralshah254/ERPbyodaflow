@@ -1,5 +1,6 @@
 "use client";
 
+import { ReturnToBanner } from "@/components/finance/ReturnToBanner";
 import * as React from "react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -117,6 +118,7 @@ export default function PeriodClosePage() {
       description="Close accounting periods and lock transactions"
     >
       <div className="space-y-6 max-w-2xl">
+        <ReturnToBanner />
         {/* Status summary — always visible so “no periods” isn't hidden */}
         <div className="flex flex-wrap items-start gap-3 p-3 rounded-lg border bg-card text-sm">
           <Icons.Calendar className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />

@@ -68,6 +68,7 @@ export const ACTION_REGISTRY: ActionInfo[] = [
   // AP
   { module: "finance", page: "/ap/bills", action: "New bill", behavior: "Navigate", status: "ok" },
   { module: "finance", page: "/ap/payments", action: "New payment", behavior: "Navigates", status: "ok" },
+  { module: "finance", page: "/ap/general-payments", action: "New general payment", behavior: "Posts payment to ledger account", status: "ok" },
   { module: "finance", page: "/ap/three-way-match", action: "Match selected", behavior: "Creates persistent match decision", status: "ok" },
 
   // AR

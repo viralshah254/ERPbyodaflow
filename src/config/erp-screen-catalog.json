@@ -138,6 +138,19 @@
     "hints": []
   },
   {
+    "route": "/ap/general-payments",
+    "title": "General Payments",
+    "description": "Payments that are not for supplier bills: contractors, services, fuel, petty bills, taxes",
+    "sections": [],
+    "fields": [
+      "Paid to",
+      "Paid for (ledger account)",
+      "Paid from",
+      "Payment method"
+    ],
+    "hints": []
+  },
+  {
     "route": "/ap/statements",
     "title": "Supplier statements",
     "description": "Loading\u2026",

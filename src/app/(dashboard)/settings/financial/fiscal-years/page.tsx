@@ -1,5 +1,6 @@
 "use client";
 
+import { ReturnToBanner } from "@/components/finance/ReturnToBanner";
 import * as React from "react";
 import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
@@ -184,6 +185,7 @@ export default function FiscalYearsPage() {
         showCommandHint
       />
       <div className="p-6 space-y-6 max-w-3xl">
+        <ReturnToBanner />
         {loading ? (
           <p className="text-sm text-muted-foreground py-8">Loading fiscal calendar…</p>
         ) : null}
