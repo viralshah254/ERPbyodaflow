@@ -78,7 +78,7 @@ export default function CollectionsPage() {
         accessor: (r: OverdueInvoiceRow) => (
           <Button variant="ghost" size="sm" asChild>
             <Link
-              href={`/ar/payments?receive=1&customerId=${encodeURIComponent(r.customerId)}&customerName=${encodeURIComponent(r.customerName)}&invoiceId=${encodeURIComponent(r.id)}&invoiceNumber=${encodeURIComponent(r.number)}&amount=${encodeURIComponent(String(r.outstanding))}`}
+              href={`/ar/payments/receive?customerId=${encodeURIComponent(r.customerId)}&customerName=${encodeURIComponent(r.customerName)}&invoiceId=${encodeURIComponent(r.id)}&invoiceNumber=${encodeURIComponent(r.number)}&amount=${encodeURIComponent(String(r.outstanding))}`}
             >
               Record receipt
             </Link>

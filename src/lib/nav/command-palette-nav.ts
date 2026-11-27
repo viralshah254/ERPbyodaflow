@@ -187,7 +187,7 @@ export const PAYMENT_RECORD_COMMANDS: (CommandItemNav & { _breadcrumb?: string; 
   {
     id: "record-customer-payment",
     group: "nav",
-    href: "/ar/payments?receive=1",
+    href: "/ar/payments/receive",
     label: "Record payment from customer",
     icon: "ArrowDownCircle",
     keywords: ["receive payment", "payment receipt", "payments", "paid", "buyer"],
@@ -197,7 +197,7 @@ export const PAYMENT_RECORD_COMMANDS: (CommandItemNav & { _breadcrumb?: string; 
   {
     id: "record-supplier-payment",
     group: "nav",
-    href: "/ap/payments?record=1",
+    href: "/ap/payments/pay",
     label: "Record payment to supplier",
     icon: "ArrowUpCircle",
     keywords: ["pay supplier", "payments", "receipt"],

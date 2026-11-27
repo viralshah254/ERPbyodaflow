@@ -22,7 +22,6 @@ import { ArStatementReviewSheet } from "@/components/finance/ArStatementReviewSh
 import { ArChequeBatchSheet } from "@/components/finance/ArChequeBatchSheet";
 import type { BankAccountRow } from "@/lib/types/treasury";
 import { ArReconciliationSheet } from "@/components/finance/ArReconciliationSheet";
-import { ArSettlementSheet, type ReceivePrefill } from "@/components/finance/ArSettlementSheet";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
@@ -72,9 +71,6 @@ export default function ARPaymentsPage() {
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [fetching, setFetching] = React.useState(false);
   const hasLoadedOnce = React.useRef(false);
-  const [receiveOpen, setReceiveOpen] = React.useState(false);
-  const [receiveSession, setReceiveSession] = React.useState(0);
-  const [receivePrefill, setReceivePrefill] = React.useState<ReceivePrefill | null>(null);
   const statementReference = searchParams.get("statementReference") || undefined;
   const [statementOpen, setStatementOpen] = React.useState(() => Boolean(statementReference));
   const [batchOpen, setBatchOpen] = React.useState(() => searchParams.has("adviceId"));
@@ -83,7 +79,6 @@ export default function ARPaymentsPage() {
   const [submittingId, setSubmittingId] = React.useState<string | null>(null);
   const [payments, setPayments] = React.useState<PaymentRow[]>([]);
   const [bankAccountOptions, setBankAccountOptions] = React.useState<BankAccountRow[]>([]);
-  const openedFromQuery = React.useRef(false);
 
   React.useEffect(() => {
     const id = window.setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
@@ -139,29 +134,16 @@ export default function ARPaymentsPage() {
       .catch(() => setBankAccountOptions([]));
   }, []);
 
-  const openReceive = React.useCallback((prefill: ReceivePrefill | null) => {
-    setReceivePrefill(prefill);
-    setReceiveSession((value) => value + 1);
-    setReceiveOpen(true);
-  }, []);
-
   React.useEffect(() => {
-    if (openedFromQuery.current) return;
     if (searchParams.get("receive") !== "1") return;
-    openedFromQuery.current = true;
-    const customerId = searchParams.get("customerId")?.trim();
-    if (!customerId) {
-      openReceive(null);
-      return;
+    const next = new URLSearchParams();
+    for (const key of ["customerId", "customerName", "invoiceNumber", "amount"]) {
+      const value = searchParams.get(key);
+      if (value) next.set(key, value);
     }
-    const amount = Number(searchParams.get("amount"));
-    openReceive({
-      customerId,
-      customerName: searchParams.get("customerName")?.trim() || customerId,
-      invoiceNumber: searchParams.get("invoiceNumber")?.trim() || undefined,
-      amount: Number.isFinite(amount) && amount > 0 ? amount : undefined,
-    });
-  }, [openReceive, searchParams]);
+    const query = next.toString();
+    router.replace(query ? `/ar/payments/receive?${query}` : "/ar/payments/receive");
+  }, [router, searchParams]);
 
   const columns = React.useMemo(
     () => [
@@ -313,9 +295,11 @@ export default function ARPaymentsPage() {
             <Button variant="outline" asChild>
               <Link href="/ar/receipts">Collect receipts</Link>
             </Button>
-            {canRecord && <Button onClick={() => openReceive(null)}>
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Receive Payment
+            {canRecord && <Button asChild>
+              <Link href="/ar/payments/receive">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Receive payments
+              </Link>
             </Button>}
           </div>
         }
@@ -378,16 +362,6 @@ export default function ARPaymentsPage() {
       {canReviewStatements && statementOpen && <ArStatementReviewSheet
         accounts={bankAccountOptions} initialReference={statementReference} onClose={() => setStatementOpen(false)}
         onSaved={() => { void refreshData(); }} />}
-      <ArSettlementSheet
-        open={canRecord && receiveOpen}
-        sessionKey={receiveSession}
-        prefill={receivePrefill}
-        bankAccounts={bankAccountOptions}
-        onOpenChange={setReceiveOpen}
-        onPosted={() => {
-          void refreshData();
-        }}
-      />
       {canRecord && batchOpen && (
         <ArChequeBatchSheet
           initialPayment={batchPayment}

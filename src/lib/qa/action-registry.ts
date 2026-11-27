@@ -67,11 +67,11 @@ export const ACTION_REGISTRY: ActionInfo[] = [
 
   // AP
   { module: "finance", page: "/ap/bills", action: "New bill", behavior: "Navigate", status: "ok" },
-  { module: "finance", page: "/ap/payments", action: "New payment", behavior: "Opens drawer", status: "ok" },
+  { module: "finance", page: "/ap/payments", action: "New payment", behavior: "Navigates", status: "ok" },
   { module: "finance", page: "/ap/three-way-match", action: "Match selected", behavior: "Creates persistent match decision", status: "ok" },
 
   // AR
-  { module: "finance", page: "/ar/payments", action: "New receipt", behavior: "Opens drawer", status: "ok" },
+  { module: "finance", page: "/ar/payments", action: "New receipt", behavior: "Navigates", status: "ok" },
   { module: "finance", page: "/ar/receipts", action: "Post receipts", behavior: "Posts each grid line as a customer receipt", status: "ok" },
   { module: "finance", page: "/ar/payments", action: "Allocate", behavior: "Allocates payment to invoices", status: "ok" },
 
