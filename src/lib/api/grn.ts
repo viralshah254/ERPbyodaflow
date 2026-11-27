@@ -134,7 +134,8 @@ export type GrnPostErrorCode =
   | "GRN_POST_FAILED"
   | "GRN_NOT_FOUND"
   | "WAREHOUSE_CANNOT_RECEIVE"
-  | "OPENING_COST_REQUIRED";
+  | "OPENING_COST_REQUIRED"
+  | "POSTING_ACCOUNT";
 
 export type OpeningCostGap = { productId: string; code: string; name: string };
 
