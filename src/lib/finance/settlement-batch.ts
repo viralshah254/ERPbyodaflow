@@ -155,18 +155,60 @@ export function suggestLine(input: {
   invoices: ArOpenItem[];
   creditNotes: ArOpenItem[];
   credits: CreditNoteApplicationLine[];
-}): Pick<BatchLine, "allocations" | "creditApplications" | "unapplied"> & { owing: number } {
+  /** Invoice numbers typed by the user, paid first in the order given. */
+  documents?: string;
+}): Pick<BatchLine, "allocations" | "creditApplications" | "unapplied"> & { owing: number; unknown: string[] } {
   const claims = batchClaims(input.lines, input.partyId);
   const invoices = withoutClaims(input.invoices, claims.invoices);
   const creditNotes = withoutClaims(input.creditNotes, claims.creditNotes);
   const creditApplications = clampCreditApplications(input.credits, invoices, creditNotes);
-  const plan = planSettlement({ amount: input.amount, invoices, tied: {}, credits: creditApplications, spreadRemainder: true });
+  const named = matchDocuments(input.documents ?? "", invoices);
+  const creditOn = new Map<string, number>();
+  for (const line of creditApplications) creditOn.set(line.invoiceId, roundMoney((creditOn.get(line.invoiceId) ?? 0) + line.amount));
+  const tied: Record<string, number> = {};
+  let left = roundMoney(Math.max(input.amount, 0));
+  for (const invoice of named.found) {
+    const take = roundMoney(Math.min(Math.max(invoice.outstanding - (creditOn.get(invoice.id) ?? 0), 0), left));
+    if (take <= 0.009) continue;
+    tied[invoice.id] = take;
+    left = roundMoney(left - take);
+  }
+  const plan = planSettlement({ amount: input.amount, invoices, tied, credits: creditApplications, spreadRemainder: true });
   return {
     allocations: plan.allocations,
     creditApplications,
     unapplied: plan.unapplied,
     owing: sumAmounts(invoices.map((row) => row.outstanding)),
+    unknown: named.unknown,
   };
+}
+
+const compact = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+const trailingNumber = (value: string) => {
+  const match = /(\d+)\D*$/.exec(value);
+  return match ? Number(match[1]) : NaN;
+};
+
+/**
+ * Open documents named in free text such as "INV-0412, 419". A bare number matches the
+ * document whose trailing number is the same, so "412" finds INV-0412.
+ */
+export function matchDocuments(text: string, invoices: ArOpenItem[]): { found: ArOpenItem[]; unknown: string[] } {
+  const found: ArOpenItem[] = [];
+  const unknown: string[] = [];
+  for (const token of text.split(/[,;\s]+/).map((part) => part.trim()).filter(Boolean)) {
+    const key = compact(token);
+    let hits = invoices.filter((invoice) => compact(invoice.number) === key);
+    if (!hits.length && /^\d+$/.test(key)) {
+      hits = invoices.filter((invoice) => trailingNumber(invoice.number) === Number(key));
+    }
+    if (hits.length !== 1) {
+      unknown.push(token);
+      continue;
+    }
+    if (!found.includes(hits[0])) found.push(hits[0]);
+  }
+  return { found, unknown };
 }
 
 /** Lines grouped by party, in entry order, so one party's lines post one after another. */
