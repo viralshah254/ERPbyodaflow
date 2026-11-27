@@ -8,15 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
-import {
-  fetchApReceiptItemsApi,
-  fetchArOpenItemsApi,
-  previewApSettlementApi,
-  previewArSettlementApi,
-  searchApSupplierOptionsApi,
-  searchReceiptCustomerOptionsApi,
-} from "@/lib/api/payments";
 import type { PartyLookupOption } from "@/lib/api/parties";
+import { SETTLEMENT_SOURCES } from "@/lib/finance/settlement-sources";
 import { creditUsed, roundMoney, scaleCreditNote, sumAmounts } from "@/lib/ar/settlement-edit";
 import { groupReceiptMoney, parseReceiptMoney } from "@/lib/ar/receipt-money";
 import {
@@ -27,7 +20,6 @@ import {
   likelyDuplicate,
   needsBankAccount,
   planSettlement,
-  sortByDue,
   tiedProblem,
   withoutClaims,
   type BatchLine,
@@ -35,7 +27,7 @@ import {
   type SettlementSide,
 } from "@/lib/finance/settlement-batch";
 import { formatMoney } from "@/lib/money";
-import type { ArOpenItem, CreditNoteApplicationLine, SettlementPreview } from "@/lib/types/ar";
+import type { ArOpenItem, CreditNoteApplicationLine } from "@/lib/types/ar";
 import { cn } from "@/lib/utils";
 
 export type EntryDefaults = {
@@ -65,9 +57,6 @@ type SideCopy = {
   owingLabel: string;
   owesVerb: string;
   browseLabel?: string;
-  loadParties: (search?: string) => Promise<PartyLookupOption[]>;
-  loadItems: (partyId: string) => Promise<{ invoices: ArOpenItem[]; creditNotes: ArOpenItem[] }>;
-  preview: (body: { partyId: string; amount: number }) => Promise<SettlementPreview>;
 };
 
 const SIDES: Record<SettlementSide, SideCopy> = {
@@ -84,9 +73,6 @@ const SIDES: Record<SettlementSide, SideCopy> = {
     owingLabel: "Still owing after",
     owesVerb: "Owes",
     browseLabel: "Owing",
-    loadParties: searchReceiptCustomerOptionsApi,
-    loadItems: fetchArOpenItemsApi,
-    preview: previewArSettlementApi,
   },
   AP: {
     party: "supplier",
@@ -100,12 +86,6 @@ const SIDES: Record<SettlementSide, SideCopy> = {
     leftLabel: "Advance to supplier",
     owingLabel: "Still owed after",
     owesVerb: "We owe",
-    loadParties: searchApSupplierOptionsApi,
-    loadItems: async (partyId) => {
-      const items = await fetchApReceiptItemsApi(partyId);
-      return { invoices: sortByDue(items.invoices), creditNotes: items.creditNotes };
-    },
-    preview: previewApSettlementApi,
   },
 };
 
@@ -162,6 +142,7 @@ export function SettlementEntryForm({
   onCancelEdit: () => void;
 }) {
   const copy = SIDES[side];
+  const source = SETTLEMENT_SOURCES[side];
   const Party = copy.party[0].toUpperCase() + copy.party.slice(1);
   const Docs = copy.docs[0].toUpperCase() + copy.docs.slice(1);
 
@@ -245,7 +226,7 @@ export function SettlementEntryForm({
     }
     let cancelled = false;
     setLoadingItems(true);
-    copy
+    source
       .loadItems(partyId)
       .then((items) => {
         if (cancelled) return;
@@ -261,12 +242,12 @@ export function SettlementEntryForm({
     return () => {
       cancelled = true;
     };
-  }, [partyId, copy]);
+  }, [partyId, copy, source]);
 
   React.useEffect(() => {
     if (!partyId || creditsEdited || openCredits.length === 0) return;
     let cancelled = false;
-    copy
+    source
       .preview({ partyId, amount: 0.01 })
       .then((preview) => {
         if (!cancelled) setCredits(preview.creditNoteApplications);
@@ -277,7 +258,7 @@ export function SettlementEntryForm({
     return () => {
       cancelled = true;
     };
-  }, [partyId, creditsEdited, openCredits.length, copy]);
+  }, [partyId, creditsEdited, openCredits.length, source]);
 
   const claims = React.useMemo(
     () => (partyId ? batchClaims(lines, partyId, editing?.key) : { invoices: {}, creditNotes: {} }),
@@ -461,7 +442,7 @@ export function SettlementEntryForm({
                 setCreditsEdited(false);
               }}
               onOptionSelect={(option) => setParty(option)}
-              loadOptions={copy.loadParties}
+              loadOptions={source.loadParties}
               selectedOption={party}
               placeholder={`Choose ${copy.party}`}
               searchPlaceholder="Name, code, phone, or email"

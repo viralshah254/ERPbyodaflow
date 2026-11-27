@@ -147,6 +147,39 @@ export function planSettlement(input: {
   return { allocations, tiedTotal, spread, unapplied: left };
 }
 
+/** The suggested split for a quick line: credit notes first, then soonest due first, less what the batch already pays. */
+export function suggestLine(input: {
+  partyId: string;
+  amount: number;
+  lines: BatchLine[];
+  invoices: ArOpenItem[];
+  creditNotes: ArOpenItem[];
+  credits: CreditNoteApplicationLine[];
+}): Pick<BatchLine, "allocations" | "creditApplications" | "unapplied"> & { owing: number } {
+  const claims = batchClaims(input.lines, input.partyId);
+  const invoices = withoutClaims(input.invoices, claims.invoices);
+  const creditNotes = withoutClaims(input.creditNotes, claims.creditNotes);
+  const creditApplications = clampCreditApplications(input.credits, invoices, creditNotes);
+  const plan = planSettlement({ amount: input.amount, invoices, tied: {}, credits: creditApplications, spreadRemainder: true });
+  return {
+    allocations: plan.allocations,
+    creditApplications,
+    unapplied: plan.unapplied,
+    owing: sumAmounts(invoices.map((row) => row.outstanding)),
+  };
+}
+
+/** Lines grouped by party, in entry order, so one party's lines post one after another. */
+export function postingGroups(lines: BatchLine[]): BatchLine[][] {
+  const groups = new Map<string, BatchLine[]>();
+  for (const line of lines) {
+    const group = groups.get(line.partyId) ?? [];
+    group.push(line);
+    groups.set(line.partyId, group);
+  }
+  return [...groups.values()];
+}
+
 /** Problem with the chosen amounts, or null when the plan can post. */
 export function tiedProblem(input: {
   amount: number;

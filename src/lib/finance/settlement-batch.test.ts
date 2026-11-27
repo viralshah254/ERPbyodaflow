@@ -4,6 +4,8 @@ import {
   batchClaims,
   documentsNamedIn,
   planSettlement,
+  postingGroups,
+  suggestLine,
   sortByDue,
   tiedProblem,
   withoutClaims,
@@ -105,5 +107,37 @@ describe("documentsNamedIn", () => {
 
   it("does not read INV-12 as INV-1", () => {
     expect(documentsNamedIn("INV-12", [invoice("1", 1), invoice("12", 1)]).map((row) => row.id)).toEqual(["12"]);
+  });
+});
+
+describe("suggestLine", () => {
+  it("skips what earlier lines for the same party already pay", () => {
+    const earlier = line({
+      partyId: "c1",
+      amount: 30000,
+      allocations: [{ invoiceId: "A", invoiceNumber: "INV-A", amount: 30000, tied: false }],
+    });
+    const result = suggestLine({
+      partyId: "c1",
+      amount: 60000,
+      lines: [earlier],
+      invoices: [invoice("A", 30000, "2026-10-01"), invoice("B", 50000, "2026-10-15")],
+      creditNotes: [],
+      credits: [],
+    });
+    expect(result.owing).toBe(50000);
+    expect(result.allocations.map((row) => [row.invoiceId, row.amount])).toEqual([["B", 50000]]);
+    expect(result.unapplied).toBe(10000);
+  });
+});
+
+describe("postingGroups", () => {
+  it("keeps each party's lines together in entry order", () => {
+    const lines = [
+      line({ key: "1", partyId: "a" }),
+      line({ key: "2", partyId: "b" }),
+      line({ key: "3", partyId: "a" }),
+    ];
+    expect(postingGroups(lines).map((group) => group.map((row) => row.key))).toEqual([["1", "3"], ["2"]]);
   });
 });
