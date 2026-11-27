@@ -15,63 +15,27 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import type { APPaymentRow } from "@/lib/types/ap";
-import {
-  allocateApPaymentApi,
-  createApPaymentApi,
-  fetchApPaymentsApi,
-  fetchApSuppliersApi,
-  fetchOpenBillsApi,
-  type OpenBillRow,
-} from "@/lib/api/payments";
+import { fetchApPaymentsApi } from "@/lib/api/payments";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ReceiptCollectionGrid } from "@/components/finance/ReceiptCollectionGrid";
 import { ApChequeBoxSheet } from "@/components/finance/ApChequeBoxSheet";
 
-function supplierLabelForBill(
-  bill: OpenBillRow,
-  supplierId: string,
-  supplierOptions: Array<{ id: string; name: string }>
-): string {
-  const fromBill = bill.supplierName?.trim();
-  if (fromBill) return fromBill;
-  const fromSelect = supplierOptions.find((s) => s.id === supplierId)?.name?.trim();
-  if (fromSelect) return fromSelect;
-  return "—";
-}
-
 export default function APPaymentsPage() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const openedFromQuery = React.useRef(false);
   const [search, setSearch] = React.useState("");
   const [allRows, setAllRows] = React.useState<APPaymentRow[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [wizardOpen, setWizardOpen] = React.useState(false);
   const [batchOpen, setBatchOpen] = React.useState(false);
   const [chequeOpen, setChequeOpen] = React.useState(false);
-  const [supplierId, setSupplierId] = React.useState("");
-  const [supplierOptions, setSupplierOptions] = React.useState<Array<{ id: string; name: string }>>([]);
   const [bankAccountOptions, setBankAccountOptions] = React.useState<Array<{ id: string; name: string }>>([]);
-  const [bankAccountId, setBankAccountId] = React.useState("");
-  const [openBills, setOpenBills] = React.useState<OpenBillRow[]>([]);
-  const [openBillsError, setOpenBillsError] = React.useState("");
-  const [allocations, setAllocations] = React.useState<Record<string, number>>({});
-  const [saving, setSaving] = React.useState(false);
   const [selectedPayment, setSelectedPayment] = React.useState<APPaymentRow | null>(null);
 
   const refreshPayments = React.useCallback(async () => {
@@ -79,36 +43,26 @@ export default function APPaymentsPage() {
   }, []);
 
   React.useEffect(() => {
-    if (openedFromQuery.current) return;
     if (searchParams.get("record") !== "1") return;
-    openedFromQuery.current = true;
-    setWizardOpen(true);
-  }, [searchParams]);
+    const next = new URLSearchParams();
+    for (const key of ["supplierId", "supplierName", "billNumber", "amount"]) {
+      const value = searchParams.get(key);
+      if (value) next.set(key, value);
+    }
+    const query = next.toString();
+    router.replace(query ? `/ap/payments/pay?${query}` : "/ap/payments/pay");
+  }, [router, searchParams]);
 
   React.useEffect(() => {
     setLoading(true);
-    Promise.all([fetchApPaymentsApi(), fetchApSuppliersApi(), fetchBankAccountsApi()])
-      .then(([payments, suppliers, bankAccounts]) => {
+    Promise.all([fetchApPaymentsApi(), fetchBankAccountsApi()])
+      .then(([payments, bankAccounts]) => {
         setAllRows(payments);
-        setSupplierOptions(suppliers);
         setBankAccountOptions(bankAccounts.map((item) => ({ id: item.id, name: item.name })));
       })
       .catch((error) => toast.error((error as Error).message || "Failed to load AP payments."))
       .finally(() => setLoading(false));
   }, []);
-
-  React.useEffect(() => {
-    let current = true;
-    setOpenBills([]);
-    setOpenBillsError("");
-    fetchOpenBillsApi(supplierId || undefined)
-      .then((rows) => { if (current) setOpenBills(rows); })
-      .catch((error) => {
-        // An empty list here would look like "nothing to pay" and let a payment post unallocated.
-        if (current) setOpenBillsError((error as Error).message || "Open bills could not be loaded.");
-      });
-    return () => { current = false; };
-  }, [supplierId]);
 
   const filtered = React.useMemo(() => {
     if (!search.trim()) return allRows;
@@ -121,11 +75,6 @@ export default function APPaymentsPage() {
         (r.releasedBy ?? "").toLowerCase().includes(q)
     );
   }, [allRows, search]);
-
-  const payingSupplierName = React.useMemo(
-    () => supplierOptions.find((s) => s.id === supplierId)?.name?.trim() ?? "",
-    [supplierId, supplierOptions]
-  );
 
   const columns = React.useMemo(
     () => [
@@ -168,32 +117,6 @@ export default function APPaymentsPage() {
     []
   );
 
-  const handleCreatePayment = async () => {
-    const nextAllocations = Object.entries(allocations)
-      .filter(([, amount]) => amount > 0)
-      .map(([documentId, amount]) => ({ documentId, amount }));
-    const totalAmount = nextAllocations.reduce((sum, allocation) => sum + allocation.amount, 0);
-    if (!supplierId || totalAmount <= 0) {
-      toast.error("Select a supplier and allocate at least one bill.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const created = await createApPaymentApi({ supplierId, amount: totalAmount, bankAccountId: bankAccountId || undefined });
-      await allocateApPaymentApi(created.id, nextAllocations);
-      await refreshPayments();
-      toast.success(`Supplier payment ${created.number} created.`);
-      setWizardOpen(false);
-      setSupplierId("");
-      setBankAccountId("");
-      setAllocations({});
-    } catch (error) {
-      toast.error((error as Error).message || "Failed to create supplier payment.");
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <PageShell className={LIST_PAGE_SHELL_CLASS}>
       <PageHeader
@@ -217,11 +140,11 @@ export default function APPaymentsPage() {
             <Button variant="outline" onClick={() => setChequeOpen(true)}>
               Record cheques
             </Button>
-            <Button
-              onClick={() => setWizardOpen(true)}
-            >
-              <Icons.Plus className="mr-2 h-4 w-4" />
-              Pay supplier
+            <Button asChild>
+              <Link href="/ap/payments/pay">
+                <Icons.Plus className="mr-2 h-4 w-4" />
+                Pay suppliers
+              </Link>
             </Button>
           </div>
         }
@@ -271,172 +194,6 @@ export default function APPaymentsPage() {
         bankAccounts={bankAccountOptions}
         onPosted={refreshPayments}
       />
-
-      <Sheet open={wizardOpen} onOpenChange={setWizardOpen}>
-        <SheetContent side="right" className="w-full">
-          <SheetHeader>
-            <SheetTitle>Pay supplier</SheetTitle>
-            <SheetDescription>
-              {supplierId && payingSupplierName ? (
-                <>
-                  Paying <span className="font-medium text-foreground">{payingSupplierName}</span>. Allocate only to each
-                  supplier bill balance below; GRN-linked logistics and other inbound costs are separate postings and are not
-                  added to these balances.
-                </>
-              ) : (
-                "Select a supplier, review open bills, and allocate the payment."
-              )}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label>Supplier</Label>
-              <Select value={supplierId} onValueChange={setSupplierId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {supplierOptions.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.id}>
-                      {supplier.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Bank account</Label>
-              <Select value={bankAccountId} onValueChange={setBankAccountId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select bank account" />
-                </SelectTrigger>
-                <SelectContent>
-                  {bankAccountOptions.map((account) => (
-                    <SelectItem key={account.id} value={account.id}>
-                      {account.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Open bills</Label>
-              <TooltipProvider delayDuration={200}>
-                <div className="rounded border divide-y max-h-80 overflow-auto">
-                  {openBillsError ? (
-                    <div className="p-3 text-sm text-destructive">{openBillsError} Reopen the supplier to retry before paying.</div>
-                  ) : openBills.length === 0 ? (
-                    <div className="p-3 text-sm text-muted-foreground">No open bills for this supplier.</div>
-                  ) : (
-                    openBills.map((bill) => {
-                      const hasLanded = (bill.landedAllocated ?? 0) > 0;
-                      const supplierLine = supplierLabelForBill(bill, supplierId, supplierOptions);
-                      return (
-                        <div key={bill.id} className="flex flex-col gap-1.5 p-3 text-sm">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-medium truncate">{bill.number}</span>
-                              <span className="text-xs text-muted-foreground truncate">
-                                Supplier: <span className="text-foreground">{supplierLine}</span>
-                              </span>
-                              <span className="text-xs text-muted-foreground">
-                                Amount due on this bill:{" "}
-                                <span className="font-medium text-foreground">
-                                  {formatMoney(bill.outstanding, bill.currency ?? "KES")}
-                                </span>
-                              </span>
-                              {(bill.grnNumber || bill.poRef) && (
-                                <span className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-1 gap-y-0.5">
-                                  <span className="text-muted-foreground/80">Linked for reference:</span>
-                                  {bill.grnNumber && (
-                                    <Link
-                                      href={`/inventory/receipts`}
-                                      className="text-primary underline-offset-2 hover:underline"
-                                      target="_blank"
-                                      rel="noreferrer"
-                                    >
-                                      GRN {bill.grnNumber}
-                                    </Link>
-                                  )}
-                                  {bill.poRef && <span>· PO {bill.poRef}</span>}
-                                </span>
-                              )}
-                            </div>
-                            <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Allocate</span>
-                              <Input
-                                type="number"
-                                className="w-28 h-8 shrink-0"
-                                placeholder="0"
-                                aria-label={`Payment amount for bill ${bill.number}`}
-                                value={allocations[bill.id] ?? ""}
-                                onChange={(e) =>
-                                  setAllocations((current) => ({
-                                    ...current,
-                                    [bill.id]: parseFloat(e.target.value) || 0,
-                                  }))
-                                }
-                              />
-                            </div>
-                          </div>
-                          {hasLanded ? (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <button
-                                  type="button"
-                                  className="flex w-full flex-col gap-0.5 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-left text-xs text-muted-foreground"
-                                >
-                                  <span className="flex items-center gap-1.5 font-medium text-foreground/90">
-                                    <Icons.Package className="h-3 w-3 shrink-0" aria-hidden />
-                                    GRN-linked costs (reference only)
-                                  </span>
-                                  <span>
-                                    <span className="tabular-nums">
-                                      {formatMoney(bill.landedAllocated ?? 0, bill.currency ?? "KES")}
-                                    </span>
-                                    <span className="text-muted-foreground">
-                                      {" "}
-                                      posted separately (landed allocations / related documents) — not part of this bill
-                                      balance.
-                                    </span>
-                                  </span>
-                                </button>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="max-w-sm text-xs">
-                                <p className="font-medium mb-1">Breakdown (linked GRN)</p>
-                                {(bill.landedBreakdown ?? []).length ? (
-                                  (bill.landedBreakdown ?? []).map((b) => (
-                                    <p key={b.label}>
-                                      {b.label}: {formatMoney(b.amount, bill.currency ?? "KES")}
-                                    </p>
-                                  ))
-                                ) : (
-                                  <p className="text-muted-foreground">No line detail available.</p>
-                                )}
-                                <p className="mt-2 border-t pt-2 text-muted-foreground">
-                                  These amounts are not added to the supplier invoice line above. Use allocation only against
-                                  “Amount due on this bill.” Inventory costing may combine bill and GRN-linked costs; this
-                                  payment settles the supplier bill only.
-                                </p>
-                              </TooltipContent>
-                            </Tooltip>
-                          ) : null}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </TooltipProvider>
-            </div>
-            <SheetFooter>
-              <Button variant="outline" onClick={() => setWizardOpen(false)}>Cancel</Button>
-              <Button disabled={saving || Boolean(openBillsError)} onClick={handleCreatePayment}>
-                {saving ? "Saving..." : "Create payment"}
-              </Button>
-            </SheetFooter>
-          </div>
-        </SheetContent>
-      </Sheet>
 
       <Sheet open={!!selectedPayment} onOpenChange={(open) => !open && setSelectedPayment(null)}>
         <SheetContent side="right" className="w-full">

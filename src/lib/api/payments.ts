@@ -811,14 +811,25 @@ export async function fetchOpenBillsApi(supplierId?: string): Promise<OpenBillRo
   return page.items;
 }
 
+type ApOpenItem = {
+  id: string;
+  number: string;
+  outstanding: number;
+  date?: string;
+  dueDate?: string;
+  total?: number;
+  allocated?: number;
+  currency?: string;
+};
+
 export async function fetchApOpenItemsApi(partyId: string): Promise<{
-  bills: Array<{ id: string; number: string; outstanding: number }>;
-  creditNotes: Array<{ id: string; number: string; outstanding: number }>;
+  bills: ApOpenItem[];
+  creditNotes: ApOpenItem[];
 }> {
   requireLiveApi("AP open items");
   const payload = await apiRequest<{
-    bills: Array<{ id: string; number: string; outstanding: number }>;
-    creditNotes: Array<{ id: string; number: string; outstanding: number }>;
+    bills: ApOpenItem[];
+    creditNotes: ApOpenItem[];
   }>("/api/ap/open-items", { params: { partyId } });
   return { bills: payload.bills ?? [], creditNotes: payload.creditNotes ?? [] };
 }
@@ -892,8 +903,20 @@ export async function allocateApPaymentApi(paymentId: string, allocations: { doc
 /** Use the receipt grid for supplier bills, preserving the same editable allocations. */
 export async function fetchApReceiptItemsApi(partyId: string): Promise<Awaited<ReturnType<typeof fetchArOpenItemsApi>>> {
   const items = await fetchApOpenItemsApi(partyId);
-  const map = (row: { id: string; number: string; outstanding: number }, sourceType: "invoice" | "credit-note") => ({
-    ...row, date: "", customerId: partyId, customerName: "", total: row.outstanding, allocated: 0, status: "OPEN", sourceType,
+  const day = (value?: string) => (value ? String(value).slice(0, 10) : undefined);
+  const map = (row: ApOpenItem, sourceType: "invoice" | "credit-note") => ({
+    id: row.id,
+    number: row.number,
+    outstanding: row.outstanding,
+    date: day(row.date) ?? "",
+    dueDate: day(row.dueDate),
+    currency: row.currency,
+    customerId: partyId,
+    customerName: "",
+    total: row.total ?? row.outstanding,
+    allocated: row.allocated ?? 0,
+    status: "OPEN",
+    sourceType,
   });
   return { invoices: items.bills.map(row => map(row, "invoice")), creditNotes: items.creditNotes.map(row => map(row, "credit-note")) };
 }
