@@ -8,8 +8,8 @@ import { Label } from "@/components/ui/label";
 import { AsyncSearchableSelect } from "@/components/ui/async-searchable-select";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import type { PartyLookupOption } from "@/lib/api/parties";
-import { roundMoney, sumAmounts } from "@/lib/ar/settlement-edit";
-import { groupReceiptMoney, parseReceiptMoney } from "@/lib/ar/receipt-money";
+import { sumAmounts } from "@/lib/ar/settlement-edit";
+import { parseReceiptMoney } from "@/lib/ar/receipt-money";
 import {
   PAYMENT_METHODS,
   likelyDuplicate,
@@ -27,7 +27,6 @@ export type FastEntrySettings = {
   method: PaymentMethod;
   bankAccountId: string;
   date: string;
-  tally: string;
 };
 
 const money = (value: number) => formatMoney(value, "KES");
@@ -116,9 +115,6 @@ export function FastEntryPanel({
       : null;
 
   const entered = sumAmounts(lines.map((line) => line.amount));
-  const tally = parseReceiptMoney(settings.tally);
-  const hasTally = Number.isFinite(tally) && tally > 0;
-  const difference = hasTally ? roundMoney(tally - entered) : 0;
 
   const clearRow = () => {
     setPartyId("");
@@ -219,7 +215,7 @@ export function FastEntryPanel({
 
   return (
     <section aria-label="Fast entry" className="overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="grid gap-3 border-b bg-muted/30 px-4 py-3 sm:px-5 md:grid-cols-[auto_minmax(0,1.4fr)_10rem_minmax(0,1fr)]">
+      <div className="grid gap-3 border-b bg-muted/30 px-4 py-3 sm:px-5 md:grid-cols-[auto_minmax(0,1.4fr)_10rem]">
         <div className="space-y-1">
           <Label className="text-xs">Paid by</Label>
           <div role="radiogroup" aria-label="Payment method" className="flex gap-1 rounded-lg border bg-background/60 p-1">
@@ -259,21 +255,6 @@ export function FastEntryPanel({
             {side === "AR" ? "Date received" : "Date paid"}
           </Label>
           <Input id="fast-entry-date" type="date" value={settings.date} max={today} onChange={(event) => set({ date: event.target.value })} />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="fast-entry-tally" className="text-xs">
-            Tally total <span className="font-normal text-muted-foreground">(adding machine, optional)</span>
-          </Label>
-          <Input
-            id="fast-entry-tally"
-            inputMode="decimal"
-            autoComplete="off"
-            className="text-right tabular-nums"
-            placeholder="0.00"
-            value={settings.tally}
-            onChange={(event) => set({ tally: event.target.value })}
-            onBlur={() => set({ tally: groupReceiptMoney(settings.tally) })}
-          />
         </div>
       </div>
 
@@ -413,18 +394,6 @@ export function FastEntryPanel({
           <span className="font-semibold tabular-nums">{money(entered)}</span>
           <span className="text-muted-foreground"> entered</span>
         </span>
-        {hasTally ? (
-          Math.abs(difference) < 0.01 ? (
-            <span className="inline-flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
-              <Icons.CheckCircle2 className="h-4 w-4" aria-hidden /> Matches the tally
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 font-medium text-amber-700 dark:text-amber-400">
-              <Icons.Scale className="h-4 w-4" aria-hidden />
-              {difference > 0 ? `${money(difference)} still to enter` : `${money(-difference)} more than the tally`}
-            </span>
-          )
-        ) : null}
       </div>
     </section>
   );
