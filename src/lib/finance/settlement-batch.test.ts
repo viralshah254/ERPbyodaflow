@@ -141,3 +141,21 @@ describe("postingGroups", () => {
     expect(postingGroups(lines).map((group) => group.map((row) => row.key))).toEqual([["1", "3"], ["2"]]);
   });
 });
+
+describe("matchDocuments in suggestLine", () => {
+  const invoices = [invoice("1", 30000, "2026-10-01"), invoice("412", 50000, "2026-10-20")];
+  const base = { partyId: "c1", lines: [], creditNotes: [], credits: [], invoices };
+
+  it("pays a named invoice first, by number or full code, then the oldest", () => {
+    const result = suggestLine({ ...base, amount: 60000, documents: "412" });
+    expect(result.allocations.map((row) => [row.invoiceId, row.amount, row.tied])).toEqual([
+      ["412", 50000, true],
+      ["1", 10000, false],
+    ]);
+    expect(suggestLine({ ...base, amount: 10000, documents: "inv-412" }).allocations[0]).toMatchObject({ invoiceId: "412", amount: 10000 });
+  });
+
+  it("reports numbers that are not open invoices", () => {
+    expect(suggestLine({ ...base, amount: 10000, documents: "999" }).unknown).toEqual(["999"]);
+  });
+});

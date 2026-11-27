@@ -57,11 +57,13 @@ export function FastEntryPanel({
 }) {
   const party = side === "AR" ? "customer" : "supplier";
   const docs = side === "AR" ? "invoices" : "bills";
+  const doc = side === "AR" ? "invoice" : "bill";
   const source = SETTLEMENT_SOURCES[side];
   const [partyId, setPartyId] = React.useState("");
   const [partyOption, setPartyOption] = React.useState<PartyLookupOption | null>(null);
   const [instrument, setInstrument] = React.useState("");
   const [amount, setAmount] = React.useState("");
+  const [documents, setDocuments] = React.useState("");
   const [items, setItems] = React.useState<PartyOpenItems | null>(null);
   const [problem, setProblem] = React.useState("");
   const [confirmDuplicate, setConfirmDuplicate] = React.useState("");
@@ -70,6 +72,7 @@ export function FastEntryPanel({
   const cache = React.useRef(new Map<string, Promise<PartyOpenItems>>());
   const instrumentRef = React.useRef<HTMLInputElement | null>(null);
   const amountRef = React.useRef<HTMLInputElement | null>(null);
+  const documentsRef = React.useRef<HTMLInputElement | null>(null);
 
   const postedCount = lines.filter((line) => line.status === "posted").length;
   React.useEffect(() => {
@@ -109,7 +112,7 @@ export function FastEntryPanel({
   const value = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
   const preview =
     partyId && items
-      ? suggestLine({ partyId, amount: value, lines, invoices: items.invoices, creditNotes: items.creditNotes, credits: items.credits })
+      ? suggestLine({ partyId, amount: value, lines, documents, invoices: items.invoices, creditNotes: items.creditNotes, credits: items.credits })
       : null;
 
   const entered = sumAmounts(lines.map((line) => line.amount));
@@ -122,6 +125,7 @@ export function FastEntryPanel({
     setPartyOption(null);
     setInstrument("");
     setAmount("");
+    setDocuments("");
     setProblem("");
     setConfirmDuplicate("");
     setOpenSignal(crypto.randomUUID());
@@ -172,7 +176,12 @@ export function FastEntryPanel({
     setAdding(true);
     try {
       const loaded = await itemsFor(partyId);
-      const plan = suggestLine({ partyId, amount: value, lines, invoices: loaded.invoices, creditNotes: loaded.creditNotes, credits: loaded.credits });
+      const plan = suggestLine({ partyId, amount: value, lines, documents, invoices: loaded.invoices, creditNotes: loaded.creditNotes, credits: loaded.credits });
+      if (plan.unknown.length) {
+        setProblem(`${plan.unknown.join(", ")} ${plan.unknown.length === 1 ? "is" : "are"} not an open ${doc} for this ${party}. Fix or clear the ${doc} box.`);
+        documentsRef.current?.focus();
+        return;
+      }
       if (side === "AP" && method === "CHEQUE" && plan.allocations.length === 0) {
         setProblem("This supplier has no open bills. A supplier cheque must pay a bill.");
         return;
@@ -269,7 +278,7 @@ export function FastEntryPanel({
       </div>
 
       <div className="px-4 py-4 sm:px-5">
-        <div className="grid items-end gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
+        <div className="grid items-end gap-2 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]">
           <div className="space-y-1">
             <Label className="text-xs">{party === "customer" ? "Customer" : "Supplier"}</Label>
             <AsyncSearchableSelect
@@ -334,6 +343,24 @@ export function FastEntryPanel({
               onKeyDown={(event) => onFieldKey(event, () => void add())}
             />
           </div>
+          <div className="space-y-1">
+            <Label htmlFor="fast-entry-documents" className="text-xs">
+              For {doc} <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="fast-entry-documents"
+              ref={documentsRef}
+              autoComplete="off"
+              className="uppercase tabular-nums"
+              placeholder={side === "AR" ? "e.g. 412" : "e.g. 88"}
+              value={documents}
+              onChange={(event) => {
+                setDocuments(event.target.value);
+                setProblem("");
+              }}
+              onKeyDown={(event) => onFieldKey(event, () => void add())}
+            />
+          </div>
           <Button type="button" onClick={() => void add()} disabled={adding} className="h-10">
             {adding ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <Icons.CornerDownLeft className="mr-2 h-4 w-4" aria-hidden />}
             Add
@@ -348,6 +375,11 @@ export function FastEntryPanel({
             </p>
           ) : partyId && !items ? (
             <p className="text-muted-foreground">Loading open {docs}…</p>
+          ) : preview && preview.unknown.length && documents.trim() ? (
+            <p className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
+              <Icons.AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              No single open {doc} matches {preview.unknown.join(", ")}.
+            </p>
           ) : preview ? (
             <p className="text-muted-foreground">
               {side === "AR" ? "Owes" : "We owe"} {money(preview.owing)}
@@ -355,7 +387,7 @@ export function FastEntryPanel({
                 <>
                   {" · pays "}
                   <span className="text-foreground">
-                    {preview.allocations.map((row) => `${row.invoiceNumber} ${money(row.amount)}`).join(", ")}
+                    {preview.allocations.map((row) => `${row.invoiceNumber} ${money(row.amount)}${row.tied ? " (named)" : ""}`).join(", ")}
                   </span>
                 </>
               ) : null}
@@ -368,7 +400,7 @@ export function FastEntryPanel({
             </p>
           ) : (
             <p className="text-muted-foreground">
-              Type the {party}, press Enter, type the {instrumentLabel(settings.method).toLowerCase()}, Enter, the amount, Enter. Esc clears the row.
+              Type the {party}, press Enter, type the {instrumentLabel(settings.method).toLowerCase()}, Enter, the amount, Enter. To pay a specific {doc}, press Tab after the amount and type its number. Esc clears the row.
             </p>
           )}
         </div>
