@@ -20,6 +20,7 @@ import { fetchApPaymentsApi } from "@/lib/api/payments";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { downloadCsv } from "@/lib/export/csv";
 import { formatMoney } from "@/lib/money";
+import { allocationLabel, allocationSummary } from "@/lib/finance/allocation-label";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 import Link from "next/link";
@@ -90,12 +91,16 @@ export default function APPaymentsPage() {
       { id: "party", header: "Paid to", accessor: "party" as keyof APPaymentRow },
       {
         id: "settled",
-        header: "Settled",
+        header: "Bills paid",
         accessor: (r: APPaymentRow) => {
           if (r.status === "CANCELLED") return "Cancelled";
           if (r.counterAccountName) return r.counterAccountName;
-          const bills = (r.allocations ?? []).map((line) => line.documentNumber || line.documentId).filter(Boolean);
-          return bills.length ? bills.join(", ") : "—";
+          const summary = allocationSummary(r.allocations);
+          return (
+            <span className="block max-w-[18rem] truncate" title={summary.full || undefined}>
+              {summary.text}
+            </span>
+          );
         },
       },
       { id: "releasedBy", header: "Released by", accessor: (r: APPaymentRow) => r.releasedBy || "—" },
@@ -255,13 +260,13 @@ export default function APPaymentsPage() {
                         <div key={`${allocation.documentId}-${allocation.amount}`} className="flex items-center justify-between gap-3 p-3 text-sm">
                           <div className="min-w-0">
                             <p className="font-medium truncate">
-                              {allocation.documentNumber ?? allocation.documentId}
+                              {allocationLabel(allocation)}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               Allocated {formatMoney(allocation.amount, "KES")}
                             </p>
                           </div>
-                          {allocation.documentType === "bill" || !allocation.documentType ? (
+                          {(allocation.documentType === "bill" || !allocation.documentType) && !allocation.documentId.startsWith("opening:") ? (
                             <Button variant="outline" size="sm" asChild>
                               <Link href={`/docs/bill/${allocation.documentId}`}>
                                 <Icons.FileText className="mr-2 h-4 w-4" />

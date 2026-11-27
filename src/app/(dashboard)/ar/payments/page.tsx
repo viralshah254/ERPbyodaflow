@@ -27,6 +27,7 @@ import { useCopilotStore } from "@/stores/copilot-store";
 import { useCopilotFeatureEnabled } from "@/lib/copilot-feature";
 import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { formatMoney } from "@/lib/money";
+import { allocationSummary } from "@/lib/finance/allocation-label";
 import { downloadCsv } from "@/lib/export/csv";
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
@@ -47,8 +48,7 @@ function methodDetail(row: PaymentRow): string {
 }
 
 function appliedSummary(row: PaymentRow): string {
-  const numbers = [...new Set((row.allocations ?? []).map((line) => line.documentNumber || line.documentId).filter(Boolean))];
-  return numbers.length ? numbers.join(", ") : "—";
+  return allocationSummary(row.allocations).full || "—";
 }
 
 import { useHasPermission } from "@/lib/rbac/use-write-guard";
@@ -192,8 +192,15 @@ export default function ARPaymentsPage() {
       },
       {
         id: "applied",
-        header: "Applied to",
-        accessor: (r: PaymentRow) => appliedSummary(r),
+        header: "Invoices paid",
+        accessor: (r: PaymentRow) => {
+          const summary = allocationSummary(r.allocations);
+          return (
+            <span className="block max-w-[18rem] truncate" title={summary.full || undefined}>
+              {summary.text}
+            </span>
+          );
+        },
       },
       {
         id: "unapplied",

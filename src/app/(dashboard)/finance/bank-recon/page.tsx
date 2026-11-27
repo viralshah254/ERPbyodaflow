@@ -60,6 +60,7 @@ import { describeMatchingRun, runPaymentMatchingApi } from "@/lib/api/payment-ma
 import type { BankReconciliationSessionRecord, SystemTransaction } from "@/lib/types/bank-recon";
 import { formatReconDate } from "@/lib/finance/bank-account-label";
 import { searchApSupplierOptionsApi, searchArCustomerOptionsApi } from "@/lib/api/payments";
+import { allocationLabel } from "@/lib/finance/allocation-label";
 import type { PartyLookupOption } from "@/lib/api/parties";
 import { uploadFile, isApiConfigured } from "@/lib/api/client";
 import { toast } from "sonner";
@@ -1275,7 +1276,7 @@ export default function BankReconPage() {
                       return (
                         <div key={`${allocation.documentId}-${allocation.amount}`} className="flex items-center justify-between gap-3 p-3 text-sm">
                           <div>
-                            <p className="font-medium">{allocation.documentNumber ?? allocation.documentId}</p>
+                            <p className="font-medium">{allocationLabel(allocation)}</p>
                             <p className="text-xs text-muted-foreground">
                               {formatMoney(allocation.amount, viewPaymentDetail.currency ?? currency)}
                             </p>
