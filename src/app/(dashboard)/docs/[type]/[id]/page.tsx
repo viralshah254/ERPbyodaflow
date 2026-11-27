@@ -56,6 +56,7 @@ import { documentExportFileName } from "@/lib/documents/export-filename";
 import { t } from "@/lib/terminology";
 import { useOrgContextStore, useTerminology } from "@/stores/orgContextStore";
 import { isFmcgOrg } from "@/lib/fmcg/sfa-customer";
+import { chartAccountPostingNotice, postingAccountsHref } from "@/lib/inventory/posting-account-notice";
 import { canonicalIndustryTemplateId, FMCG_BAKERY_TEMPLATE_ID, FMCG_SELLING_TEMPLATE_IDS, isBakeryTemplate, requiresStampedDeliveryNote } from "@/config/industry";
 import { customerDeliveryAddressText } from "@/lib/docs/customer-delivery-address";
 import {
@@ -301,6 +302,21 @@ function toastDocumentActionError(error: unknown, documentId?: string): "own" | 
     return false;
   }
   const message = error instanceof Error ? error.message : "Request failed";
+  const posting = chartAccountPostingNotice(error);
+  if (posting) {
+    const returnTo = typeof window !== "undefined" ? window.location.pathname : undefined;
+    toast.error("This was not posted", {
+      description: posting.message,
+      action: {
+        label: "Open posting accounts",
+        onClick: () => {
+          window.location.href = postingAccountsHref(returnTo);
+        },
+      },
+      duration: 20000,
+    });
+    return false;
+  }
   const fiscal = fiscalRecoveryToast(message);
   if (fiscal) {
     const otherDocument = /unresolved signing attempt/i.test(message);

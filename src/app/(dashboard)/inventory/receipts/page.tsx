@@ -28,6 +28,7 @@ import { getSavedViews, saveView, deleteSavedView } from "@/lib/saved-views";
 import type { SavedView } from "@/components/ui/saved-views-dropdown";
 import type { FilterChip } from "@/components/ui/filter-chips";
 import { useCanWriteInventory } from "@/lib/rbac/use-write-guard";
+import { chartAccountPostingNotice, postingAccountsHref } from "@/lib/inventory/posting-account-notice";
 import { formatActivityExact, formatDocumentCreatedLabel } from "@/lib/format/nairobi-datetime";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -213,6 +214,16 @@ export default function InventoryReceiptsPage() {
               onClick: () => { window.location.href = openingCostsHref(err.products); },
             },
             duration: 12000,
+          });
+        } else if (chartAccountPostingNotice(err)) {
+          const posting = chartAccountPostingNotice(err)!;
+          toast.error("This receipt was not posted", {
+            description: posting.message,
+            action: {
+              label: "Open posting accounts",
+              onClick: () => { window.location.href = postingAccountsHref(`/inventory/receipts/${row.id}`); },
+            },
+            duration: 20000,
           });
         } else {
           toast.error(msg);
@@ -504,6 +515,16 @@ export default function InventoryReceiptsPage() {
                             onClick: () => { window.location.href = openingCostsHref(reason.products); },
                           },
                           duration: 12000,
+                        });
+                      } else if (chartAccountPostingNotice(reason)) {
+                        const posting = chartAccountPostingNotice(reason)!;
+                        toast.error("This receipt was not posted", {
+                          description: posting.message,
+                          action: {
+                            label: "Open posting accounts",
+                            onClick: () => { window.location.href = postingAccountsHref(`/inventory/receipts/${row.id}`); },
+                          },
+                          duration: 20000,
                         });
                       } else {
                         toast.error(parts.join(" "), {

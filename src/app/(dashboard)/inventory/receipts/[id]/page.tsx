@@ -22,6 +22,7 @@ import { ProcurementVariancePanel } from "@/components/operational/ProcurementVa
 import { StockAgeIndicator } from "@/components/operational/StockAgeIndicator";
 import { ExceptionBanner } from "@/components/operational/ExceptionBanner";
 import { fetchGRNById, postGRN, patchGRNLine, patchGrnHeaderApi, confirmGRNProcessing, recordGRNLineQc, recordGRNBulkQc, exportGRNDetailCsv, exportGRNPdf, isOpeningCostPostError, openingCostPostMessage, openingCostsHref, type GrnDetailRow, type GrnPostError, type OpeningCostGap } from "@/lib/api/grn";
+import { chartAccountPostingNotice, postingAccountsHref } from "@/lib/inventory/posting-account-notice";
 import { Badge } from "@/components/ui/badge";
 import { fetchPutawayTasks } from "@/lib/api/warehouse-execution";
 import type { GrnLineRow } from "@/lib/types/purchasing";
@@ -45,7 +46,7 @@ import { useCanWriteInventory, useHasPermission } from "@/lib/rbac/use-write-gua
 import { toast } from "sonner";
 import * as Icons from "lucide-react";
 
-function toastGrnActionError(raw: unknown, fallback = "Failed to post GRN.") {
+function toastGrnActionError(raw: unknown, fallback = "Failed to post GRN.", returnTo?: string) {
   const e = raw as GrnPostError & {
     body?: { code?: string; grns?: Array<{ id: string; number: string }> };
   };
@@ -121,6 +122,20 @@ function toastGrnActionError(raw: unknown, fallback = "Failed to post GRN.") {
     });
     return;
   }
+  const posting = chartAccountPostingNotice(e);
+  if (posting) {
+    toast.error("This receipt was not posted", {
+      description: posting.message,
+      action: {
+        label: "Open posting accounts",
+        onClick: () => {
+          window.location.href = postingAccountsHref(returnTo);
+        },
+      },
+      duration: 20000,
+    });
+    return;
+  }
   toast.error(msg);
 }
 
@@ -154,6 +169,7 @@ export default function ReceiptDetailPage() {
   const [editingExpiry, setEditingExpiry] = React.useState<Record<number, string>>({});
   const [supplierInvoiceNo, setSupplierInvoiceNo] = React.useState("");
   const [postOpeningCost, setPostOpeningCost] = React.useState<{ message: string; products: OpeningCostGap[] } | null>(null);
+  const [postingAccountMessage, setPostingAccountMessage] = React.useState<string | null>(null);
   const [linkedBillIdDraft, setLinkedBillIdDraft] = React.useState("");
 
   // GRN header edit dialog
@@ -326,6 +342,7 @@ export default function ReceiptDetailPage() {
     if (!grn) return;
     setPosting(true);
     setPostOpeningCost(null);
+    setPostingAccountMessage(null);
     try {
       if (fmcgOrg) await saveSupplierInvoice();
       else await flushPendingReceivedWeights();
@@ -345,7 +362,8 @@ export default function ReceiptDetailPage() {
       if (isOpeningCostPostError(failed)) {
         setPostOpeningCost({ message: openingCostPostMessage(failed), products: failed.products ?? [] });
       }
-      toastGrnActionError(raw);
+      setPostingAccountMessage(chartAccountPostingNotice(failed)?.message ?? null);
+      toastGrnActionError(raw, "Failed to post GRN.", `/inventory/receipts/${grn.id}`);
     } finally {
       setPosting(false);
     }
@@ -773,6 +791,21 @@ export default function ReceiptDetailPage() {
             actions={[
               { label: "Open audit", onClick: () => { window.location.href = "/purchasing/cash-weight-audit"; } },
             ]}
+          />
+        ) : null}
+
+        {postingAccountMessage && grn.status !== "POSTED" && grn.status !== "RECEIVED" && grn.status !== "CONVERTED" ? (
+          <ExceptionBanner
+            type="error"
+            title="This receipt cannot be posted yet"
+            description={postingAccountMessage}
+            actions={[{
+              label: "Open posting accounts",
+              variant: "default",
+              onClick: () => {
+                window.location.href = postingAccountsHref(`/inventory/receipts/${grn.id}`);
+              },
+            }]}
           />
         ) : null}
 
