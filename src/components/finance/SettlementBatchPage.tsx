@@ -196,7 +196,7 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
   const [posting, setPosting] = React.useState(false);
   const [progress, setProgress] = React.useState({ done: 0, total: 0 });
   const [mode, setMode] = React.useState<"fast" | "form">("fast");
-  const [fast, setFast] = React.useState<FastEntrySettings>({ method: "CHEQUE", bankAccountId: "", date: today, tally: "" });
+  const [fast, setFast] = React.useState<FastEntrySettings>({ method: "CHEQUE", bankAccountId: "", date: today });
   const [defaults, setDefaults] = React.useState<EntryDefaults>({
     date: today,
     method: "BANK_TRANSFER",
@@ -217,7 +217,7 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
     setMode(prefill ? "form" : savedMode === "form" ? "form" : "fast");
     const savedFast = readJson<FastEntrySettings>(`${storageKey}.fast`);
     if (savedFast) {
-      setFast(restored.length ? savedFast : { ...savedFast, date: todayNairobiYmd(), tally: "" });
+      setFast(restored.length ? savedFast : { ...savedFast, date: todayNairobiYmd() });
     }
     setLoaded(true);
   }, [storageKey, prefill]);
