@@ -12,10 +12,12 @@ import { sumAmounts } from "@/lib/ar/settlement-edit";
 import { parseReceiptMoney } from "@/lib/ar/receipt-money";
 import {
   PAYMENT_METHODS,
+  batchClaims,
   likelyDuplicate,
   needsBankAccount,
   suggestLine,
   type BatchLine,
+  withoutClaims,
   type PaymentMethod,
   type SettlementSide,
 } from "@/lib/finance/settlement-batch";
@@ -71,7 +73,6 @@ export function FastEntryPanel({
   const cache = React.useRef(new Map<string, Promise<PartyOpenItems>>());
   const instrumentRef = React.useRef<HTMLInputElement | null>(null);
   const amountRef = React.useRef<HTMLInputElement | null>(null);
-  const documentsRef = React.useRef<HTMLInputElement | null>(null);
 
   const postedCount = lines.filter((line) => line.status === "posted").length;
   React.useEffect(() => {
@@ -109,6 +110,11 @@ export function FastEntryPanel({
 
   const parsedAmount = parseReceiptMoney(amount);
   const value = Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : 0;
+  // Open documents the box can suggest: not already claimed by another line in this batch.
+  const openDocs = React.useMemo(
+    () => (partyId && items ? withoutClaims(items.invoices, batchClaims(lines, partyId).invoices) : []),
+    [partyId, items, lines],
+  );
   const preview =
     partyId && items
       ? suggestLine({ partyId, amount: value, lines, documents, invoices: items.invoices, creditNotes: items.creditNotes, credits: items.credits })
@@ -173,17 +179,13 @@ export function FastEntryPanel({
     try {
       const loaded = await itemsFor(partyId);
       const plan = suggestLine({ partyId, amount: value, lines, documents, invoices: loaded.invoices, creditNotes: loaded.creditNotes, credits: loaded.credits });
-      if (plan.unknown.length) {
-        setProblem(`${plan.unknown.join(", ")} ${plan.unknown.length === 1 ? "is" : "are"} not an open ${doc} for this ${party}. Fix or clear the ${doc} box.`);
-        documentsRef.current?.focus();
-        return;
-      }
       if (side === "AP" && method === "CHEQUE" && plan.allocations.length === 0) {
         setProblem("This supplier has no open bills. A supplier cheque must pay a bill.");
         return;
       }
       onAdd({
         ...draft,
+        reference: [draft.reference, plan.unknown.length ? `Typed ${doc} ${plan.unknown.join(", ")}` : ""].filter(Boolean).join(" · "),
         partyName: partyOption?.label ?? partyId,
         date: settings.date,
         bankAccountId: method === "CASH" ? "" : settings.bankAccountId,
@@ -330,10 +332,11 @@ export function FastEntryPanel({
             </Label>
             <Input
               id="fast-entry-documents"
-              ref={documentsRef}
+              list="fast-entry-open-docs"
               autoComplete="off"
-              className="uppercase tabular-nums"
-              placeholder={side === "AR" ? "e.g. 412" : "e.g. 88"}
+              className="tabular-nums"
+              placeholder={partyId ? "Type or pick" : `Choose the ${party} first`}
+              disabled={!partyId}
               value={documents}
               onChange={(event) => {
                 setDocuments(event.target.value);
@@ -341,6 +344,13 @@ export function FastEntryPanel({
               }}
               onKeyDown={(event) => onFieldKey(event, () => void add())}
             />
+            <datalist id="fast-entry-open-docs">
+              {openDocs.map((invoice) => (
+                <option key={invoice.id} value={invoice.number}>
+                  {`${money(invoice.outstanding)} · ${invoice.dueDate ? `due ${invoice.dueDate}` : invoice.date}`}
+                </option>
+              ))}
+            </datalist>
           </div>
           <Button type="button" onClick={() => void add()} disabled={adding} className="h-10">
             {adding ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <Icons.CornerDownLeft className="mr-2 h-4 w-4" aria-hidden />}
@@ -356,11 +366,6 @@ export function FastEntryPanel({
             </p>
           ) : partyId && !items ? (
             <p className="text-muted-foreground">Loading open {docs}…</p>
-          ) : preview && preview.unknown.length && documents.trim() ? (
-            <p className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400">
-              <Icons.AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
-              No single open {doc} matches {preview.unknown.join(", ")}.
-            </p>
           ) : preview ? (
             <p className="text-muted-foreground">
               {side === "AR" ? "Owes" : "We owe"} {money(preview.owing)}
@@ -376,6 +381,12 @@ export function FastEntryPanel({
                 <span className="text-amber-700 dark:text-amber-400">
                   {" · "}
                   {money(preview.unapplied)} {side === "AR" ? "more than owed, stays on account" : "more than owed, recorded as an advance"}
+                </span>
+              ) : null}
+              {preview.unknown.length ? (
+                <span className="text-muted-foreground">
+                  {" · "}
+                  Not an open {doc}: {preview.unknown.join(", ")}. Kept on the line; the amount is allocated automatically.
                 </span>
               ) : null}
             </p>
