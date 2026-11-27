@@ -239,7 +239,7 @@ export function CustomerLedger({
 
         <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
           {[
-            ["Opening", statement?.openingBalance],
+            ["Brought forward", statement?.openingBalance],
             ["Charges", statement?.periodDebits],
             ["Payments", statement?.periodCredits],
             ["Closing", statement?.closingBalance],
@@ -293,7 +293,7 @@ export function CustomerLedger({
             <TableBody>
               <TableRow>
                 <TableCell className="text-muted-foreground" colSpan={statement?.branches?.length ? 6 : 5}>
-                  Opening balance
+                  Balance brought forward
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums" data-sort-value={(statement) ? (statement.openingBalance) : null}>
                   {statement ? formatMoney(statement.openingBalance, currency) : "—"}
