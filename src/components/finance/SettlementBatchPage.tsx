@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { SettlementEntryForm, focusEntryParty, type EntryDefaults, type EntryPrefill } from "@/components/finance/SettlementEntryForm";
 import { createArPaymentApi, createBatchApPaymentApi, downloadArReceiptPdfApi } from "@/lib/api/payments";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
-import { batchTotals, methodLabel, type BatchLine, type SettlementSide } from "@/lib/finance/settlement-batch";
+import { batchTotals, methodLabel, postingGroups, type BatchLine, type SettlementSide } from "@/lib/finance/settlement-batch";
+import { FastEntryPanel, type FastEntrySettings } from "@/components/finance/FastEntryPanel";
 import { roundMoney } from "@/lib/ar/settlement-edit";
 import { isFmcgTemplateId } from "@/lib/fmcg/sfa-customer";
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
@@ -73,9 +74,71 @@ function instrument(line: BatchLine): string {
   return line.bankAccountName || "Bank transfer";
 }
 
+function readJson<T>(key: string): T | null {
+  try {
+    const raw = window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key: string, value: unknown) {
+  try {
+    if (value == null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, JSON.stringify(value));
+    window.sessionStorage.removeItem(key);
+  } catch {
+    /* storage full or blocked: the batch still works for this visit */
+  }
+}
+
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
+
+/** A plain list to bank the physical cheques with: number, drawer, amount, total. */
+function printBankingList(lines: BatchLine[]) {
+  const cheques = lines.filter((line) => line.method === "CHEQUE");
+  if (!cheques.length) {
+    toast.message("There are no cheques in this batch.");
+    return;
+  }
+  const byBank = new Map<string, BatchLine[]>();
+  for (const line of cheques) {
+    const bank = line.bankAccountName || "No bank account";
+    byBank.set(bank, [...(byBank.get(bank) ?? []), line]);
+  }
+  const sections = [...byBank.entries()]
+    .map(([bank, rows]) => {
+      const total = roundMoney(rows.reduce((sum, row) => sum + row.amount, 0));
+      const body = rows
+        .map(
+          (row, index) =>
+            `<tr><td>${index + 1}</td><td>${escapeHtml(row.chequeNumber)}</td><td>${escapeHtml(row.partyName)}</td><td>${escapeHtml(row.chequeDate || row.date)}</td><td class="n">${escapeHtml(formatMoney(row.amount, "KES"))}</td></tr>`,
+        )
+        .join("");
+      return `<h2>${escapeHtml(bank)}</h2><table><thead><tr><th>#</th><th>Cheque no.</th><th>From</th><th>Date</th><th class="n">Amount</th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="4">${rows.length} cheque${rows.length === 1 ? "" : "s"}</td><td class="n">${escapeHtml(formatMoney(total, "KES"))}</td></tr></tfoot></table>`;
+    })
+    .join("");
+  const win = window.open("", "_blank", "width=900,height=700");
+  if (!win) {
+    toast.error("Allow pop-ups to print the banking list.");
+    return;
+  }
+  win.document.write(
+    `<!doctype html><html><head><title>Cheques to bank</title><style>body{font:13px system-ui,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:20px 0 6px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left}th{font-size:11px;text-transform:uppercase;color:#555}.n{text-align:right;font-variant-numeric:tabular-nums}tfoot td{font-weight:600;border-top:2px solid #111}</style></head><body><h1>Cheques to bank</h1><div>Printed ${escapeHtml(new Date().toLocaleString("en-KE"))}</div>${sections}</body></html>`,
+  );
+  win.document.close();
+  win.focus();
+  win.print();
+}
+
+/** Payment numbers are count + 1 on the server, so parallel posts could take the same number. */
+const POST_WORKERS = 1;
+
 function loadBatch(key: string): BatchLine[] {
   try {
-    const raw = window.sessionStorage.getItem(key);
+    const raw = window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
     const parsed = raw ? (JSON.parse(raw) as BatchLine[]) : [];
     if (!Array.isArray(parsed)) return [];
     return parsed
@@ -131,6 +194,9 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
   const [loaded, setLoaded] = React.useState(false);
   const [editingKey, setEditingKey] = React.useState<string | null>(null);
   const [posting, setPosting] = React.useState(false);
+  const [progress, setProgress] = React.useState({ done: 0, total: 0 });
+  const [mode, setMode] = React.useState<"fast" | "form">("fast");
+  const [fast, setFast] = React.useState<FastEntrySettings>({ method: "CHEQUE", bankAccountId: "", date: today, tally: "" });
   const [defaults, setDefaults] = React.useState<EntryDefaults>({
     date: today,
     method: "BANK_TRANSFER",
@@ -145,15 +211,27 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
   }, []);
 
   React.useEffect(() => {
-    setLines(loadBatch(storageKey));
+    const restored = loadBatch(storageKey);
+    setLines(restored);
+    const savedMode = readJson<"fast" | "form">(`${storageKey}.mode`);
+    setMode(prefill ? "form" : savedMode === "form" ? "form" : "fast");
+    const savedFast = readJson<FastEntrySettings>(`${storageKey}.fast`);
+    if (savedFast) {
+      setFast(restored.length ? savedFast : { ...savedFast, date: todayNairobiYmd(), tally: "" });
+    }
     setLoaded(true);
-  }, [storageKey]);
+  }, [storageKey, prefill]);
 
   React.useEffect(() => {
     if (!loaded) return;
-    if (lines.length) window.sessionStorage.setItem(storageKey, JSON.stringify(lines));
-    else window.sessionStorage.removeItem(storageKey);
+    writeJson(storageKey, lines.length ? lines : null);
   }, [lines, loaded, storageKey]);
+
+  React.useEffect(() => {
+    if (!loaded) return;
+    writeJson(`${storageKey}.mode`, mode);
+    writeJson(`${storageKey}.fast`, fast);
+  }, [mode, fast, loaded, storageKey]);
 
   const waiting = lines.filter((line) => line.status === "ready" || line.status === "failed");
   const posted = lines.filter((line) => line.status === "posted");
@@ -197,22 +275,32 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
     if (!queue.length || posting) return;
     setEditingKey(null);
     setPosting(true);
+    setProgress({ done: 0, total: queue.length });
     let ok = 0;
     let failed = 0;
-    for (const line of queue) {
-      setLines((current) => current.map((row) => (row.key === line.key ? { ...row, status: "posting", error: undefined } : row)));
-      try {
-        const result = await postLine(side, line);
-        ok += 1;
-        setLines((current) =>
-          current.map((row) => (row.key === line.key ? { ...row, status: "posted", paymentId: result.id, paymentNumber: result.number } : row)),
-        );
-      } catch (error) {
-        failed += 1;
-        const message = (error as Error).message || `Could not post this ${page.noun}.`;
-        setLines((current) => current.map((row) => (row.key === line.key ? { ...row, status: "failed", error: message } : row)));
+    const groups = postingGroups(queue);
+    const worker = async () => {
+      for (let group = groups.shift(); group; group = groups.shift()) {
+        for (const line of group) {
+          setLines((current) => current.map((row) => (row.key === line.key ? { ...row, status: "posting", error: undefined } : row)));
+          try {
+            const result = await postLine(side, line);
+            ok += 1;
+            setLines((current) =>
+              current.map((row) =>
+                row.key === line.key ? { ...row, status: "posted", paymentId: result.id, paymentNumber: result.number } : row,
+              ),
+            );
+          } catch (error) {
+            failed += 1;
+            const message = (error as Error).message || `Could not post this ${page.noun}.`;
+            setLines((current) => current.map((row) => (row.key === line.key ? { ...row, status: "failed", error: message } : row)));
+          }
+          setProgress((current) => ({ ...current, done: current.done + 1 }));
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(POST_WORKERS, groups.length) }, worker));
     setPosting(false);
     if (failed === 0) toast.success(`${ok} ${ok === 1 ? page.noun : page.nouns} posted.`);
     else toast.error(`${ok} posted, ${failed} need attention. Fix them in the list and post again.`);
@@ -237,27 +325,67 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
         description={page.description}
         breadcrumbs={breadcrumbs}
         actions={
-          <Button variant="outline" asChild>
-            <Link href={page.listHref}>
-              <Icons.ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
-              {page.listLabel}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div role="radiogroup" aria-label="Entry mode" className="flex gap-1 rounded-lg border bg-muted/40 p-1">
+              {(
+                [
+                  { value: "fast", label: "Fast entry", icon: Icons.Zap },
+                  { value: "form", label: "One at a time", icon: Icons.ListChecks },
+                ] as const
+              ).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={mode === option.value}
+                  onClick={() => {
+                    setMode(option.value);
+                    setEditingKey(null);
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                    mode === option.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <option.icon className="h-3.5 w-3.5" aria-hidden />
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <Button variant="outline" asChild>
+              <Link href={page.listHref}>
+                <Icons.ArrowLeft className="mr-2 h-4 w-4" aria-hidden />
+                {page.listLabel}
+              </Link>
+            </Button>
+          </div>
         }
       />
 
       <div className="space-y-4 pb-28">
-        <SettlementEntryForm
-          side={side}
-          lines={lines}
-          editing={editing}
-          defaults={defaults}
-          prefill={prefill}
-          bankAccounts={bankAccounts}
-          today={today}
-          onSave={saveLine}
-          onCancelEdit={() => setEditingKey(null)}
-        />
+        {mode === "fast" && !editing ? (
+          <FastEntryPanel
+            side={side}
+            lines={lines}
+            settings={fast}
+            onSettingsChange={setFast}
+            bankAccounts={bankAccounts}
+            today={today}
+            onAdd={saveLine}
+          />
+        ) : (
+          <SettlementEntryForm
+            side={side}
+            lines={lines}
+            editing={editing}
+            defaults={defaults}
+            prefill={prefill}
+            bankAccounts={bankAccounts}
+            today={today}
+            onSave={saveLine}
+            onCancelEdit={() => setEditingKey(null)}
+          />
+        )}
 
         <section aria-label={`${page.nouns} in this batch`} className="overflow-hidden rounded-xl border bg-card shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3 sm:px-5">
@@ -272,11 +400,19 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
                   : `${page.nouns[0].toUpperCase() + page.nouns.slice(1)} you add appear here.`}
               </p>
             </div>
-            {posted.length ? (
-              <Button type="button" variant="ghost" size="sm" onClick={() => setLines((current) => current.filter((line) => line.status !== "posted"))}>
-                Clear {posted.length} posted
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap gap-1">
+              {side === "AR" && lines.some((line) => line.method === "CHEQUE") ? (
+                <Button type="button" variant="outline" size="sm" onClick={() => printBankingList(lines)}>
+                  <Icons.Printer className="mr-1.5 h-3.5 w-3.5" aria-hidden />
+                  Banking list
+                </Button>
+              ) : null}
+              {posted.length ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => setLines((current) => current.filter((line) => line.status !== "posted"))}>
+                  Clear {posted.length} posted
+                </Button>
+              ) : null}
+            </div>
           </div>
 
           {lines.length === 0 ? (
@@ -300,11 +436,11 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {lines.map((line, index) => (
+                  {(mode === "fast" ? [...lines].reverse() : lines).map((line) => (
                     <BatchRow
                       key={line.key}
                       line={line}
-                      index={index}
+                      index={lines.indexOf(line)}
                       page={page}
                       side={side}
                       editing={line.key === editingKey}
@@ -342,7 +478,7 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
             </div>
             <Button type="button" size="lg" onClick={postAll} disabled={posting || waiting.length === 0 || Boolean(editingKey)}>
               {posting ? <Icons.Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : <Icons.Send className="mr-2 h-4 w-4" aria-hidden />}
-              {posting ? "Posting…" : `Post ${waiting.length || ""} ${waiting.length === 1 ? page.noun : page.nouns}`}
+              {posting ? `Posting ${Math.min(progress.done + 1, progress.total)} of ${progress.total}…` : `Post ${waiting.length || ""} ${waiting.length === 1 ? page.noun : page.nouns}`}
             </Button>
           </div>
           {editingKey ? <p className="mt-1 text-xs text-muted-foreground">Finish or cancel the edit before posting.</p> : null}
