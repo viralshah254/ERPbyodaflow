@@ -91,6 +91,7 @@ export const ROUTE_REGISTRY: RouteInfo[] = [
   { path: "/ap/statements", module: "finance", description: "Supplier statements", inNav: true },
   { path: "/ap/bills", module: "finance", description: "AP Bills", inNav: true },
   { path: "/ap/payments", module: "finance", description: "AP Payments", inNav: true },
+  { path: "/ap/general-payments", module: "finance", description: "General Payments", inNav: true },
   { path: "/ap/three-way-match", module: "finance", description: "3-way match", inNav: true },
 
   // AR

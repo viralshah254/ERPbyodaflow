@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { ReturnToBanner } from "@/components/finance/ReturnToBanner";
 import { LIST_PAGE_BODY_CLASS, LIST_PAGE_SHELL_CLASS, LIST_TABLE_SURFACE_CLASS, PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -251,6 +252,7 @@ export default function ChartOfAccountsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <ReturnToBanner />
         <DataTableToolbar className="shrink-0"
           searchPlaceholder="Search by code, name, type, currency..."
           searchValue={search}

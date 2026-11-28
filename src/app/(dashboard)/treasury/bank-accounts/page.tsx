@@ -36,6 +36,7 @@ import {
 } from "@/lib/api/treasury-ops";
 import type { BankAccountRow } from "@/lib/types/treasury";
 import { fetchFinanceAccountsApi, type FinanceAccount } from "@/lib/api/finance";
+import { ReturnToBanner } from "@/components/finance/ReturnToBanner";
 import { ExplainThis } from "@/components/copilot/ExplainThis";
 import { downloadCsv } from "@/lib/export/csv";
 import { statementReadyBankAccount } from "@/lib/finance/bank-account-label";
@@ -145,6 +146,7 @@ export default function BankAccountsPage() {
         }
       />
       <div className={LIST_PAGE_BODY_CLASS}>
+        <ReturnToBanner />
         <DataTableToolbar
           className="shrink-0"
           searchPlaceholder="Search by name, bank, account..."

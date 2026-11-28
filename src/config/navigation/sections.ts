@@ -548,6 +548,7 @@ export const NAV_SECTIONS_CONFIG: NavSectionConfig[] = [
       { key: "ap-statements", label: "Supplier statements", href: "/ap/statements", icon: "FileText", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "ap-bills", label: "AP Bills", href: "/ap/bills", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "ap-payments", label: "AP Payments", href: "/ap/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
+      { key: "ap-general-payments", label: "General Payments", href: "/ap/general-payments", icon: "Wallet", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "ap-three-way-match", label: "3-way match", href: "/ap/three-way-match", icon: "GitCompare", moduleKey: "finance", requiresPermissions: ["finance.ap.read"] },
       { key: "finance-payments", label: "Payments & Receipts", href: "/finance/payments", icon: "CreditCard", moduleKey: "finance", requiresPermissions: ["finance.payments.read"] },
       { key: "finance-notes", label: "Credit / debit notes", href: "/finance/notes", icon: "Receipt", moduleKey: "finance", requiresPermissions: ["finance.read"] },

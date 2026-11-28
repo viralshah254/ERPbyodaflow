@@ -1386,6 +1386,16 @@ export const ITEM_GUIDES: Partial<
       "AP Payments lists payments to suppliers. Payments are created from payment runs; view history and status here.",
     guideSteps: ["Filter by supplier or date.", "Open a payment to see details or linked bills."],
   },
+  "ap-general-payments": {
+    guideSummary:
+      "General Payments records money paid out that is not for stock bought from a supplier: contractors, services, fuel, petty bills and taxes. Each payment posts to the ledger account you choose and reduces the bank, cash or M-Pesa account it was paid from.",
+    guideSteps: [
+      "Choose New payment and enter the date, amount and who was paid.",
+      "Pick the ledger account the payment is for, such as repairs, fuel or contractor fees, and describe it.",
+      "Choose the account it was paid from and the method. Cheques need a number; M-Pesa needs the transaction code.",
+      "Save, or use Save & add another to enter a batch of vouchers.",
+    ],
+  },
   "ap-three-way-match": {
     guideSummary:
       "3-way match reconciles PO, GRN, and supplier invoice. Resolve variances and post the invoice when quantities and prices match.",
