@@ -84,6 +84,29 @@ export async function fetchFinishedGoodsPage(opts: {
   };
 }
 
+/**
+ * One numbered page of what a bakery receives on a GRN: raw materials and packaging, never finished goods.
+ * `total` is the number of matching rows, so the caller can show page numbers.
+ */
+export async function fetchReceivableProductsPage(opts: {
+  page: number;
+  pageSize: number;
+  search?: string;
+}): Promise<{ items: ProductRow[]; total: number }> {
+  const pageSize = Math.min(Math.max(Math.floor(opts.pageSize) || 10, 1), 100);
+  const page = Math.max(Math.floor(opts.page) || 1, 1);
+  const result = await fetchProductsPageApi({
+    status: "ACTIVE",
+    itemRoles: ["RAW", "PACKAGING"],
+    search: opts.search,
+    limit: pageSize,
+    cursor: String((page - 1) * pageSize),
+    includeStock: false,
+    includeTotal: true,
+  });
+  return { items: result.items, total: result.total ?? (page - 1) * pageSize + result.items.length };
+}
+
 /** Hydrate products cache from API; call from pages that need listProducts() to reflect live data. */
 export async function hydrateProductsFromApi(): Promise<ProductRow[]> {
   const rows = await fetchProductsApi({ limit: 100 });
