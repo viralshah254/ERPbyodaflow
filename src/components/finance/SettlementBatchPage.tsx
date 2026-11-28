@@ -8,11 +8,13 @@ import { PageShell } from "@/components/layout/page-shell";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { SettlementEntryForm, focusEntryParty, type EntryDefaults, type EntryPrefill } from "@/components/finance/SettlementEntryForm";
+import { fetchApiBinary } from "@/lib/api/client";
 import { createArPaymentApi, createBatchApPaymentApi, downloadArReceiptPdfApi } from "@/lib/api/payments";
 import { fetchBankAccountsApi } from "@/lib/api/treasury-ops";
 import { batchTotals, methodLabel, postingGroups, type BatchLine, type SettlementSide } from "@/lib/finance/settlement-batch";
 import { FastEntryPanel, type FastEntrySettings } from "@/components/finance/FastEntryPanel";
 import { roundMoney } from "@/lib/ar/settlement-edit";
+import { isBakeryTemplate } from "@/config/industry";
 import { isFmcgTemplateId } from "@/lib/fmcg/sfa-customer";
 import { todayNairobiYmd } from "@/lib/format/nairobi-datetime";
 import { formatMoney } from "@/lib/money";
@@ -96,41 +98,143 @@ function writeJson(key: string, value: unknown) {
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char);
 
-/** A plain list to bank the physical cheques with: number, drawer, amount, total. */
-function printBankingList(lines: BatchLine[]) {
+/** Same colours as the Joy invoice and receipt. Other FMCG sellers keep the standard document colours. */
+const BANKING_PALETTE = {
+  joy: { brand: "#24385B", soft: "#EEF2F8", ink: "#1F2937", muted: "#6B7280", line: "#D7DCE3", row: "#FAFBFC" },
+  standard: { brand: "#1E3A5F", soft: "#E9EFF7", ink: "#111111", muted: "#555555", line: "#D8DEE6", row: "#F5F7FA" },
+};
+
+type BankingListOrg = { name: string; taxId: string; bakery: boolean };
+
+/** ISO dates (YYYY-MM-DD) print as dd/mm/yyyy. */
+function displayDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value;
+}
+
+/** The org logo as a data URL, so the print window needs no sign-in. Null when none is uploaded. */
+async function orgLogoDataUrl(): Promise<string | null> {
+  try {
+    const blob = await fetchApiBinary("/api/org/compliance-docs/logo");
+    if (!blob?.size) return null;
+    return await new Promise<string | null>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** A printable banking slip for the physical cheques: per bank, cheque number, drawer, date, amount, and totals. */
+async function printBankingList(lines: BatchLine[], org: BankingListOrg) {
   const cheques = lines.filter((line) => line.method === "CHEQUE");
   if (!cheques.length) {
     toast.message("There are no cheques in this batch.");
     return;
   }
-  const byBank = new Map<string, BatchLine[]>();
-  for (const line of cheques) {
-    const bank = line.bankAccountName || "No bank account";
-    byBank.set(bank, [...(byBank.get(bank) ?? []), line]);
-  }
-  const sections = [...byBank.entries()]
-    .map(([bank, rows]) => {
-      const total = roundMoney(rows.reduce((sum, row) => sum + row.amount, 0));
-      const body = rows
-        .map(
-          (row, index) =>
-            `<tr><td>${index + 1}</td><td>${escapeHtml(row.chequeNumber)}</td><td>${escapeHtml(row.partyName)}</td><td>${escapeHtml(row.chequeDate || row.date)}</td><td class="n">${escapeHtml(formatMoney(row.amount, "KES"))}</td></tr>`,
-        )
-        .join("");
-      return `<h2>${escapeHtml(bank)}</h2><table><thead><tr><th>#</th><th>Cheque no.</th><th>From</th><th>Date</th><th class="n">Amount</th></tr></thead><tbody>${body}</tbody><tfoot><tr><td colspan="4">${rows.length} cheque${rows.length === 1 ? "" : "s"}</td><td class="n">${escapeHtml(formatMoney(total, "KES"))}</td></tr></tfoot></table>`;
-    })
-    .join("");
+  // Open the window before any await: browsers only allow pop-ups straight from the click.
   const win = window.open("", "_blank", "width=900,height=700");
   if (!win) {
     toast.error("Allow pop-ups to print the banking list.");
     return;
   }
-  win.document.write(
-    `<!doctype html><html><head><title>Cheques to bank</title><style>body{font:13px system-ui,sans-serif;margin:24px;color:#111}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:20px 0 6px}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left}th{font-size:11px;text-transform:uppercase;color:#555}.n{text-align:right;font-variant-numeric:tabular-nums}tfoot td{font-weight:600;border-top:2px solid #111}</style></head><body><h1>Cheques to bank</h1><div>Printed ${escapeHtml(new Date().toLocaleString("en-KE"))}</div>${sections}</body></html>`,
-  );
+  const logo = await orgLogoDataUrl();
+  const palette = org.bakery ? BANKING_PALETTE.joy : BANKING_PALETTE.standard;
+
+  const byBank = new Map<string, BatchLine[]>();
+  for (const line of cheques) {
+    const bank = line.bankAccountName || "No bank account";
+    byBank.set(bank, [...(byBank.get(bank) ?? []), line]);
+  }
+  const grandTotal = roundMoney(cheques.reduce((sum, row) => sum + row.amount, 0));
+  const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+  const sections = [...byBank.entries()]
+    .map(([bank, rows]) => {
+      const subtotal = roundMoney(rows.reduce((sum, row) => sum + row.amount, 0));
+      const body = rows
+        .map(
+          (row, index) =>
+            `<tr><td class="c">${index + 1}</td><td class="mono">${escapeHtml(row.chequeNumber || "—")}</td><td>${escapeHtml(row.partyName)}</td><td>${escapeHtml(displayDate(row.chequeDate || row.date))}</td><td class="n">${escapeHtml(formatMoney(row.amount, "KES"))}</td></tr>`,
+        )
+        .join("");
+      return `<section class="bank"><div class="bank-head"><h3>${escapeHtml(bank)}</h3><span>${escapeHtml(plural(rows.length, "cheque"))} · <b>${escapeHtml(formatMoney(subtotal, "KES"))}</b></span></div><table><thead><tr><th class="c">#</th><th>Cheque no.</th><th>From</th><th>Cheque date</th><th class="n">Amount</th></tr></thead><tbody>${body}</tbody></table></section>`;
+    })
+    .join("");
+
+  const printed = new Date().toLocaleString("en-KE", { dateStyle: "medium", timeStyle: "short" });
+  const orgBlock = `${logo ? `<img class="logo" src="${logo}" alt="" />` : ""}<div><div class="org-name">${escapeHtml(org.name || "Organisation")}</div>${org.taxId ? `<div class="muted">PIN ${escapeHtml(org.taxId)}</div>` : ""}</div>`;
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Cheques to bank</title><style>
+    @page{size:A4;margin:14mm 14mm 16mm}
+    *{box-sizing:border-box}
+    body{margin:0;font:11px/1.45 "Helvetica Neue",Helvetica,Arial,sans-serif;color:${palette.ink}}
+    @media screen{body{padding:28px 32px}}
+    .bar{height:6px;background:${palette.brand}}
+    .head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-top:16px}
+    .org{display:flex;align-items:center;gap:12px}
+    .logo{width:52px;height:52px;object-fit:contain}
+    .org-name{font-size:16px;font-weight:700;color:${palette.brand}}
+    .muted{color:${palette.muted};font-size:10px}
+    .title{text-align:right}
+    .title h2{margin:0;font-size:18px;letter-spacing:1.4px;color:${palette.brand}}
+    .meta{margin-top:8px;min-width:200px;background:${palette.soft};border-radius:6px;padding:7px 10px}
+    .meta div{display:flex;justify-content:space-between;gap:12px;padding:1px 0}
+    .meta span{color:${palette.muted}}
+    .meta b{font-weight:700}
+    .rule{border-top:1.5px solid ${palette.brand};margin:16px 0 14px}
+    .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+    .card{border:1px solid ${palette.line};border-radius:6px;padding:10px 12px}
+    .card small{display:block;font-size:8.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:${palette.muted}}
+    .card strong{display:block;margin-top:4px;font-size:15px;font-variant-numeric:tabular-nums}
+    .card.total{background:${palette.brand};border-color:${palette.brand};color:#fff}
+    .card.total small{color:#D5DDEC}
+    .bank{margin-top:18px;break-inside:avoid}
+    .bank-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;background:${palette.soft};border-left:4px solid ${palette.brand};border-radius:4px;padding:7px 10px}
+    .bank-head h3{margin:0;font-size:12px;color:${palette.brand}}
+    .bank-head span{color:${palette.muted}}
+    .bank-head b{color:${palette.ink};font-variant-numeric:tabular-nums}
+    table{width:100%;border-collapse:collapse;margin-top:6px}
+    th{background:${palette.brand};color:#fff;font-size:9px;font-weight:700;letter-spacing:.4px;text-transform:uppercase;text-align:left;padding:6px 8px}
+    td{padding:6px 8px;border-bottom:.5px solid ${palette.line}}
+    tbody tr:nth-child(even) td{background:${palette.row}}
+    .c{text-align:center;width:36px}
+    .n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+    .mono{font-family:ui-monospace,Menlo,monospace}
+    .sign{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;margin-top:44px;break-inside:avoid}
+    .sign div{border-top:1px solid ${palette.ink};padding-top:6px;font-size:9.5px;color:${palette.muted}}
+    .foot{margin-top:22px;font-size:8.5px;color:${palette.muted};text-align:right}
+  </style></head><body>
+    <div class="bar"></div>
+    <div class="head">
+      <div class="org">${orgBlock}</div>
+      <div class="title"><h2>CHEQUES TO BANK</h2>
+        <div class="meta">
+          <div><span>Printed</span><b>${escapeHtml(printed)}</b></div>
+        </div>
+      </div>
+    </div>
+    <div class="rule"></div>
+    <div class="summary">
+      <div class="card"><small>Cheques</small><strong>${escapeHtml(String(cheques.length))}</strong></div>
+      <div class="card"><small>Banks</small><strong>${escapeHtml(String(byBank.size))}</strong></div>
+      <div class="card total"><small>Total to bank</small><strong>${escapeHtml(formatMoney(grandTotal, "KES"))}</strong></div>
+    </div>
+    ${sections}
+    <div class="sign"><div>Prepared by</div><div>Banked by</div><div>Received by bank (stamp &amp; signature)</div></div>
+    <div class="foot">Printed by OdaFlow ERP · ${escapeHtml(printed)}</div>
+  </body></html>`;
+
+  win.document.open();
+  win.document.write(html);
   win.document.close();
-  win.focus();
-  win.print();
+  win.addEventListener("load", () => {
+    win.focus();
+    win.print();
+  }, { once: true });
 }
 
 /** Payment numbers are count + 1 on the server, so parallel posts could take the same number. */
@@ -179,6 +283,8 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
   const page = PAGES[side];
   const canRecord = useHasPermission(...page.permissions);
   const orgId = useAuthStore((s) => s.org?.orgId ?? "");
+  const orgName = useAuthStore((s) => s.org?.name ?? "");
+  const orgTaxId = useAuthStore((s) => s.org?.taxId ?? "");
   const templateId = useOrgContextStore((s) => s.templateId);
   const issueReceipt = side === "AR" && isFmcgTemplateId(templateId);
   const today = todayNairobiYmd();
@@ -402,7 +508,12 @@ export function SettlementBatchPage({ side, prefill }: { side: SettlementSide; p
             </div>
             <div className="flex flex-wrap gap-1">
               {side === "AR" && lines.some((line) => line.method === "CHEQUE") ? (
-                <Button type="button" variant="outline" size="sm" onClick={() => printBankingList(lines)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void printBankingList(lines, { name: orgName, taxId: orgTaxId, bakery: isBakeryTemplate(templateId) })}
+                >
                   <Icons.Printer className="mr-1.5 h-3.5 w-3.5" aria-hidden />
                   Banking list
                 </Button>
