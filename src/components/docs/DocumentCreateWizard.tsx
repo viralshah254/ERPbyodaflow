@@ -636,7 +636,9 @@ export function DocumentCreateWizard({
     bakery: bakeryOrg,
   });
   const lineByLine = usesSalesLayout && operatingProfile.lineItemLayout === "line_by_line";
-  const skipEmptyQuantities = sheetFinishedGoods || lineByLine;
+  /** Joy's goods receipt lists raw materials and packaging by numbered page. Rows left at zero are not received. */
+  const pagedReceiving = bakeryOrg && type === "grn";
+  const skipEmptyQuantities = sheetFinishedGoods || lineByLine || pagedReceiving;
   const explicitSheetEdit = isEditMode && sheetFinishedGoods;
   /** Delivery note edits save once with a reason, so each save is one entry in its edit history. */
   const deliveryNoteEdit = isEditMode && type === "delivery-note";
@@ -3472,6 +3474,7 @@ export function DocumentCreateWizard({
               finishedGoodsOnly={bakeryFinishedCatalogue}
               fixedOrderSheet={lineEditorMode === "sales" && operatingProfile.fixedOrderSheet}
               lineByLine={lineByLine}
+              pagedReceiving={pagedReceiving}
               packSizeFromName={operatingProfile.packSizeFromName && lineEditorMode === "sales"}
               repriceExistingRevision={repriceExistingRevision}
               priceListId={lineEditorPriceListId}

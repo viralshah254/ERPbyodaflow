@@ -88,6 +88,10 @@ export type FetchProductsOptions = {
   includeBarcodedRaw?: boolean;
   productType?: "RAW" | "FINISHED" | "BOTH";
   itemRole?: "FINISHED" | "RAW" | "PACKAGING" | "SEMI";
+  /** Any of these roles, e.g. raw materials and packaging for a goods receipt. */
+  itemRoles?: Array<"FINISHED" | "RAW" | "PACKAGING" | "SEMI">;
+  /** Ask the server for `total`, the number of rows matching the filters. */
+  includeTotal?: boolean;
   categoryId?: string;
   departmentId?: string;
   productFamily?: string;
@@ -118,6 +122,8 @@ export type FetchProductsPageResult = {
   offset: number;
   hasMore: boolean;
   nextCursor: string | null;
+  /** Present when `includeTotal` was requested. */
+  total?: number;
 };
 
 export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Promise<FetchProductsPageResult> {
@@ -130,6 +136,8 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   if (opts.includeBarcodedRaw) params.set("includeBarcodedRaw", "true");
   if (opts.productType) params.set("productType", opts.productType);
   if (opts.itemRole) params.set("itemRole", opts.itemRole);
+  if (opts.itemRoles?.length) params.set("itemRoles", opts.itemRoles.join(","));
+  if (opts.includeTotal) params.set("includeTotal", "true");
   if (opts.categoryId?.trim()) params.set("categoryId", opts.categoryId.trim());
   if (opts.departmentId?.trim()) params.set("departmentId", opts.departmentId.trim());
   if (opts.productFamily?.trim()) params.set("productFamily", opts.productFamily.trim());
@@ -152,6 +160,7 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
     offset?: number;
     hasMore?: boolean;
     nextCursor?: string | null;
+    total?: number;
   }>("/api/products", { params });
   const limit = typeof data.limit === "number" ? data.limit : lim;
   const parsedOffset =
@@ -177,7 +186,14 @@ export async function fetchProductsPageApi(opts: FetchProductsOptions = {}): Pro
   } else {
     nextCursor = null;
   }
-  return { items, limit, offset: parsedOffset, hasMore, nextCursor };
+  return {
+    items,
+    limit,
+    offset: parsedOffset,
+    hasMore,
+    nextCursor,
+    ...(typeof data.total === "number" ? { total: data.total } : {}),
+  };
 }
 
 export async function fetchProductsApi(

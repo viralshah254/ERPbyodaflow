@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { FormattedDecimalInput } from "@/components/ui/formatted-decimal-input";
+import { NumberedPagination } from "@/components/ui/numbered-pagination";
 import { sanitizeDecimalInput, parseDecimalString, parsePartialDecimalString, formatDecimalDisplay } from "@/lib/decimal-input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,6 +24,7 @@ import {
   listProducts,
   getProductById,
   fetchFinishedGoodsPage,
+  fetchReceivableProductsPage,
   fetchProductsForDocumentLines,
   setProductsCache,
   subscribeProductsCache,
@@ -121,6 +123,11 @@ interface DocumentLineEditorProps {
   /** Finished goods only, including when the pack-size name rule is off. Joy credit notes, invoices, and delivery notes. */
   finishedGoodsOnly?: boolean;
   lineByLine?: boolean;
+  /**
+   * Goods receipt for a bakery: a searchable, numbered-page list of raw materials and packaging.
+   * Each row starts at zero quantity; the clerk only types what arrived. Quantities survive page changes.
+   */
+  pagedReceiving?: boolean;
   /** Increment only on an intentional customer/price-tag change, never on initial hydration. */
   repriceExistingRevision?: number;
   /** Available tax codes for the tax column select. */
@@ -273,6 +280,7 @@ export function DocumentLineEditor({
   fixedOrderSheet = false,
   finishedGoodsOnly = false,
   lineByLine = false,
+  pagedReceiving = false,
   repriceExistingRevision = 0,
   taxCodes = [],
   defaultLineTaxCodeId,
@@ -322,6 +330,21 @@ export function DocumentLineEditor({
   const [sheetCursor, setSheetCursor] = React.useState<string | null>(null);
   const sheetGenerationRef = React.useRef(0);
 
+  /** Paged receiving list: server page of raw materials and packaging. */
+  const [pagedView, setPagedView] = React.useState<"all" | "received">(() =>
+    pagedReceiving && lines.some((l) => l.qty > 0) ? "received" : "all"
+  );
+  const [pagedPage, setPagedPage] = React.useState(1);
+  const [pagedSize, setPagedSize] = React.useState(10);
+  const [pagedInput, setPagedInput] = React.useState("");
+  const [pagedSearch, setPagedSearch] = React.useState("");
+  const pagedSearchRef = React.useRef("");
+  const [pagedItems, setPagedItems] = React.useState<ProductRow[]>([]);
+  const [pagedTotal, setPagedTotal] = React.useState(0);
+  const [pagedLoading, setPagedLoading] = React.useState(pagedReceiving);
+  const [pagedError, setPagedError] = React.useState(false);
+  const [pagedRetry, setPagedRetry] = React.useState(0);
+
   React.useEffect(() => {
     if (!fmcgOrg || !swapLineId) return;
     const id = window.setTimeout(() => searchInputRef.current?.focus(), 0);
@@ -344,7 +367,7 @@ export function DocumentLineEditor({
 
   const handleLineQtyDraft = (lineId: string, raw: string) => {
     setLineFieldDrafts((prev) => ({ ...prev, [lineId]: { ...prev[lineId], qty: raw } }));
-    const partial = raw === "" && (sheetFinishedGoods || lineByLine) ? 0 : parsePartialDecimalString(raw);
+    const partial = raw === "" && (sheetFinishedGoods || lineByLine || pagedReceiving) ? 0 : parsePartialDecimalString(raw);
     if (partial != null && partial >= 0) setQty(lineId, partial);
   };
 
@@ -414,7 +437,11 @@ export function DocumentLineEditor({
 
   React.useEffect(() => {
     if (!fmcgOrg || !isApiConfigured()) return;
-    const productIds = [...new Set(lines.map((line) => line.productId).filter(Boolean))];
+    const productIds = [
+      ...new Set(
+        lines.filter((line) => !pagedReceiving || line.qty > 0).map((line) => line.productId).filter(Boolean)
+      ),
+    ];
     for (const productId of productIds) {
       ensureVariantsLoaded(productId);
       const cached = products.find((p) => p.id === productId) ?? getProductById(productId);
@@ -425,7 +452,7 @@ export function DocumentLineEditor({
         })
         .catch(() => {});
     }
-  }, [ensureVariantsLoaded, fmcgOrg, lines, products, variantsByProductId]);
+  }, [ensureVariantsLoaded, fmcgOrg, lines, pagedReceiving, products, variantsByProductId]);
 
   const catalogueLinesRef = React.useRef(lines);
   catalogueLinesRef.current = lines;
@@ -437,6 +464,12 @@ export function DocumentLineEditor({
       setFilteredProducts(null);
       setBrowseCursor(null);
       setBrowseHasMore(false);
+      return;
+    }
+    if (pagedReceiving) {
+      // Rows come from the numbered page below, not from one bulk catalogue load.
+      setCatalogError(false);
+      setFilteredProducts((prev) => prev ?? []);
       return;
     }
     let cancelled = false;
@@ -501,7 +534,51 @@ export function DocumentLineEditor({
     return () => {
       cancelled = true;
     };
-  }, [productFilter, mode, sheetFinishedGoods, catalogueFinishedOnly, catalogRetry, lineByLine, fmcgOrg, fixedSheet]);
+  }, [productFilter, mode, sheetFinishedGoods, catalogueFinishedOnly, catalogRetry, lineByLine, fmcgOrg, fixedSheet, pagedReceiving]);
+
+  React.useEffect(() => {
+    if (!pagedReceiving) return;
+    const next = pagedInput.trim();
+    if (next === pagedSearchRef.current) return;
+    const timer = window.setTimeout(() => {
+      pagedSearchRef.current = next;
+      setPagedSearch(next);
+      setPagedPage(1);
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [pagedInput, pagedReceiving]);
+
+  React.useEffect(() => {
+    if (!pagedReceiving) return;
+    if (pagedView !== "all" || !isApiConfigured()) {
+      setPagedLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setPagedLoading(true);
+    setPagedError(false);
+    fetchReceivableProductsPage({ page: pagedPage, pageSize: pagedSize, search: pagedSearch || undefined })
+      .then(({ items, total }) => {
+        if (cancelled) return;
+        const lastPage = Math.max(1, Math.ceil(total / pagedSize));
+        if (pagedPage > lastPage) {
+          setPagedPage(lastPage);
+          return;
+        }
+        setPagedItems(items);
+        setPagedTotal(total);
+        setFilteredProducts(items);
+        setPagedLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPagedError(true);
+        setPagedLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [pagedReceiving, pagedView, pagedPage, pagedSize, pagedSearch, pagedRetry]);
 
   React.useEffect(() => {
     const catalogReady = !catalogError && (!productFilter || productFilter === "all" || filteredProducts !== null);
@@ -741,7 +818,7 @@ export function DocumentLineEditor({
             }
           }
           const p = item.product;
-          ensureVariantsLoaded(p.id);
+          if (!(pagedReceiving && q === 0)) ensureVariantsLoaded(p.id);
           const packaging = packagingByProductId?.[p.id] ?? [];
           // Quantity-sheet rows start in the SKU's own unit, as before batching.
           // A pack (PK/CTN) is an explicit selection, never a timing-dependent default.
@@ -788,7 +865,7 @@ export function DocumentLineEditor({
       if (focusId && focusQty) setPendingQtyFocusId(focusId);
       if (created.length) onProductsAdded?.(created.map((l) => l.productId));
 
-      if (isApiConfigured()) {
+      if (isApiConfigured() && !pagedReceiving) {
         for (const newLine of created) {
           void fetchProductApi(newLine.productId)
             .then((full) => {
@@ -828,6 +905,7 @@ export function DocumentLineEditor({
       sheetFinishedGoods,
       packSizeFromName,
       fmcgCatalogByProductId,
+      pagedReceiving,
     ]
   );
 
@@ -844,6 +922,23 @@ export function DocumentLineEditor({
       false
     );
   }, [fixedSheet, sheetCatalogReady, packSizeFromName, fmcgCatalogByProductId, filteredProducts, lines, commitProducts]);
+
+  /** Paged receiving: each product on the current page starts as a zero-quantity row. */
+  const zeroRowsForPageRef = React.useRef<ProductRow[] | null>(null);
+  React.useEffect(() => {
+    if (!pagedReceiving || pagedView !== "all" || !pagedItems.length) return;
+    // Once per fetched page, so a changing callback identity can never re-add rows in a loop.
+    if (zeroRowsForPageRef.current === pagedItems) return;
+    zeroRowsForPageRef.current = pagedItems;
+    const existingIds = new Set(lines.map((line) => line.productId));
+    const missingProducts = pagedItems.filter((product) => !existingIds.has(product.id));
+    if (!missingProducts.length) return;
+    commitProducts(
+      missingProducts.map((product) => ({ product, qty: 0, asNewLine: false })),
+      undefined,
+      false
+    );
+  }, [pagedReceiving, pagedView, pagedItems, lines, commitProducts]);
 
   const updateLine = (id: string, patch: Partial<DocumentLine>) => {
     onLinesChange((prevLines) => {
@@ -1444,7 +1539,26 @@ export function DocumentLineEditor({
 
   const [sheetFilter, setSheetFilter] = React.useState("");
   const sheetFilterQuery = React.useDeferredValue(fixedSheet ? sheetFilter.trim().toLowerCase() : "");
+  /** Lines with a quantity. A row whose quantity is being retyped stays until the field loses focus. */
+  const receivedLines = React.useMemo(
+    () => (pagedReceiving ? lines.filter((l) => l.qty > 0 || lineFieldDrafts[l.id]?.qty !== undefined) : []),
+    [lines, lineFieldDrafts, pagedReceiving]
+  );
   const displayedLines = React.useMemo(() => {
+    if (pagedReceiving) {
+      if (pagedView === "received") {
+        const query = pagedSearch.toLowerCase();
+        const matching = query
+          ? receivedLines.filter((l) => [l.name, l.sku].some((v) => v?.toLowerCase().includes(query)))
+          : receivedLines;
+        return matching.slice((pagedPage - 1) * pagedSize, pagedPage * pagedSize);
+      }
+      const lineByProduct = new Map(lines.map((l) => [l.productId, l]));
+      return pagedItems.flatMap((p) => {
+        const line = lineByProduct.get(p.id);
+        return line ? [line] : [];
+      });
+    }
     if (!sheetFinishedGoods) return lines;
     const productsById = new Map(products.map((product) => [product.id, product]));
     return lines
@@ -1461,7 +1575,21 @@ export function DocumentLineEditor({
       }))
       .sort((a, b) => a.code - b.code || a.index - b.index)
       .map(({ line }) => line);
-  }, [lines, products, sheetFinishedGoods, sheetFilterQuery]);
+  }, [lines, products, sheetFinishedGoods, sheetFilterQuery, pagedReceiving, pagedView, pagedSearch, pagedPage, pagedSize, pagedItems, receivedLines]);
+
+  const receivedMatchCount = React.useMemo(() => {
+    if (!pagedReceiving || pagedView !== "received") return 0;
+    const query = pagedSearch.toLowerCase();
+    return query
+      ? receivedLines.filter((l) => [l.name, l.sku].some((v) => v?.toLowerCase().includes(query))).length
+      : receivedLines.length;
+  }, [pagedReceiving, pagedView, pagedSearch, receivedLines]);
+
+  React.useEffect(() => {
+    if (!pagedReceiving || pagedView !== "received") return;
+    const lastPage = Math.max(1, Math.ceil(receivedMatchCount / pagedSize));
+    if (pagedPage > lastPage) setPagedPage(lastPage);
+  }, [pagedReceiving, pagedView, receivedMatchCount, pagedSize, pagedPage]);
 
   React.useEffect(() => {
     const query = searchQuery.trim();
@@ -1502,14 +1630,14 @@ export function DocumentLineEditor({
       if (Number.isFinite(qty) && qty > 0) searchInputRef.current?.focus();
       return;
     }
-    if (event.key === "ArrowUp" || event.key === "ArrowDown" || (sheetFinishedGoods && event.key === "Enter" && !event.shiftKey)) {
+    if (event.key === "ArrowUp" || event.key === "ArrowDown" || ((sheetFinishedGoods || pagedReceiving) && event.key === "Enter" && !event.shiftKey)) {
       event.preventDefault();
       moveFieldFocus(lineId, field, event.key === "ArrowUp" ? -1 : 1);
     }
   };
 
   const onEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (inlineCatalogue) return;
+    if (inlineCatalogue || pagedReceiving) return;
     if (event.key !== "Enter" || !event.shiftKey) return;
     if (productPickerOpen) return;
     if (document.querySelector("[data-radix-select-content]")) return;
@@ -1559,7 +1687,7 @@ export function DocumentLineEditor({
     }
   };
 
-  const LineTable = sheetFinishedGoods || lineByLine ? "table" : InteractiveTable;
+  const LineTable = sheetFinishedGoods || lineByLine || pagedReceiving ? "table" : InteractiveTable;
   const showChips = !lineByLine && searchOpen && !searchQuery.trim() && groupOptions.length > 0;
   const swapLine = swapLineId ? lines.find((l) => l.id === swapLineId) : undefined;
 
@@ -1781,7 +1909,7 @@ export function DocumentLineEditor({
   return (
     <div ref={editorRef} className="min-w-0 space-y-3" onKeyDown={onEditorKeyDown}>
       <Label>{lineItemsLabel}</Label>
-      {!inlineCatalogue && !fixedSheet ? composer : null}
+      {!inlineCatalogue && !fixedSheet && !pagedReceiving ? composer : null}
       {fixedSheet && !catalogError && filteredProducts == null ? (
         <p className="text-sm text-muted-foreground">Loading order sheet…</p>
       ) : null}
@@ -1789,7 +1917,7 @@ export function DocumentLineEditor({
         <p className="text-sm text-muted-foreground">No active finished goods to order.</p>
       ) : null}
 
-      {!inlineCatalogue && !fixedSheet && <DocumentProductPickerSheet
+      {!inlineCatalogue && !fixedSheet && !pagedReceiving && <DocumentProductPickerSheet
         open={productPickerOpen}
         onOpenChange={setProductPickerOpen}
         sheetFinishedGoods={sheetFinishedGoods}
@@ -1812,7 +1940,7 @@ export function DocumentLineEditor({
           <Button type="button" variant="outline" onClick={() => setCatalogRetry((n) => n + 1)}>Retry catalogue</Button>
         </div>
       ) : null}
-      {lines.length === 0 ? (
+      {lines.length === 0 && !pagedReceiving ? (
         fixedSheet ? null : inlineCatalogue ? composer : sheetFinishedGoods || fmcgOrg ? (
           <div className="flex items-center justify-center py-10" role="img" aria-label="No products selected">
             <Icons.PackageOpen className="h-9 w-9 text-muted-foreground/70" aria-hidden />
@@ -1822,6 +1950,65 @@ export function DocumentLineEditor({
         )
       ) : (
         <div className="min-w-0 space-y-2">
+          {pagedReceiving ? (
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="relative min-w-[16rem] max-w-md flex-1">
+                <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  type="search"
+                  aria-label="Search raw materials and packaging"
+                  placeholder="Search name, product code, SKU or barcode"
+                  className="h-9 pl-9"
+                  value={pagedInput}
+                  onChange={(e) => setPagedInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setPagedInput("");
+                  }}
+                />
+              </div>
+              <div className="inline-flex rounded-md border p-0.5" role="group" aria-label="Which items to show">
+                {([
+                  ["all", "All items"],
+                  ["received", `On this receipt (${receivedLines.length})`],
+                ] as const).map(([key, label]) => (
+                  <Button
+                    key={key}
+                    type="button"
+                    size="sm"
+                    variant={pagedView === key ? "secondary" : "ghost"}
+                    className="h-8 px-3 text-xs"
+                    aria-pressed={pagedView === key}
+                    onClick={() => {
+                      if (pagedView === key) return;
+                      setPagedView(key);
+                      setPagedPage(1);
+                    }}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {pagedReceiving && pagedError ? (
+            <div role="alert" className="space-y-2 rounded border border-destructive p-3 text-sm">
+              <p>Could not load raw materials and packaging. Quantities you entered are kept.</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => setPagedRetry((n) => n + 1)}>
+                Try again
+              </Button>
+            </div>
+          ) : null}
+          {pagedReceiving && !pagedError && !pagedLoading && displayedLines.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {pagedView === "received"
+                ? pagedSearch
+                  ? `Nothing on this receipt matches “${pagedSearch}”.`
+                  : "No quantities entered yet. Switch to All items and type what was received."
+                : pagedSearch
+                  ? `No raw material or packaging matches “${pagedSearch}”.`
+                  : "No raw materials or packaging to receive."}
+            </p>
+          ) : null}
           {fixedSheet ? (
             <div className="relative max-w-md">
               <Icons.Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1847,7 +2034,7 @@ export function DocumentLineEditor({
           {fixedSheet && sheetFilterQuery && displayedLines.length === 0 ? (
             <p className="text-sm text-muted-foreground">No product on the sheet matches “{sheetFilter.trim()}”.</p>
           ) : null}
-          <div className="min-w-0 overflow-hidden rounded-md border">
+          <div className={cn("min-w-0 overflow-hidden rounded-md border", pagedReceiving && pagedLoading && "opacity-60 transition-opacity")} aria-busy={pagedReceiving && pagedLoading ? true : undefined}>
             <LineTable className="w-full table-fixed border-collapse text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">
@@ -1914,7 +2101,7 @@ export function DocumentLineEditor({
                         )}
                       </button>
                       <div className="min-w-0">
-                        {fixedSheet ? (
+                        {fixedSheet || pagedReceiving ? (
                           <p className={cn("line-clamp-2 text-sm font-medium leading-snug", CAPS_ON_PRODUCT_CLASS)}>
                             {l.name || product?.name || l.sku}
                           </p>
@@ -1951,8 +2138,8 @@ export function DocumentLineEditor({
                       data-line-field="qty"
                       className="h-8 w-full px-2"
                       aria-label={`${lineColumnLabels?.qtyHeader ?? "Quantity"} for ${l.name}`}
-                      value={(lineByLine || sheetFinishedGoods) && l.qty === 0 && lineQtyValue(l) === "0" ? "" : lineQtyValue(l)}
-                      placeholder={lineByLine ? "Qty" : sheetFinishedGoods ? "0" : undefined}
+                      value={(lineByLine || sheetFinishedGoods || pagedReceiving) && l.qty === 0 && lineQtyValue(l) === "0" ? "" : lineQtyValue(l)}
+                      placeholder={lineByLine ? "Qty" : sheetFinishedGoods || pagedReceiving ? "0" : undefined}
                       enterKeyHint={lineByLine ? "next" : undefined}
                       onValueChange={(raw) => handleLineQtyDraft(l.id, raw)}
                       onBlur={() => finalizeLineQtyDraft(l.id, lineQtyValue(l))}
@@ -2002,7 +2189,7 @@ export function DocumentLineEditor({
                     </span>
                   </td>
                   <td className="px-1 py-2">
-                    {fixedSheet ? null : (
+                    {fixedSheet || pagedReceiving ? null : (
                       <Button
                         type="button"
                         variant="ghost"
@@ -2111,6 +2298,20 @@ export function DocumentLineEditor({
           })}
               </tbody>
             </LineTable>
+            {pagedReceiving ? (
+              <NumberedPagination
+                page={pagedPage}
+                pageSize={pagedSize}
+                total={pagedView === "received" ? receivedMatchCount : pagedTotal}
+                pageSizeOptions={[10, 25, 50]}
+                loading={pagedLoading}
+                onPageChange={setPagedPage}
+                onPageSizeChange={(size) => {
+                  setPagedSize(size);
+                  setPagedPage(1);
+                }}
+              />
+            ) : null}
           </div>
           {inlineCatalogue ? composer : null}
           <div className="mt-4 flex justify-end">
