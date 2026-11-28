@@ -151,12 +151,33 @@ export function applySidebarLayout(
   }
 
   return enforceSectionPins(result, pins).map((sec) => {
+    if (sec.key === "finance") {
+      return { ...sec, items: pinItemsTogether(sec.items, FINANCE_PAYMENT_KEYS, "ap-bills") };
+    }
     if (sec.key !== "sales") return sec;
     return {
       ...sec,
       items: pinItemAfter(sec.items, "sales-customer-approvals", "sales-customers"),
     };
   });
+}
+
+/** Money-moving screens that read as one group: receipts in, supplier payments out, general payments out. */
+const FINANCE_PAYMENT_KEYS = ["ar-payments", "ap-payments", "ap-general-payments"];
+
+/**
+ * Keeps `keys` next to each other in that order, even when a saved layout predates one of them
+ * (saved orders push unknown items to the end). They go after `afterKey`, or where the first of them was.
+ */
+function pinItemsTogether(items: ResolvedNavItem[], keys: string[], afterKey: string): ResolvedNavItem[] {
+  const group = keys.map((key) => items.find((entry) => entry.key === key)).filter((entry): entry is ResolvedNavItem => Boolean(entry));
+  if (group.length < 2) return items;
+  const firstAt = items.findIndex((entry) => keys.includes(entry.key));
+  const rest = items.filter((entry) => !keys.includes(entry.key));
+  const afterIndex = rest.findIndex((entry) => entry.key === afterKey);
+  const insertAt = afterIndex >= 0 ? afterIndex + 1 : Math.min(firstAt, rest.length);
+  rest.splice(insertAt, 0, ...group);
+  return rest;
 }
 
 function pinItemAfter(items: ResolvedNavItem[], itemKey: string, afterKey: string): ResolvedNavItem[] {

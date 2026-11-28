@@ -61,6 +61,49 @@ export function generalPaymentNotice(error: unknown): GuidedNotice | null {
   return null;
 }
 
+/** What a failed post shows beside its row: what went wrong, how to fix it, and a link when a screen can fix it. */
+export type PostFailure = { title: string; message: string; href?: string; label?: string };
+
+function isNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  if ((error as { status?: number }).status != null) return false;
+  return error instanceof TypeError || /failed to fetch|networkerror|load failed|network request failed/i.test(error.message);
+}
+
+/** The same guidance the single form gave, for every row of a batch. */
+export function postFailure(error: unknown): PostFailure {
+  const guided = generalPaymentNotice(error);
+  if (guided) return guided;
+  if (isNetworkFailure(error)) {
+    return {
+      title: "Could not reach the server",
+      message:
+        "Nothing was posted. Check your internet connection (or that the ERP server is running), then press Post again. It is safe to retry: this payment cannot be recorded twice.",
+    };
+  }
+  const status = (error as { status?: number } | null)?.status;
+  const serverMessage = error instanceof Error ? error.message : "";
+  if (status === 401) {
+    return { title: "You are signed out", message: "Sign in again, then press Post. Your list is kept.", href: "/login", label: "Open sign in" };
+  }
+  if (status === 403) {
+    return {
+      title: "You cannot record payments",
+      message: "Your role does not allow recording payments. Ask an administrator for finance write access, then press Post again.",
+    };
+  }
+  if (status != null && status >= 500) {
+    return {
+      title: "The server had a problem",
+      message: `${serverMessage || "Something went wrong on the server."} Wait a moment and press Post again. If it keeps failing, tell support and quote this payee and amount.`,
+    };
+  }
+  return {
+    title: "This payment was not accepted",
+    message: `${serverMessage || "The server refused this payment."} Edit the row (pencil) to correct it, then press Post again.`,
+  };
+}
+
 /** Shown before saving when the chosen paid-from account cannot post to the books. */
 export function paidFromNotLinkedNotice(name: string): GuidedNotice {
   return { ...BY_CODE.GP_PAID_FROM_NOT_LINKED!, message: `${name} is not linked to a ledger account, so the payment cannot be posted to your books. Open Treasury → Bank accounts, edit it and choose its ledger account (for example Petty Cash or the M-Pesa float), then come back.` };

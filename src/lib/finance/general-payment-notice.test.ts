@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FinanceAccount } from "@/lib/api/finance";
 import type { BankAccountRow } from "@/lib/types/treasury";
-import { cashBookSetupIssues, generalPaymentNotice, safeReturnTo, withReturnTo } from "./general-payment-notice";
+import { cashBookSetupIssues, generalPaymentNotice, postFailure, safeReturnTo, withReturnTo } from "./general-payment-notice";
 
 const bank = (patch: Partial<BankAccountRow>): BankAccountRow => ({
   id: "b1",
@@ -59,5 +59,25 @@ describe("general payment notice", () => {
     expect(safeReturnTo("https://evil.example")).toBeNull();
     expect(safeReturnTo("//evil.example")).toBeNull();
     expect(withReturnTo("/treasury/bank-accounts")).toBe("/treasury/bank-accounts?returnTo=%2Fap%2Fgeneral-payments");
+  });
+});
+
+describe("post failure", () => {
+  it("explains a dropped connection and says retrying is safe", () => {
+    const failure = postFailure(new TypeError("Failed to fetch"));
+    expect(failure.title).toBe("Could not reach the server");
+    expect(failure.message).toContain("Nothing was posted");
+    expect(failure.href).toBeUndefined();
+  });
+
+  it("keeps the fix link for setup problems", () => {
+    const failure = postFailure(apiError("GP_PERIOD_CLOSED", "March is closed."));
+    expect(failure).toMatchObject({ message: "March is closed.", href: "/finance/period-close", label: "Open Period close" });
+  });
+
+  it("tells the user what to do for permission and server errors", () => {
+    expect(postFailure(Object.assign(new Error("no"), { status: 403 })).title).toBe("You cannot record payments");
+    expect(postFailure(Object.assign(new Error("boom"), { status: 500 })).title).toBe("The server had a problem");
+    expect(postFailure(Object.assign(new Error("Amount must be positive"), { status: 400 })).message).toContain("Edit the row");
   });
 });
